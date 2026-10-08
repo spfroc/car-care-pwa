@@ -13,6 +13,7 @@ import {
   weightedAverage,
 } from '../lib/economy';
 import { allowsCharge, allowsFuel } from '../lib/energy';
+import { EconomyIntervalList } from '../components/EconomyIntervalList';
 
 type RangeKey = '30' | '90' | '365' | 'all';
 
@@ -80,8 +81,10 @@ export function StatsPage() {
   const vehicle = vehicles.find((v) => v.id === vehicleId);
   const hev = settings?.hevAllowCharge ?? false;
 
-  const fuelAvg = weightedAverage(fuelIntervals(filtered));
-  const elecAvg = weightedAverage(electricIntervals(filtered));
+  const fuelIvs = fuelIntervals(filtered);
+  const elecIvs = electricIntervals(filtered);
+  const fuelAvg = weightedAverage(fuelIvs);
+  const elecAvg = weightedAverage(elecIvs);
   const combined = settings ? combinedEconomy(filtered, settings.kwhToLiterFactor) : null;
 
   if (!settings) return <div className="page"><p className="muted">加载中…</p></div>;
@@ -180,25 +183,45 @@ export function StatsPage() {
       <section className="card">
         <h2>能耗</h2>
         {showFuelEco && (
-          <p>
-            平均油耗：{' '}
-            <strong>
-              {fuelAvg == null ? '数据不足' : `${fuelAvg.toFixed(2)} ${settings.fuelEconomyUnit}`}
-            </strong>
-          </p>
+          <>
+            <p>
+              平均油耗：{' '}
+              <strong>
+                {fuelAvg == null ? '数据不足' : `${fuelAvg.toFixed(2)} ${settings.fuelEconomyUnit}`}
+              </strong>
+            </p>
+            <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
+              油耗区间明细
+            </h3>
+            <EconomyIntervalList
+              intervals={fuelIvs}
+              unitLabel={settings.fuelEconomyUnit}
+              kindLabel="加油"
+            />
+          </>
         )}
         {showElecEco && (
-          <p>
-            平均电耗：{' '}
-            <strong>
-              {elecAvg == null
-                ? '数据不足'
-                : `${elecAvg.toFixed(2)} ${settings.electricEconomyUnit}`}
-            </strong>
-          </p>
+          <>
+            <p style={{ marginTop: showFuelEco ? 14 : undefined }}>
+              平均电耗：{' '}
+              <strong>
+                {elecAvg == null
+                  ? '数据不足'
+                  : `${elecAvg.toFixed(2)} ${settings.electricEconomyUnit}`}
+              </strong>
+            </p>
+            <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
+              电耗区间明细
+            </h3>
+            <EconomyIntervalList
+              intervals={elecIvs}
+              unitLabel={settings.electricEconomyUnit}
+              kindLabel="充电"
+            />
+          </>
         )}
         {showCombined && (
-          <p>
+          <p style={{ marginTop: 14 }}>
             综合油耗（折算）：{' '}
             <strong>
               {combined == null ? '数据不足' : `${combined.economyPer100.toFixed(2)} L/100km`}

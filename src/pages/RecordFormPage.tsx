@@ -48,6 +48,8 @@ export function RecordFormPage() {
   // charge
   const [stationKind, setStationKind] = useState<ChargeStationKind>('public');
   const [kWh, setKWh] = useState('');
+  const [socBefore, setSocBefore] = useState('');
+  const [socAfter, setSocAfter] = useState('');
   const [duration, setDuration] = useState('');
 
   // maintenance
@@ -112,6 +114,8 @@ export function RecordFormPage() {
           setStationId(r.stationId ?? '');
           setStationKind(r.stationKind);
           setKWh(r.kWh.toString());
+          setSocBefore(r.socBefore != null ? String(r.socBefore) : '');
+          setSocAfter(r.socAfter != null ? String(r.socAfter) : '');
           setDuration(r.durationMinutes?.toString() ?? '');
         } else if (r.type === 'maintenance') {
           setCategory(r.category);
@@ -228,6 +232,19 @@ export function RecordFormPage() {
       } else if (type === 'charge') {
         if (!stationName.trim()) throw new Error('请填写充电站/地点');
         if (!kWh) throw new Error('请填写充电量');
+        const parseSoc = (raw: string, label: string): number | undefined => {
+          if (raw === '') return undefined;
+          const n = Number(raw);
+          if (Number.isNaN(n) || n < 0 || n > 100) {
+            throw new Error(`${label}须为 0–100 的电量百分比`);
+          }
+          return n;
+        };
+        const socB = parseSoc(socBefore, '充电前电量');
+        const socA = parseSoc(socAfter, '充电后电量');
+        if (socB != null && socA != null && socA < socB) {
+          throw new Error('充电后电量不能低于充电前电量');
+        }
         rec = {
           ...common,
           type: 'charge',
@@ -235,6 +252,8 @@ export function RecordFormPage() {
           stationId: stationId || undefined,
           stationKind,
           kWh: Number(kWh),
+          socBefore: socB,
+          socAfter: socA,
           durationMinutes: duration === '' ? undefined : Number(duration),
           odometer: odoNum!,
         };
@@ -428,6 +447,30 @@ export function RecordFormPage() {
             <label>
               充电量 (kWh) *
               <input type="number" step="0.01" value={kWh} onChange={(e) => setKWh(e.target.value)} required />
+            </label>
+            <label>
+              充电前电量 (%)
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="1"
+                value={socBefore}
+                onChange={(e) => setSocBefore(e.target.value)}
+                placeholder="0–100"
+              />
+            </label>
+            <label>
+              充电后电量 (%)
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="1"
+                value={socAfter}
+                onChange={(e) => setSocAfter(e.target.value)}
+                placeholder="0–100"
+              />
             </label>
             <label>
               充电时长 (分钟)

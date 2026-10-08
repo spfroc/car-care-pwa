@@ -106,6 +106,7 @@ export async function loadDemoSeed(replace = true): Promise<void> {
     kWh: number,
     paid: number,
     kind: 'public' | 'home' = 'public',
+    soc?: { before: number; after: number },
   ): CareRecord => ({
     id,
     vehicleId,
@@ -113,6 +114,8 @@ export async function loadDemoSeed(replace = true): Promise<void> {
     date: ts(daysAgo),
     odometer: odo,
     kWh,
+    socBefore: soc?.before,
+    socAfter: soc?.after,
     stationName: kind === 'home' ? '家充桩' : '特来电商场桩',
     stationId: kind === 'home' ? 'seed-station-chg-2' : 'seed-station-chg-1',
     stationKind: kind,
@@ -136,27 +139,27 @@ export async function loadDemoSeed(replace = true): Promise<void> {
 
   // EV: ~15 kWh/100km — 30kWh / 200km
   const evCharges: CareRecord[] = [
-    charge('seed-chg-ev-1', evId, 80, 5000, 45, 60, 'home'),
-    charge('seed-chg-ev-2', evId, 65, 5200, 30, 45), // 15
-    charge('seed-chg-ev-3', evId, 50, 5400, 28, 42),
-    charge('seed-chg-ev-4', evId, 35, 5620, 33, 50),
-    charge('seed-chg-ev-5', evId, 20, 5850, 35, 52, 'home'),
-    charge('seed-chg-ev-6', evId, 10, 6080, 32, 48),
-    charge('seed-chg-ev-7', evId, 3, 6300, 33, 49),
+    charge('seed-chg-ev-1', evId, 80, 5000, 45, 60, 'home', { before: 15, after: 95 }),
+    charge('seed-chg-ev-2', evId, 65, 5200, 30, 45, 'public', { before: 20, after: 80 }), // 15
+    charge('seed-chg-ev-3', evId, 50, 5400, 28, 42, 'public', { before: 25, after: 78 }),
+    charge('seed-chg-ev-4', evId, 35, 5620, 33, 50, 'public', { before: 18, after: 85 }),
+    charge('seed-chg-ev-5', evId, 20, 5850, 35, 52, 'home', { before: 12, after: 90 }),
+    charge('seed-chg-ev-6', evId, 10, 6080, 32, 48, 'public', { before: 22, after: 82 }),
+    charge('seed-chg-ev-7', evId, 3, 6300, 33, 49, 'public', { before: 19, after: 88 }),
   ];
 
   // PHEV: fuel + charge
   const phevRecords: CareRecord[] = [
     fuel('seed-fuel-phev-1', phevId, 85, 8000, 35, 280),
-    charge('seed-chg-phev-1', phevId, 80, 8100, 18, 20, 'home'),
+    charge('seed-chg-phev-1', phevId, 80, 8100, 18, 20, 'home', { before: 20, after: 95 }),
     fuel('seed-fuel-phev-2', phevId, 70, 8500, 20, 160), // 4L/100 over 500? 20/500*100=4
-    charge('seed-chg-phev-2', phevId, 65, 8700, 20, 25),
+    charge('seed-chg-phev-2', phevId, 65, 8700, 20, 25, 'public', { before: 15, after: 90 }),
     fuel('seed-fuel-phev-3', phevId, 50, 9100, 22, 176),
-    charge('seed-chg-phev-3', phevId, 45, 9300, 16, 18, 'home'),
+    charge('seed-chg-phev-3', phevId, 45, 9300, 16, 18, 'home', { before: 25, after: 100 }),
     fuel('seed-fuel-phev-4', phevId, 30, 9700, 18, 144),
-    charge('seed-chg-phev-4', phevId, 25, 9900, 19, 22),
+    charge('seed-chg-phev-4', phevId, 25, 9900, 19, 22, 'public', { before: 18, after: 92 }),
     fuel('seed-fuel-phev-5', phevId, 12, 10200, 20, 160),
-    charge('seed-chg-phev-5', phevId, 8, 10400, 17, 15, 'home'),
+    charge('seed-chg-phev-5', phevId, 8, 10400, 17, 15, 'home', { before: 22, after: 98 }),
   ];
 
   const extras: CareRecord[] = [

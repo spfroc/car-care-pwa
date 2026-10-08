@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getVehicle } from '../repositories/vehicles';
 import { deleteRecord, listRecordsByVehicle } from '../repositories/records';
 import { useSettings } from '../hooks/useAppData';
-import type { CareRecord, RecordType, Vehicle } from '../types';
+import type { CareRecord, EconomyInterval, RecordType, Vehicle } from '../types';
 import {
   ENERGY_COLORS,
   ENERGY_LABELS,
@@ -21,6 +21,7 @@ import {
   fuelIntervals,
   electricIntervals,
 } from '../lib/economy';
+import { EconomyIntervalList } from '../components/EconomyIntervalList';
 
 const FILTERS: { key: 'all' | RecordType; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -37,8 +38,13 @@ function recordTitle(r: CareRecord): string {
   switch (r.type) {
     case 'fuel':
       return `${r.fuelGrade} ${r.liters}L · ${r.stationName || '加油'}`;
-    case 'charge':
-      return `${r.kWh}kWh · ${r.stationName}`;
+    case 'charge': {
+      const soc =
+        r.socBefore != null || r.socAfter != null
+          ? ` · ${r.socBefore ?? '—'}%→${r.socAfter ?? '—'}%`
+          : '';
+      return `${r.kWh}kWh${soc} · ${r.stationName}`;
+    }
     case 'maintenance':
       return r.title;
     case 'modification':
@@ -50,6 +56,29 @@ function recordTitle(r: CareRecord): string {
     case 'ticket':
       return r.violationType || '罚单';
   }
+}
+
+
+function intervalLine(
+  r: CareRecord,
+  fuelByEnd: Map<string, EconomyInterval>,
+  elecByEnd: Map<string, EconomyInterval>,
+  fuelUnit: string,
+  elecUnit: string,
+): string | null {
+  if (r.type === 'fuel') {
+    const iv = fuelByEnd.get(r.id);
+    if (!iv) return null;
+    const dist = iv.toOdometer - iv.fromOdometer;
+    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${iv.economyPer100.toFixed(2)} ${fuelUnit}`;
+  }
+  if (r.type === 'charge') {
+    const iv = elecByEnd.get(r.id);
+    if (!iv) return null;
+    const dist = iv.toOdometer - iv.fromOdometer;
+    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${iv.economyPer100.toFixed(2)} ${elecUnit}`;
+  }
+  return null;
 }
 
 export function VehicleDetailPage() {
@@ -80,9 +109,13 @@ export function VehicleDetailPage() {
   const spend = summarizeSpend(vehicle.id, records);
   const canFuel = allowsFuel(vehicle.energyType);
   const canCharge = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
-  const fuelAvg = weightedAverage(fuelIntervals(records));
-  const elecAvg = weightedAverage(electricIntervals(records));
+  const fuelIvs = fuelIntervals(records);
+  const elecIvs = electricIntervals(records);
+  const fuelAvg = weightedAverage(fuelIvs);
+  const elecAvg = weightedAverage(elecIvs);
   const combined = combinedEconomy(records, settings.kwhToLiterFactor);
+  const fuelByEnd = new Map(fuelIvs.map((iv) => [iv.endRecordId, iv]));
+  const elecByEnd = new Map(elecIvs.map((iv) => [iv.endRecordId, iv]));
   const bg = ENERGY_COLORS[vehicle.energyType];
 
   async function onDelete(rid: string) {
@@ -200,29 +233,72 @@ export function VehicleDetailPage() {
         ))}
       </div>
 
+      {(canFuel || canCharge) && (
+        <section className="card">
+          <h2>能耗区间</h2>
+          {canFuel && (
+            <>
+              <h3 className="interval-meta" style={{ fontWeight: 600 }}>
+                油耗（{settings.fuelEconomyUnit}）
+              </h3>
+              <EconomyIntervalList
+                intervals={fuelIvs}
+                unitLabel={settings.fuelEconomyUnit}
+                kindLabel="加油"
+              />
+            </>
+          )}
+          {canCharge && (
+            <>
+              <h3
+                className="interval-meta"
+                style={{ fontWeight: 600, marginTop: canFuel ? 12 : 0 }}
+              >
+                电耗（{settings.electricEconomyUnit}）
+              </h3>
+              <EconomyIntervalList
+                intervals={elecIvs}
+                unitLabel={settings.electricEconomyUnit}
+                kindLabel="充电"
+              />
+            </>
+          )}
+        </section>
+      )}
+
       <div className="timeline">
         {filtered.length === 0 && <p className="muted">暂无记录</p>}
-        {filtered.map((r) => (
-          <div key={r.id} className={`timeline-item ${r.type === 'ticket' && !r.paid ? 'unpaid' : ''}`}>
-            <Link to={`/vehicles/${vehicle.id}/records/${r.id}`} className="ti-main">
-              <span className="ti-icon">{RECORD_TYPE_ICONS[r.type]}</span>
-              <div>
-                <div className="ti-title">{recordTitle(r)}</div>
-                <div className="muted small">
-                  {RECORD_TYPE_LABELS[r.type]} · {formatDate(r.date)}
-                  {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
-                  {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
+        {filtered.map((r) => {
+          const eco = intervalLine(
+            r,
+            fuelByEnd,
+            elecByEnd,
+            settings.fuelEconomyUnit,
+            settings.electricEconomyUnit,
+          );
+          return (
+            <div key={r.id} className={`timeline-item ${r.type === 'ticket' && !r.paid ? 'unpaid' : ''}`}>
+              <Link to={`/vehicles/${vehicle.id}/records/${r.id}`} className="ti-main">
+                <span className="ti-icon">{RECORD_TYPE_ICONS[r.type]}</span>
+                <div>
+                  <div className="ti-title">{recordTitle(r)}</div>
+                  <div className="muted small">
+                    {RECORD_TYPE_LABELS[r.type]} · {formatDate(r.date)}
+                    {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
+                    {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
+                    {r.type === 'fuel' && !r.filledUp ? ' · 未加满' : ''}
+                  </div>
+                  {eco && <div className="ti-eco">{eco}</div>}
                 </div>
-              </div>
-              <div className="ti-amount">{formatMoney(r.amountPaid)}</div>
-            </Link>
-            <button type="button" className="btn ghost danger-text" onClick={() => onDelete(r.id)}>
-              删
-            </button>
-          </div>
-        ))}
+                <div className="ti-amount">{formatMoney(r.amountPaid)}</div>
+              </Link>
+              <button type="button" className="btn ghost danger-text" onClick={() => onDelete(r.id)}>
+                删
+              </button>
+            </div>
+          );
+        })}
       </div>
-      {/* silence unused */}
     </div>
   );
 }

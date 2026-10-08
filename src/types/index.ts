@@ -76,6 +76,10 @@ export interface ChargeRecord extends RecordBase {
   stationId?: UUID;
   stationKind: ChargeStationKind;
   kWh: KWh;
+  /** Battery SOC % before charge (0–100). */
+  socBefore?: number;
+  /** Battery SOC % after charge (0–100). */
+  socAfter?: number;
   durationMinutes?: number;
   odometer: Km;
 }
