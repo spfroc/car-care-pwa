@@ -21,7 +21,6 @@ import {
   fuelIntervals,
   electricIntervals,
 } from '../lib/economy';
-import { EconomyIntervalList } from '../components/EconomyIntervalList';
 
 const FILTERS: { key: 'all' | RecordType; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -232,39 +231,6 @@ export function VehicleDetailPage() {
           </button>
         ))}
       </div>
-
-      {(canFuel || canCharge) && (
-        <section className="card">
-          <h2>能耗区间</h2>
-          {canFuel && (
-            <>
-              <h3 className="interval-meta" style={{ fontWeight: 600 }}>
-                油耗（{settings.fuelEconomyUnit}）
-              </h3>
-              <EconomyIntervalList
-                intervals={fuelIvs}
-                unitLabel={settings.fuelEconomyUnit}
-                kindLabel="加油"
-              />
-            </>
-          )}
-          {canCharge && (
-            <>
-              <h3
-                className="interval-meta"
-                style={{ fontWeight: 600, marginTop: canFuel ? 12 : 0 }}
-              >
-                电耗（{settings.electricEconomyUnit}）
-              </h3>
-              <EconomyIntervalList
-                intervals={elecIvs}
-                unitLabel={settings.electricEconomyUnit}
-                kindLabel="充电"
-              />
-            </>
-          )}
-        </section>
-      )}
 
       <div className="timeline">
         {filtered.length === 0 && <p className="muted">暂无记录</p>}
