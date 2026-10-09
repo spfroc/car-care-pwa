@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
 import { getVehicle } from '../repositories/vehicles';
 import { deleteRecord, listRecordsByVehicle } from '../repositories/records';
@@ -33,19 +34,47 @@ import {
 } from '../lib/vehicleStats';
 
 
-/** Hover (desktop) / tap·focus (mobile) formula tip after a metric label. */
+/** Hover (desktop) / tap·focus (mobile) formula tip after a metric label.
+ *  Bubble is portaled + position:fixed so it overlays without expanding
+ *  overflow:auto parents (e.g. .mini-stats → unwanted vertical scrollbar). */
 function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const show = open || hovered;
+
+  const updatePosition = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: r.bottom + 6, left: r.left + r.width / 2 });
+  };
+
+  useLayoutEffect(() => {
+    if (!show) return;
+    updatePosition();
+    const onReposition = () => updatePosition();
+    window.addEventListener('scroll', onReposition, true);
+    window.addEventListener('resize', onReposition);
+    return () => {
+      window.removeEventListener('scroll', onReposition, true);
+      window.removeEventListener('resize', onReposition);
+    };
+  }, [show]);
+
   return (
     <span
-      className={`help-tip${open ? ' open' : ''}`}
-      onMouseLeave={() => setOpen(false)}
+      className={`help-tip${show ? ' open' : ''}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <button
+        ref={btnRef}
         type="button"
         className="help-tip-btn"
         aria-label={`计算方法：${text}`}
-        aria-expanded={open}
+        aria-expanded={show}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => !v);
@@ -54,9 +83,18 @@ function HelpTip({ text }: { text: string }) {
       >
         ?
       </button>
-      <span className="help-tip-bubble" role="tooltip">
-        {text}
-      </span>
+      {show &&
+        coords &&
+        createPortal(
+          <span
+            className="help-tip-bubble help-tip-bubble--portal"
+            role="tooltip"
+            style={{ top: coords.top, left: coords.left }}
+          >
+            {text}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
