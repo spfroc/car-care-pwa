@@ -1,5 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import type { QuickEntryNavState } from '../components/QuickEntrySheet';
+import type { QuickEntryPrefill } from '../lib/quickEntryParse';
 import { getVehicle, putVehicle } from '../repositories/vehicles';
 import { getRecord, latestOdometer, putRecord } from '../repositories/records';
 import { listStations } from '../repositories/stations';
@@ -26,6 +28,8 @@ export function RecordFormPage() {
   const { vehicleId, recordId, type: typeParam } = useParams();
   const isNew = recordId === 'new' || !recordId;
   const nav = useNavigate();
+  const routeLocation = useLocation();
+  const quickPrefill = (routeLocation.state as QuickEntryNavState | null)?.prefill;
   const { settings } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [type, setType] = useState<RecordType>((typeParam as RecordType) || 'fuel');
@@ -99,6 +103,25 @@ export function RecordFormPage() {
   const [insurer, setInsurer] = useState('');
   const [policyName, setPolicyName] = useState('');
   // reuses periodStart / periodEnd from parking when type is insurance
+
+  function applyQuickPrefill(p?: QuickEntryPrefill) {
+    if (!p) return;
+    if (p.amountPaid != null) setAmountPaid(String(p.amountPaid));
+    if (p.amountDue != null) setAmountDue(String(p.amountDue));
+    if (p.liters != null) setLiters(String(p.liters));
+    if (p.kWh != null) setKWh(String(p.kWh));
+    if (p.odometer != null) setOdometer(String(p.odometer));
+    if (p.unitPrice != null) setUnitPrice(String(p.unitPrice));
+    if (p.stationName) setStationName(p.stationName);
+    if (p.fuelGrade) setFuelGrade(p.fuelGrade);
+    if (p.note) setNote(p.note);
+    if (p.place) setPlace(p.place);
+    if (p.route) setRoute(p.route);
+    if (p.title) setTitle(p.title);
+    if (p.parkingKind) setParkingKind(p.parkingKind);
+    if (p.insurer) setInsurer(p.insurer);
+    if (p.policyName) setPolicyName(p.policyName);
+  }
 
   useEffect(() => {
     if (!vehicleId) return;
@@ -181,9 +204,11 @@ export function RecordFormPage() {
       Promise.all([latestOdometer(vehicleId), getVehicle(vehicleId)]).then(([last, v]) => {
         const seed = last ?? v?.initialOdometer;
         if (seed != null) setOdometer(String(seed));
+        // Quick-entry prefill overlays defaults (still user must submit to save).
+        applyQuickPrefill(quickPrefill);
       });
     }
-  }, [vehicleId, recordId, isNew, typeParam]);
+  }, [vehicleId, recordId, isNew, typeParam, quickPrefill]);
 
   function syncDiscount(due: string, paidVal: string) {
     const d = Number(due);

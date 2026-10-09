@@ -31,7 +31,7 @@ button, input, select, textarea {
 }
 .app-main {
   flex: 1;
-  padding-bottom: calc(var(--tab-h) + 16px);
+  padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 16px);
 }
 .tab-bar {
   position: fixed;
@@ -39,7 +39,8 @@ button, input, select, textarea {
   transform: translateX(-50%);
   bottom: 0;
   width: min(560px, 100%);
-  height: var(--tab-h);
+  height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   background: #fff;
@@ -58,6 +59,9 @@ button, input, select, textarea {
 .tab.active { color: var(--primary); font-weight: 600; }
 
 .page { padding: 16px; }
+.page-home {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
 .page-header {
   display: flex;
   align-items: center;
@@ -587,4 +591,137 @@ button, input, select, textarea {
   padding: 4px 8px;
   font-size: 12px;
   border-radius: 8px;
+}
+
+/* —— Quick entry FAB (fixed above tab bar) —— */
+.qe-fab {
+  position: fixed;
+  z-index: 25;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 12px);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 8px 24px rgb(109 40 217 / 35%), 0 2px 6px rgb(15 23 42 / 12%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1.1;
+}
+.qe-fab:active { transform: translateX(-50%) scale(0.96); }
+.qe-fab-icon { font-size: 1.25rem; }
+.qe-fab-label { font-size: 11px; font-weight: 600; }
+
+.qe-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.qe-sheet {
+  width: min(560px, 100%);
+  max-height: min(85dvh, calc(100dvh - var(--tab-h) - env(safe-area-inset-bottom, 0px) - 24px));
+  overflow: auto;
+  background: var(--card);
+  border-radius: 18px 18px 0 0;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  margin-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 32px rgb(15 23 42 / 18%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qe-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  margin: 4px auto 0;
+}
+.qe-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.qe-sheet-head h2 { margin: 0; font-size: 1.1rem; }
+.qe-hint { margin: 0; }
+.qe-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.qe-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.qe-input-row textarea {
+  flex: 1;
+  font-weight: 400;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  resize: vertical;
+  min-height: 72px;
+}
+.qe-mic {
+  width: 48px;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  padding: 0;
+}
+.qe-mic.listening {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  animation: qe-pulse 1.2s ease-in-out infinite;
+}
+@keyframes qe-pulse {
+  50% { box-shadow: 0 0 0 4px rgb(239 68 68 / 20%); }
+}
+.qe-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 8px;
+}
+.qe-result {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qe-result label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.qe-result select {
+  font-weight: 400;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+.qe-chip-line { margin: 0; font-size: 14px; }
+.qe-fields {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
 }

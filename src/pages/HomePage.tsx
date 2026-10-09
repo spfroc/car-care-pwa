@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { QuickEntryFab } from '../components/QuickEntrySheet';
 import { VehicleCard } from '../components/VehicleCard';
 import { useSettings, useVehicles } from '../hooks/useAppData';
 import { listAllRecords } from '../repositories/records';
@@ -18,7 +19,7 @@ export function HomePage() {
   if (loading || !settings) return <div className="page"><p className="muted">加载中…</p></div>;
 
   return (
-    <div className="page">
+    <div className="page page-home">
       <header className="page-header">
         <div>
           <h1>车护助手</h1>
@@ -51,6 +52,8 @@ export function HomePage() {
           ))}
         </div>
       )}
+
+      <QuickEntryFab vehicles={vehicles} />
     </div>
   );
 }
