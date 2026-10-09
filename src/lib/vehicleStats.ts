@@ -1,4 +1,5 @@
-import type { CareRecord, Km, KWh, Liter, Money, Vehicle } from '../types';
+import type { CareRecord, EnergyType, Km, KWh, Liter, Money, Vehicle } from '../types';
+import { allowsCharge, allowsFuel } from './energy';
 
 /**
  * Mileage / volume / cost helpers for the vehicle detail hero card.
@@ -11,10 +12,12 @@ import type { CareRecord, Km, KWh, Liter, Money, Vehicle } from '../types';
  * - **统计里程** (tracked mileage): distance driven while the app has been
  *   tracking = 行驶里程 − baseline. Baseline is `initialOdometer` when set;
  *   otherwise the earliest (minimum) odometer among records. Never negative.
- * - **加油花费** (hero): Σ amountPaid on fuel records with odometer **strictly
- *   after** the stats baseline (same baseline as 统计里程). Non-fuel expenses
- *   are excluded from the hero; full totals remain on the Stats page / home expand.
- * - **每公里成本** (hero): 加油花费 ÷ 统计里程 (¥/km when currency is CNY).
+ * - **加油花费 / 充电花费** (hero): Σ amountPaid on fuel / charge records with
+ *   odometer **strictly after** the stats baseline (same baseline as 统计里程).
+ *   Which rows appear depends on energy type (see `heroEnergyCosts`).
+ * - **每公里成本** (hero): energy-spend numerator ÷ 统计里程 (¥/km when CNY).
+ *   Numerator matches energy type — fuel, charge, or fuel+charge — never
+ *   maintenance/insurance/etc. Full category totals remain on Stats / home expand.
  * - **总加油量 / 总充电量**: Σ liters on fuel records / Σ kWh on charge records.
  */
 
@@ -70,19 +73,14 @@ export function summarizeMileage(
   return { drivingOdometer, trackedMileage, baselineOdometer };
 }
 
-/**
- * Sum amountPaid on fuel (加油) records after stats tracking started.
- * Includes only fuel with odometer strictly greater than baseline
- * (initialOdometer, or earliest record odo when initial is unset).
- * When baseline is null, all fuel amountPaid are included.
- */
-export function fuelSpendAfterBaseline(
+function spendOfTypeAfterBaseline(
   records: CareRecord[],
+  type: 'fuel' | 'charge',
   baselineOdometer: Km | null | undefined,
 ): Money {
   let sum = 0;
   for (const r of records) {
-    if (r.type !== 'fuel') continue;
+    if (r.type !== type) continue;
     if (typeof r.odometer !== 'number' || !Number.isFinite(r.odometer)) continue;
     if (baselineOdometer != null && Number.isFinite(baselineOdometer) && r.odometer <= baselineOdometer) {
       continue;
@@ -93,11 +91,111 @@ export function fuelSpendAfterBaseline(
   return sum;
 }
 
+/**
+ * Sum amountPaid on fuel (加油) records after stats tracking started.
+ * Includes only fuel with odometer strictly greater than baseline
+ * (initialOdometer, or earliest record odo when initial is unset).
+ * When baseline is null, all fuel amountPaid are included.
+ */
+export function fuelSpendAfterBaseline(
+  records: CareRecord[],
+  baselineOdometer: Km | null | undefined,
+): Money {
+  return spendOfTypeAfterBaseline(records, 'fuel', baselineOdometer);
+}
+
+/** Sum amountPaid on charge (充电) records after stats tracking started (same baseline rules as fuel). */
+export function chargeSpendAfterBaseline(
+  records: CareRecord[],
+  baselineOdometer: Km | null | undefined,
+): Money {
+  return spendOfTypeAfterBaseline(records, 'charge', baselineOdometer);
+}
+
 /** Cost per tracked km; null when tracked mileage is missing or ≤ 0. */
 export function costPerKm(totalSpend: Money, trackedMileage: Km | null | undefined): Money | null {
   if (trackedMileage == null || trackedMileage <= 0) return null;
   if (!Number.isFinite(totalSpend)) return null;
   return totalSpend / trackedMileage;
+}
+
+/**
+ * Detail-hero energy cost bundle: which spend lines to show and the ¥/km numerator.
+ *
+ * | Energy | Shown spend | 每公里成本 numerator |
+ * |--------|-------------|----------------------|
+ * | ICE / HEV (no charge) | 加油花费 | fuel |
+ * | EV | 充电花费 | charge |
+ * | PHEV / REEV / HEV+charge | 加油 + 充电 | fuel + charge |
+ * | OTHER / FCEV | whichever of fuel/charge is allowed | sum of shown |
+ */
+export interface HeroEnergyCosts {
+  showFuelSpend: boolean;
+  showChargeSpend: boolean;
+  fuelSpend: Money;
+  chargeSpend: Money;
+  /** Numerator for 每公里成本 (matches shown energy spends). */
+  costPerKmNumerator: Money;
+  /** Short helper: what ÷ 统计里程. */
+  costPerKmHint: string;
+}
+
+export function heroEnergyCosts(
+  energyType: EnergyType,
+  records: CareRecord[],
+  baselineOdometer: Km | null | undefined,
+  hevAllowCharge = false,
+): HeroEnergyCosts {
+  const fuelOk = allowsFuel(energyType);
+  const chargeOk = allowsCharge(energyType, hevAllowCharge);
+  const fuelSpend = fuelSpendAfterBaseline(records, baselineOdometer);
+  const chargeSpend = chargeSpendAfterBaseline(records, baselineOdometer);
+
+  // EV: charge only (never show 加油花费 ¥0).
+  if (energyType === 'EV') {
+    return {
+      showFuelSpend: false,
+      showChargeSpend: true,
+      fuelSpend,
+      chargeSpend,
+      costPerKmNumerator: chargeSpend,
+      costPerKmHint: '充电花费 ÷ 统计里程',
+    };
+  }
+
+  // Pure fuel path: ICE, HEV without charge, FCEV treated as fuel-like.
+  if (fuelOk && !chargeOk) {
+    return {
+      showFuelSpend: true,
+      showChargeSpend: false,
+      fuelSpend,
+      chargeSpend,
+      costPerKmNumerator: fuelSpend,
+      costPerKmHint: '加油花费 ÷ 统计里程',
+    };
+  }
+
+  // Dual-energy: PHEV / REEV / HEV+charge / OTHER with both.
+  if (fuelOk && chargeOk) {
+    return {
+      showFuelSpend: true,
+      showChargeSpend: true,
+      fuelSpend,
+      chargeSpend,
+      costPerKmNumerator: fuelSpend + chargeSpend,
+      costPerKmHint: '加油+充电花费 ÷ 统计里程',
+    };
+  }
+
+  // Charge-only fallback (should be rare).
+  return {
+    showFuelSpend: false,
+    showChargeSpend: chargeOk,
+    fuelSpend,
+    chargeSpend,
+    costPerKmNumerator: chargeSpend,
+    costPerKmHint: '充电花费 ÷ 统计里程',
+  };
 }
 
 export function totalFuelLiters(records: CareRecord[]): Liter {

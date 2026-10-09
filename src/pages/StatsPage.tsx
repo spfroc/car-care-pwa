@@ -209,7 +209,9 @@ export function StatsPage() {
             <p>
               平均油耗：{' '}
               <strong>
-                {fuelAvg == null ? '数据不足' : `${formatEconomy(fuelAvg)} ${settings.fuelEconomyUnit}`}
+                {fuelAvg == null
+                  ? '数据不足'
+                  : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -229,7 +231,7 @@ export function StatsPage() {
               <strong>
                 {elecAvg == null
                   ? '数据不足'
-                  : `${formatEconomy(elecAvg)} ${settings.electricEconomyUnit}`}
+                  : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -246,7 +248,9 @@ export function StatsPage() {
           <p style={{ marginTop: 14 }}>
             综合油耗（折算）：{' '}
             <strong>
-              {combined == null ? '数据不足' : `${formatEconomy(combined.economyPer100)} L/100km`}
+              {combined == null
+                ? '数据不足'
+                : `${formatEconomy(combined.economyPer100, 'L/100km')} L/100km`}
             </strong>
           </p>
         )}

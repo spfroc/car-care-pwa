@@ -42,7 +42,7 @@ export function EconomyIntervalList({
               </span>
             </div>
             <div className="iv-eco">
-              {formatEconomy(iv.economyPer100)} {unitLabel}
+              {formatEconomy(iv.economyPer100, unitLabel)} {unitLabel}
             </div>
           </li>
         );

@@ -26,7 +26,7 @@ import {
 import {
   costPerKm,
   formatMileagePair,
-  fuelSpendAfterBaseline,
+  heroEnergyCosts,
   summarizeMileage,
   totalChargeKWh,
   totalFuelLiters,
@@ -96,13 +96,13 @@ function intervalLine(
     const iv = fuelByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100)} ${fuelUnit}`;
+    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100, fuelUnit)} ${fuelUnit}`;
   }
   if (r.type === 'charge') {
     const iv = elecByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100)} ${elecUnit}`;
+    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100, elecUnit)} ${elecUnit}`;
   }
   return null;
 }
@@ -150,8 +150,13 @@ export function VehicleDetailPage() {
   const elecByEnd = new Map(elecIvs.map((iv) => [iv.endRecordId, iv]));
   const bg = ENERGY_COLORS[vehicle.energyType];
   const mileage = summarizeMileage(vehicle, records);
-  const fuelSpend = fuelSpendAfterBaseline(records, mileage.baselineOdometer);
-  const perKm = costPerKm(fuelSpend, mileage.trackedMileage);
+  const energyCosts = heroEnergyCosts(
+    vehicle.energyType,
+    records,
+    mileage.baselineOdometer,
+    settings.hevAllowCharge,
+  );
+  const perKm = costPerKm(energyCosts.costPerKmNumerator, mileage.trackedMileage);
   const fuelLiters = totalFuelLiters(records);
   const chargeKWh = totalChargeKWh(records);
 
@@ -189,21 +194,32 @@ export function VehicleDetailPage() {
           </div>
         </div>
         <div className="mini-stats">
-          <div>
-            <span className="label">加油花费</span>
-            <strong>{formatMoney(fuelSpend, settings.currency.symbol)}</strong>
-          </div>
+          {energyCosts.showFuelSpend && (
+            <div>
+              <span className="label">加油花费</span>
+              <strong>{formatMoney(energyCosts.fuelSpend, settings.currency.symbol)}</strong>
+            </div>
+          )}
+          {energyCosts.showChargeSpend && (
+            <div>
+              <span className="label">充电花费</span>
+              <strong>{formatMoney(energyCosts.chargeSpend, settings.currency.symbol)}</strong>
+            </div>
+          )}
           <div>
             <span className="label">每公里成本</span>
             <strong>
               {perKm == null ? '—' : formatMoney(perKm, settings.currency.symbol)}
             </strong>
+            <span className="field-hint hero-cost-hint">{energyCosts.costPerKmHint}</span>
           </div>
           {canFuel && (
             <div>
               <span className="label">油耗</span>
               <strong>
-                {fuelAvg == null ? '—' : `${formatEconomy(fuelAvg)} ${settings.fuelEconomyUnit}`}
+                {fuelAvg == null
+                  ? '—'
+                  : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
               </strong>
             </div>
           )}
@@ -211,7 +227,9 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">电耗</span>
               <strong>
-                {elecAvg == null ? '—' : `${formatEconomy(elecAvg)} ${settings.electricEconomyUnit}`}
+                {elecAvg == null
+                  ? '—'
+                  : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
               </strong>
             </div>
           )}
@@ -235,7 +253,7 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">综合</span>
               <strong>
-                {combined == null ? '—' : `${formatEconomy(combined.economyPer100)} L/100km`}
+                {combined == null ? '—' : `${formatEconomy(combined.economyPer100, 'L/100km')} L/100km`}
               </strong>
             </div>
           )}

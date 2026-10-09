@@ -58,7 +58,7 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">油耗</div>
                 <div className="value">
-                  {fuelEco == null ? '—' : `${formatEconomy(fuelEco)} ${fuelUnit}`}
+                  {fuelEco == null ? '—' : `${formatEconomy(fuelEco, fuelUnit)} ${fuelUnit}`}
                 </div>
               </div>
             )}
@@ -66,7 +66,7 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">电耗</div>
                 <div className="value">
-                  {elecEco == null ? '—' : `${formatEconomy(elecEco)} ${electricUnit}`}
+                  {elecEco == null ? '—' : `${formatEconomy(elecEco, electricUnit)} ${electricUnit}`}
                 </div>
               </div>
             )}

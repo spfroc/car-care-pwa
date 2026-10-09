@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  chargeSpendAfterBaseline,
   costPerKm,
   formatMileagePair,
   fuelSpendAfterBaseline,
+  heroEnergyCosts,
   summarizeMileage,
   totalChargeKWh,
   totalFuelLiters,
@@ -207,7 +209,7 @@ describe('fuelSpendAfterBaseline', () => {
     expect(fuelSpendAfterBaseline(records, 34448)).toBeCloseTo(280 + 320, 5);
   });
 
-  it('hero 每公里成本 = fuel spend / tracked mileage', () => {
+  it('ICE hero 每公里成本 = fuel spend / tracked mileage', () => {
     const records: CareRecord[] = [
       {
         ...base,
@@ -266,5 +268,126 @@ describe('fuelSpendAfterBaseline', () => {
       },
     ];
     expect(fuelSpendAfterBaseline(records, null)).toBe(80);
+  });
+});
+
+
+describe('chargeSpendAfterBaseline', () => {
+  it('sums only charge amountPaid with odometer strictly after baseline', () => {
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'at',
+        vehicleId: 'v',
+        type: 'charge',
+        date: '2026-01-01T10:00:00.000Z',
+        odometer: 5000,
+        kWh: 40,
+        stationName: 'h',
+        stationKind: 'home',
+        amountPaid: 0,
+      },
+      {
+        ...base,
+        id: 'after',
+        vehicleId: 'v',
+        type: 'charge',
+        date: '2026-01-10T10:00:00.000Z',
+        odometer: 5300,
+        kWh: 30,
+        stationName: 'p',
+        stationKind: 'public',
+        amountPaid: 45,
+      },
+      {
+        ...base,
+        id: 'fuel',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-11T10:00:00.000Z',
+        odometer: 5400,
+        liters: 10,
+        fuelGrade: '95#',
+        filledUp: true,
+        amountPaid: 80,
+      },
+    ];
+    expect(chargeSpendAfterBaseline(records, 5000)).toBe(45);
+  });
+});
+
+describe('heroEnergyCosts by energy type', () => {
+  const records: CareRecord[] = [
+    {
+      ...base,
+      id: 'f0',
+      vehicleId: 'v',
+      type: 'fuel',
+      date: '2026-01-01T10:00:00.000Z',
+      odometer: 100,
+      liters: 40,
+      fuelGrade: '92#',
+      filledUp: true,
+      amountPaid: 300,
+    },
+    {
+      ...base,
+      id: 'f1',
+      vehicleId: 'v',
+      type: 'fuel',
+      date: '2026-02-01T10:00:00.000Z',
+      odometer: 1100,
+      liters: 40,
+      fuelGrade: '92#',
+      filledUp: true,
+      amountPaid: 400,
+    },
+    {
+      ...base,
+      id: 'c1',
+      vehicleId: 'v',
+      type: 'charge',
+      date: '2026-02-05T10:00:00.000Z',
+      odometer: 1200,
+      kWh: 20,
+      stationName: 'h',
+      stationKind: 'home',
+      amountPaid: 12,
+    },
+  ];
+
+  it('EV shows charge only; ¥/km = charge / tracked', () => {
+    const h = heroEnergyCosts('EV', records, 100);
+    expect(h.showFuelSpend).toBe(false);
+    expect(h.showChargeSpend).toBe(true);
+    expect(h.chargeSpend).toBe(12);
+    expect(h.costPerKmNumerator).toBe(12);
+    expect(h.costPerKmHint).toContain('充电');
+  });
+
+  it('ICE shows fuel only; ¥/km = fuel / tracked', () => {
+    const h = heroEnergyCosts('ICE', records, 100);
+    expect(h.showFuelSpend).toBe(true);
+    expect(h.showChargeSpend).toBe(false);
+    expect(h.fuelSpend).toBe(400); // excludes baseline fill at 100
+    expect(h.costPerKmNumerator).toBe(400);
+    expect(h.costPerKmHint).toContain('加油');
+  });
+
+  it('PHEV shows oil + electric; ¥/km uses combined numerator', () => {
+    const h = heroEnergyCosts('PHEV', records, 100);
+    expect(h.showFuelSpend).toBe(true);
+    expect(h.showChargeSpend).toBe(true);
+    expect(h.fuelSpend).toBe(400);
+    expect(h.chargeSpend).toBe(12);
+    expect(h.costPerKmNumerator).toBe(412);
+    expect(h.costPerKmHint).toContain('加油+充电');
+  });
+
+  it('HEV with hevAllowCharge uses combined numerator', () => {
+    const h = heroEnergyCosts('HEV', records, 100, true);
+    expect(h.showFuelSpend).toBe(true);
+    expect(h.showChargeSpend).toBe(true);
+    expect(h.costPerKmNumerator).toBe(412);
   });
 });

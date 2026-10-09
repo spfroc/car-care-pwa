@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   averageFuelEconomy,
   combinedEconomy,
+  convertEconomy,
   electricIntervals,
   formatEconomy,
   fuelIntervals,
@@ -160,5 +161,33 @@ describe('averageFuelEconomy / formatEconomy', () => {
     expect(formatEconomy(6.1)).toBe('6.10');
     expect(formatEconomy(6.09)).toBe('6.09');
     expect(formatEconomy(6)).toBe('6.00');
+  });
+});
+
+describe('convertEconomy / formatEconomy unit conversion', () => {
+  it('leaves L/100km and kWh/100km unchanged', () => {
+    expect(convertEconomy(8, 'L/100km')).toBe(8);
+    expect(convertEconomy(15, 'kWh/100km')).toBe(15);
+    expect(formatEconomy(8, 'L/100km')).toBe('8.00');
+    expect(formatEconomy(15.5, 'kWh/100km')).toBe('15.50');
+  });
+
+  it('converts L/100km → km/L as 100 / value', () => {
+    // 8 L/100km → 12.5 km/L
+    expect(convertEconomy(8, 'km/L')).toBeCloseTo(12.5, 10);
+    expect(formatEconomy(8, 'km/L')).toBe('12.50');
+    // 6.90909… → ~14.47 km/L
+    expect(formatEconomy((76 / 1100) * 100, 'km/L')).toBe('14.47');
+  });
+
+  it('converts kWh/100km → km/kWh as 100 / value', () => {
+    // 15 kWh/100km → 6.666… km/kWh
+    expect(convertEconomy(15, 'km/kWh')).toBeCloseTo(100 / 15, 10);
+    expect(formatEconomy(15, 'km/kWh')).toBe('6.67');
+  });
+
+  it('defaults to raw per-100 when unit omitted (backward compatible)', () => {
+    expect(formatEconomy(6.1)).toBe('6.10');
+    expect(convertEconomy(6.1)).toBe(6.1);
   });
 });

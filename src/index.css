@@ -115,25 +115,59 @@ button, input, select, textarea {
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+  flex-wrap: wrap;
 }
-.vc-title { display: flex; gap: 10px; align-items: center; min-width: 0; }
-.vc-icon { font-size: 1.6rem; }
+.vc-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 140px;
+}
+.vc-icon { font-size: 1.6rem; flex-shrink: 0; }
 .vc-icon.lg { font-size: 2rem; }
-.vc-name { font-weight: 700; }
-.vc-meta { font-size: 12px; color: var(--muted); }
+.vc-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vc-meta {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .vc-head-metrics {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px 12px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   text-align: right;
+}
+.vc-metric {
+  min-width: 0;
 }
 .vc-metric .label { font-size: 11px; color: var(--muted); }
 .vc-metric .value {
   font-weight: 700;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+/* PHEV/REEV show both 油耗+电耗; stack metrics under title on narrow cards */
+@media (max-width: 420px) {
+  .vc-head-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .vc-head-metrics {
+    justify-content: flex-start;
+    text-align: left;
+    width: 100%;
+  }
 }
 .vc-expand {
   flex-shrink: 0;
@@ -258,6 +292,13 @@ button, input, select, textarea {
   min-width: max-content;
 }
 .mini-stats .label { display: block; white-space: nowrap; }
+
+.hero-cost-hint {
+  display: block;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
 .mini-stats strong {
   font-size: 0.95rem;
   font-variant-numeric: tabular-nums;

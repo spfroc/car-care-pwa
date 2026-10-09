@@ -138,7 +138,21 @@ export function latestElectricEconomy(records: CareRecord[]): number | null {
   return ivs[ivs.length - 1].economyPer100;
 }
 
-/** Display economy with unified 2 decimal places (home, detail, timeline, stats). */
-export function formatEconomy(n: number): string {
-  return n.toFixed(2);
+/**
+ * Convert canonical economyPer100 (L/100km or kWh/100km) to the display unit.
+ * km/L = 100 / (L/100km); km/kWh = 100 / (kWh/100km).
+ * Non-finite or ≤0 inputs are returned unchanged (caller shows "—" for null averages).
+ */
+export function convertEconomy(economyPer100: number, unit?: string): number {
+  if (unit !== 'km/L' && unit !== 'km/kWh') return economyPer100;
+  if (!Number.isFinite(economyPer100) || economyPer100 <= 0) return economyPer100;
+  return 100 / economyPer100;
+}
+
+/**
+ * Display economy with unified 2 decimal places (home, detail, timeline, stats).
+ * Pass the settings unit so km/L and km/kWh convert the value, not only the suffix.
+ */
+export function formatEconomy(economyPer100: number, unit?: string): string {
+  return convertEconomy(economyPer100, unit).toFixed(2);
 }
