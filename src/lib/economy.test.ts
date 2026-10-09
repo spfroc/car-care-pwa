@@ -73,6 +73,43 @@ describe('electricIntervals', () => {
   });
 });
 
+describe('multi-vehicle: never cross-stitch intervals', () => {
+  it('fuelIntervals groups by vehicleId (Stats 全部车辆)', () => {
+    // Two ICE cars with overlapping-looking odometers — stitching across cars
+    // would invent a fake 1500→2000 interval (40L / 500km).
+    const records: CareRecord[] = [
+      { ...base, id: 'a1', vehicleId: 'car-a', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'a2', vehicleId: 'car-a', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1500, liters: 40, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'b1', vehicleId: 'car-b', type: 'fuel', date: '2026-01-02T10:00:00.000Z', odometer: 2000, liters: 35, fuelGrade: '92#', filledUp: true },
+      { ...base, id: 'b2', vehicleId: 'car-b', type: 'fuel', date: '2026-01-20T10:00:00.000Z', odometer: 2500, liters: 35, fuelGrade: '92#', filledUp: true },
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs.map((iv) => iv.endRecordId).sort()).toEqual(['a2', 'b2']);
+    // No cross-vehicle 1500→2000
+    expect(ivs.some((iv) => iv.fromOdometer === 1500 && iv.toOdometer === 2000)).toBe(false);
+    expect(ivs.find((iv) => iv.endRecordId === 'a2')!.economyPer100).toBeCloseTo(8, 5);
+    expect(ivs.find((iv) => iv.endRecordId === 'b2')!.economyPer100).toBeCloseTo(7, 5);
+    // Average = distance-weighted merge of per-vehicle intervals only
+    expect(averageFuelEconomy(records)).toBeCloseTo(weightedAverage(ivs)!, 10);
+    expect(averageFuelEconomy(records)).toBeCloseTo((40 + 35) / (500 + 500) * 100, 5);
+  });
+
+  it('electricIntervals groups by vehicleId', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'e1', vehicleId: 'ev-a', type: 'charge', date: '2026-01-01T10:00:00.000Z', odometer: 1000, kWh: 40, stationName: 'h', stationKind: 'home' },
+      { ...base, id: 'e2', vehicleId: 'ev-a', type: 'charge', date: '2026-01-05T10:00:00.000Z', odometer: 1200, kWh: 30, stationName: 'h', stationKind: 'home' },
+      { ...base, id: 'f1', vehicleId: 'ev-b', type: 'charge', date: '2026-01-02T10:00:00.000Z', odometer: 5000, kWh: 50, stationName: 'p', stationKind: 'public' },
+      { ...base, id: 'f2', vehicleId: 'ev-b', type: 'charge', date: '2026-01-12T10:00:00.000Z', odometer: 5300, kWh: 45, stationName: 'p', stationKind: 'public' },
+    ];
+    const ivs = electricIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs.some((iv) => iv.fromOdometer === 1200 && iv.toOdometer === 5000)).toBe(false);
+    expect(ivs.find((iv) => iv.endRecordId === 'e2')!.economyPer100).toBeCloseTo(15, 5);
+    expect(ivs.find((iv) => iv.endRecordId === 'f2')!.economyPer100).toBeCloseTo(15, 5);
+  });
+});
+
 describe('weightedAverage', () => {
   it('distance-weights intervals', () => {
     const avg = weightedAverage([

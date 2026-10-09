@@ -102,15 +102,18 @@ export function VehicleCard({
       </div>
       {expanded && (
         <Link to={detailTo} className="vc-grid">
+          <p className="vc-spend-note muted small">
+            全部记录合计；详情页加油/充电花费按统计里程起点起算
+          </p>
           {flags.showFuelCost && (
             <div>
-              <div className="label">燃油</div>
+              <div className="label" title="全部加油记录实付合计">燃油</div>
               <div className="value">{formatMoney(spend.fuelCost)}</div>
             </div>
           )}
           {flags.showChargeCost && (
             <div>
-              <div className="label">充电</div>
+              <div className="label" title="全部充电记录实付合计">充电</div>
               <div className="value">{formatMoney(spend.chargeCost)}</div>
             </div>
           )}

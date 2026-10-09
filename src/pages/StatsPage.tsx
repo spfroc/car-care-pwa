@@ -254,7 +254,7 @@ export function StatsPage() {
             </strong>
           </p>
         )}
-        {!vehicle && <p className="muted small">选择单车可查看对应能耗公式分支</p>}
+        {!vehicle && <p className="muted small">全部车辆：油耗/电耗按各车区间分别计算后合并；综合折算请选单车</p>}
         {vehicle?.energyType === 'FCEV' && <p className="muted">能耗公式未启用（氢燃料）</p>}
       </section>
 

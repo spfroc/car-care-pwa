@@ -10,6 +10,7 @@ import {
   parseChineseYuan,
   parseQuickEntry,
   resolveVehicleWithoutMention,
+  truncateStationCapture,
 } from './quickEntryParse';
 
 const vehicles = [
@@ -185,6 +186,22 @@ describe('matchStations', () => {
   });
 });
 
+describe('truncateStationCapture', () => {
+  it('keeps brand-only and brand+location', () => {
+    expect(truncateStationCapture('中凯')).toBe('中凯');
+    expect(truncateStationCapture('中石化浦东站')).toBe('中石化浦东站');
+    expect(truncateStationCapture('中石油')).toBe('中石油');
+  });
+  it('truncates after brand at 加/充/块/元/油', () => {
+    expect(truncateStationCapture('中石化加了300块')).toBe('中石化');
+    expect(truncateStationCapture('中凯加油')).toBe('中凯');
+    expect(truncateStationCapture('特来电充电45度')).toBe('特来电');
+    expect(truncateStationCapture('壳牌块')).toBe('壳牌');
+    expect(truncateStationCapture('中石油油')).toBe('中石油'); // 油 after brand, not part of 石油
+    expect(truncateStationCapture('中石化浦东站加了')).toBe('中石化浦东站');
+  });
+});
+
 describe('extractFields', () => {
   it('extracts amount, liters, odometer, grade', () => {
     const f = extractFields('加了 40 升 320 元 95号 里程 12345', 'fuel');
@@ -238,6 +255,10 @@ describe('extractFields', () => {
     expect(new Date(f.date!).toDateString()).toBe(
       new Date('2026-10-08T15:18:00+08:00').toDateString(),
     );
+  });
+  it('brand without 在: truncates 中石化加了… to 中石化', () => {
+    const f = extractFields('中石化加了300块的油', 'fuel');
+    expect(f.stationName).toBe('中石化');
   });
 });
 

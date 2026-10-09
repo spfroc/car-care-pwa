@@ -112,7 +112,7 @@ export function VehicleDetailPage() {
   const { settings } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [records, setRecords] = useState<CareRecord[]>([]);
-  const [filter, setFilter] = useState<'all' | RecordType>('fuel');
+  const [filter, setFilter] = useState<'all' | RecordType>('all');
   const [showAdd, setShowAdd] = useState(false);
 
   async function refresh() {
@@ -129,7 +129,9 @@ export function VehicleDetailPage() {
     if (!vehicle || !settings) return;
     const fuelOk = allowsFuel(vehicle.energyType);
     const chargeOk = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
-    setFilter(fuelOk ? 'fuel' : chargeOk ? 'charge' : 'all');
+    // Dual-energy (PHEV/REEV/HEV+charge): default 「全部」 so both fuel & charge show.
+    if (fuelOk && chargeOk) setFilter('all');
+    else setFilter(fuelOk ? 'fuel' : chargeOk ? 'charge' : 'all');
   }, [vehicle?.id, settings?.hevAllowCharge]);
 
   const filtered = useMemo(
@@ -196,13 +198,17 @@ export function VehicleDetailPage() {
         <div className="mini-stats">
           {energyCosts.showFuelSpend && (
             <div>
-              <span className="label">加油花费</span>
+              <span className="label" title="里程严格大于统计基线的加油实付（与首页「全部记录」不同）">
+                加油花费
+              </span>
               <strong>{formatMoney(energyCosts.fuelSpend, settings.currency.symbol)}</strong>
             </div>
           )}
           {energyCosts.showChargeSpend && (
             <div>
-              <span className="label">充电花费</span>
+              <span className="label" title="里程严格大于统计基线的充电实付（与首页「全部记录」不同）">
+                充电花费
+              </span>
               <strong>{formatMoney(energyCosts.chargeSpend, settings.currency.symbol)}</strong>
             </div>
           )}

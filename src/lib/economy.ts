@@ -7,8 +7,21 @@ function sortByOdometerThenDate<T extends { odometer: Km; date: string }>(rows: 
   });
 }
 
-/** Interval fuel economy L/100km using full-tank method (B.liters / Δkm * 100). */
-export function fuelIntervals(records: CareRecord[]): EconomyInterval[] {
+/** Group records by vehicleId (preserves first-seen order of vehicle keys). */
+function groupByVehicleId(records: CareRecord[]): CareRecord[][] {
+  const map = new Map<string, CareRecord[]>();
+  for (const r of records) {
+    let list = map.get(r.vehicleId);
+    if (!list) {
+      list = [];
+      map.set(r.vehicleId, list);
+    }
+    list.push(r);
+  }
+  return [...map.values()];
+}
+
+function fuelIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
   const fuels = sortByOdometerThenDate(
     records.filter((r): r is FuelRecord => r.type === 'fuel' && typeof r.odometer === 'number'),
   );
@@ -31,8 +44,7 @@ export function fuelIntervals(records: CareRecord[]): EconomyInterval[] {
   return out;
 }
 
-/** Interval electric economy kWh/100km. */
-export function electricIntervals(records: CareRecord[]): EconomyInterval[] {
+function electricIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
   const charges = sortByOdometerThenDate(
     records.filter((r): r is ChargeRecord => r.type === 'charge' && typeof r.odometer === 'number'),
   );
@@ -53,6 +65,23 @@ export function electricIntervals(records: CareRecord[]): EconomyInterval[] {
     });
   }
   return out;
+}
+
+/**
+ * Interval fuel economy L/100km using full-tank method (B.liters / Δkm * 100).
+ * Always computed per vehicleId then merged — never stitch odometer across vehicles
+ * (Stats「全部车辆」 must not invent cross-car intervals).
+ */
+export function fuelIntervals(records: CareRecord[]): EconomyInterval[] {
+  return groupByVehicleId(records).flatMap(fuelIntervalsOneVehicle);
+}
+
+/**
+ * Interval electric economy kWh/100km.
+ * Always computed per vehicleId then merged (same anti-cross-stitch rule as fuel).
+ */
+export function electricIntervals(records: CareRecord[]): EconomyInterval[] {
+  return groupByVehicleId(records).flatMap(electricIntervalsOneVehicle);
 }
 
 /** Distance-weighted average economy from intervals. */

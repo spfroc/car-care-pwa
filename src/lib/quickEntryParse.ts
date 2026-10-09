@@ -412,6 +412,42 @@ export function buildVehicleMatchInputs(
   }));
 }
 
+/** Known station brand prefixes (longer first for 中石油 before shorter tails). */
+const STATION_BRANDS = [
+  '国家电网',
+  '中石化',
+  '中石油',
+  '道达尔',
+  '特来电',
+  '壳牌',
+  '小桔',
+  '星星',
+  '中凯',
+] as const;
+
+/**
+ * After a brand-style capture, drop trailing action/money junk
+ * (加/充/块/元/油/停…) so「中石化加了300块」→「中石化」, while keeping
+ * location suffixes like「中石化浦东站」and not chopping「中石油」itself.
+ */
+export function truncateStationCapture(raw: string): string {
+  const s = raw.trim();
+  if (!s) return s;
+  const brand = STATION_BRANDS.find((b) => s.startsWith(b));
+  if (brand) {
+    const rest = s.slice(brand.length);
+    // Cut remainder at first action / money / 油 marker (油 is safe here: after brand).
+    const cut = rest.search(/[加充块元油停]/);
+    if (cut === 0) return brand;
+    if (cut > 0) return brand + rest.slice(0, cut);
+    return s;
+  }
+  // Non-brand captures (e.g. 在X加了): also stop before action/money if present.
+  const cut = s.search(/加了|加油|充电|补电|停了|停车|[块元]/);
+  if (cut > 0) return s.slice(0, cut);
+  return s;
+}
+
 /** Pull common numeric / string fields from free text. */
 export function extractFields(
   text: string,
@@ -526,7 +562,7 @@ export function extractFields(
     text.match(
       /((?:中石化|中石油|壳牌|道达尔|国家电网|特来电|小桔|星星|中凯)[^\s，,。]{0,12})/,
     );
-  if (station?.[1]) fields.stationName = station[1];
+  if (station?.[1]) fields.stationName = truncateStationCapture(station[1]);
 
   const place = text.match(/(?:在|于)\s*([^\s，,。]{2,20}?(?:停车场|车库|商场|小区))/);
   if (place?.[1]) fields.place = place[1];
