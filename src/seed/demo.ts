@@ -228,6 +228,16 @@ export async function loadDemoSeed(replace = true): Promise<void> {
       id: 'seed-toll-phev-1', vehicleId: phevId, type: 'toll', date: ts(14), route: 'G15 沈海高速',
       amountPaid: 120, mediaIds: [], createdAt, updatedAt: createdAt,
     },
+    {
+      id: 'seed-ins-ice-1', vehicleId: iceId, type: 'insurance', date: ts(90),
+      insurer: '人保车险', policyName: '交强险+商业险', periodStart: ts(90), periodEnd: ts(-275),
+      amountPaid: 5200, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-ins-ev-1', vehicleId: evId, type: 'insurance', date: ts(60),
+      insurer: '平安车险', policyName: '新能源专属', periodStart: ts(60), periodEnd: ts(-305),
+      amountPaid: 3800, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
   ];
 
   for (const v of vehicles) await db.put('vehicles', v);

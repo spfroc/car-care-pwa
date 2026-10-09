@@ -15,7 +15,7 @@ export type BodyType =
 
 export type RecordType =
   | 'fuel' | 'charge' | 'maintenance' | 'modification' | 'wash' | 'goods' | 'ticket'
-  | 'parking' | 'toll';
+  | 'parking' | 'toll' | 'insurance';
 
 export type ChargeStationKind = 'public' | 'home' | 'destination' | 'other';
 export type MaintenanceCategory = 'service' | 'repair' | 'beauty' | 'tire' | 'other';
@@ -149,6 +149,19 @@ export interface TollRecord extends RecordBase {
   route?: string;
 }
 
+/** Vehicle insurance premium. */
+export interface InsuranceRecord extends RecordBase {
+  type: 'insurance';
+  /** Insurer / company name. */
+  insurer?: string;
+  /** Policy / product name (e.g. 交强险+商业险). */
+  policyName?: string;
+  /** Coverage / billing period start. */
+  periodStart?: ISODateTime;
+  /** Coverage / billing period end. */
+  periodEnd?: ISODateTime;
+}
+
 export type CareRecord =
   | FuelRecord
   | ChargeRecord
@@ -158,7 +171,8 @@ export type CareRecord =
   | GoodsRecord
   | TicketRecord
   | ParkingRecord
-  | TollRecord;
+  | TollRecord
+  | InsuranceRecord;
 
 export interface Station {
   id: UUID;
@@ -207,6 +221,7 @@ export interface VehicleSpendSummary {
   ticketCost: Money;
   parkingCost: Money;
   tollCost: Money;
+  insuranceCost: Money;
   total: Money;
 }
 

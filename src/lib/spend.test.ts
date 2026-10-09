@@ -16,7 +16,7 @@ function rec(partial: Partial<CareRecord> & { id: string; type: CareRecord['type
 }
 
 describe('summarizeSpend', () => {
-  it('sums all expense types including parking and toll', () => {
+  it('sums all expense types including parking, toll, and insurance', () => {
     const records: CareRecord[] = [
       rec({ id: '1', type: 'fuel', fuelGrade: '95#', liters: 40, filledUp: true, odometer: 1000, amountPaid: 300 }),
       rec({ id: '2', type: 'charge', stationName: 'home', stationKind: 'home', kWh: 20, odometer: 1100, amountPaid: 40 }),
@@ -28,8 +28,9 @@ describe('summarizeSpend', () => {
       rec({ id: '8', type: 'parking', parkingKind: 'fixed', place: '小区', amountPaid: 400 }),
       rec({ id: '9', type: 'parking', parkingKind: 'temporary', place: '商场', amountPaid: 15 }),
       rec({ id: '10', type: 'toll', route: '沪杭高速', amountPaid: 80 }),
+      rec({ id: '11', type: 'insurance', insurer: '人保', policyName: '交强险', amountPaid: 3000 }),
       // other vehicle ignored
-      rec({ id: '11', type: 'toll', vehicleId: 'v2', amountPaid: 999 }),
+      rec({ id: '12', type: 'toll', vehicleId: 'v2', amountPaid: 999 }),
     ];
     const s = summarizeSpend('v1', records);
     expect(s.fuelCost).toBe(300);
@@ -41,7 +42,8 @@ describe('summarizeSpend', () => {
     expect(s.ticketCost).toBe(200);
     expect(s.parkingCost).toBe(415);
     expect(s.tollCost).toBe(80);
-    expect(s.total).toBe(300 + 40 + 500 + 200 + 30 + 50 + 200 + 415 + 80);
+    expect(s.insuranceCost).toBe(3000);
+    expect(s.total).toBe(300 + 40 + 500 + 200 + 30 + 50 + 200 + 415 + 80 + 3000);
   });
 
   it('treats missing amountPaid as 0', () => {

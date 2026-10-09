@@ -61,6 +61,7 @@ export const RECORD_TYPE_LABELS: Record<string, string> = {
   ticket: '罚单',
   parking: '停车费',
   toll: '高速费',
+  insurance: '保险',
 };
 
 export const RECORD_TYPE_LABELS_EN: Record<string, string> = {
@@ -73,6 +74,7 @@ export const RECORD_TYPE_LABELS_EN: Record<string, string> = {
   ticket: 'Ticket',
   parking: 'Parking',
   toll: 'Toll',
+  insurance: 'Insurance',
 };
 
 export const RECORD_TYPE_ICONS: Record<string, string> = {
@@ -85,6 +87,7 @@ export const RECORD_TYPE_ICONS: Record<string, string> = {
   ticket: '📄',
   parking: '🅿️',
   toll: '🛣️',
+  insurance: '🛡️',
 };
 
 export const PARKING_KIND_LABELS: Record<string, string> = {

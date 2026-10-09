@@ -43,6 +43,7 @@ function filterLabels(lang?: string): { key: 'all' | RecordType; label: string }
     { key: 'ticket', label: recordTypeLabel('ticket', lang) },
     { key: 'parking', label: recordTypeLabel('parking', lang) },
     { key: 'toll', label: recordTypeLabel('toll', lang) },
+    { key: 'insurance', label: recordTypeLabel('insurance', lang) },
   ];
 }
 
@@ -73,6 +74,11 @@ function recordTitle(r: CareRecord, lang?: string): string {
     }
     case 'toll':
       return r.route || recordTypeLabel('toll', lang);
+    case 'insurance': {
+      const name = r.policyName || r.insurer || recordTypeLabel('insurance', lang);
+      if (r.policyName && r.insurer) return `${r.policyName} · ${r.insurer}`;
+      return name;
+    }
   }
 }
 
@@ -268,6 +274,9 @@ export function VehicleDetailPage() {
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/toll`} className="btn block">
             🛣️ {recordTypeLabel('toll', settings.language)}
+          </Link>
+          <Link to={`/vehicles/${vehicle.id}/records/new/insurance`} className="btn block">
+            🛡️ {recordTypeLabel('insurance', settings.language)}
           </Link>
         </div>
       )}

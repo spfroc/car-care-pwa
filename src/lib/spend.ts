@@ -12,6 +12,7 @@ export function summarizeSpend(vehicleId: string, records: CareRecord[]): Vehicl
     ticketCost: 0,
     parkingCost: 0,
     tollCost: 0,
+    insuranceCost: 0,
     total: 0,
   };
   for (const r of records) {
@@ -27,11 +28,12 @@ export function summarizeSpend(vehicleId: string, records: CareRecord[]): Vehicl
       case 'ticket': s.ticketCost += p; break;
       case 'parking': s.parkingCost += p; break;
       case 'toll': s.tollCost += p; break;
+      case 'insurance': s.insuranceCost += p; break;
     }
   }
   s.total =
     s.fuelCost + s.chargeCost + s.maintenanceCost + s.modificationCost +
-    s.washCost + s.goodsCost + s.ticketCost + s.parkingCost + s.tollCost;
+    s.washCost + s.goodsCost + s.ticketCost + s.parkingCost + s.tollCost + s.insuranceCost;
   return s;
 }
 

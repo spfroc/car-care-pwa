@@ -62,6 +62,7 @@ export function StatsPage() {
         ticketCost: 0,
         parkingCost: 0,
         tollCost: 0,
+        insuranceCost: 0,
         total: 0,
       };
       for (const v of vehicles) {
@@ -75,6 +76,7 @@ export function StatsPage() {
         base.ticketCost += s.ticketCost;
         base.parkingCost += s.parkingCost;
         base.tollCost += s.tollCost;
+        base.insuranceCost += s.insuranceCost;
         base.total += s.total;
       }
       return base;
@@ -192,6 +194,10 @@ export function StatsPage() {
         <div className="stat-card">
           <div className="label">高速费</div>
           <div className="big">{formatMoney(spend.tollCost)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">保险</div>
+          <div className="big">{formatMoney(spend.insuranceCost)}</div>
         </div>
       </div>
 

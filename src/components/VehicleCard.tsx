@@ -82,6 +82,10 @@ export function VehicleCard({
           <div className="label">高速</div>
           <div className="value">{formatMoney(spend.tollCost)}</div>
         </div>
+        <div>
+          <div className="label">保险</div>
+          <div className="value">{formatMoney(spend.insuranceCost)}</div>
+        </div>
         {flags.showFuelEconomy && (
           <div>
             <div className="label">近况油耗</div>

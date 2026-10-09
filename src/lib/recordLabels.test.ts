@@ -5,10 +5,12 @@ describe('recordTypeLabel', () => {
   it('returns zh-CN by default', () => {
     expect(recordTypeLabel('parking')).toBe('停车费');
     expect(recordTypeLabel('toll')).toBe('高速费');
+    expect(recordTypeLabel('insurance')).toBe('保险');
   });
   it('returns en when language is en', () => {
     expect(recordTypeLabel('parking', 'en')).toBe('Parking');
     expect(recordTypeLabel('toll', 'en-US')).toBe('Toll');
+    expect(recordTypeLabel('insurance', 'en')).toBe('Insurance');
   });
 });
 

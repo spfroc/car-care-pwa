@@ -94,6 +94,11 @@ export function RecordFormPage() {
   // toll
   const [route, setRoute] = useState('');
 
+  // insurance
+  const [insurer, setInsurer] = useState('');
+  const [policyName, setPolicyName] = useState('');
+  // reuses periodStart / periodEnd from parking when type is insurance
+
   useEffect(() => {
     if (!vehicleId) return;
     getVehicle(vehicleId).then((v) => setVehicle(v ?? null));
@@ -163,6 +168,11 @@ export function RecordFormPage() {
           setParkDuration(r.durationMinutes?.toString() ?? '');
         } else if (r.type === 'toll') {
           setRoute(r.route ?? '');
+        } else if (r.type === 'insurance') {
+          setInsurer(r.insurer ?? '');
+          setPolicyName(r.policyName ?? '');
+          setPeriodStart(r.periodStart ? formatDateTimeLocal(r.periodStart).slice(0, 10) : '');
+          setPeriodEnd(r.periodEnd ? formatDateTimeLocal(r.periodEnd).slice(0, 10) : '');
         }
       });
     } else if (isNew && vehicleId) {
@@ -358,11 +368,27 @@ export function RecordFormPage() {
               ? Number(parkDuration)
               : undefined,
         };
-      } else {
+      } else if (type === 'toll') {
         rec = {
           ...common,
           type: 'toll',
           route: route.trim() || undefined,
+        };
+      } else {
+        if (periodStart && periodEnd) {
+          const ps = new Date(periodStart).getTime();
+          const pe = new Date(periodEnd).getTime();
+          if (!Number.isNaN(ps) && !Number.isNaN(pe) && pe < ps) {
+            throw new Error('保障/计费周期结束不能早于开始');
+          }
+        }
+        rec = {
+          ...common,
+          type: 'insurance',
+          insurer: insurer.trim() || undefined,
+          policyName: policyName.trim() || undefined,
+          periodStart: periodStart ? new Date(periodStart).toISOString() : undefined,
+          periodEnd: periodEnd ? new Date(periodEnd).toISOString() : undefined,
         };
       }
     } catch (ex) {
@@ -749,6 +775,46 @@ export function RecordFormPage() {
             {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Route / entry→exit' : '路线 / 入口→出口'}
             <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. Shanghai → Hangzhou' : '如：上海→杭州 / G92'} />
           </label>
+        )}
+
+        {type === 'insurance' && (
+          <>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Insurer' : '保险公司'}
+              <input value={insurer} onChange={(e) => setInsurer(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. PICC' : '如：人保 / 平安'} />
+            </label>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Policy / product' : '险种/保单'}
+              <input value={policyName} onChange={(e) => setPolicyName(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. compulsory + commercial' : '如：交强险+商业险'} />
+            </label>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Coverage start' : '保障/计费开始'}
+              <DateTimeField
+                mode="date"
+                value={periodStart}
+                onChange={setPeriodStart}
+                dateFormat={settings?.dateFormat}
+                timeFormat={settings?.timeFormat}
+                language={settings?.language}
+              />
+            </label>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Coverage end' : '保障/计费结束'}
+              <DateTimeField
+                mode="date"
+                value={periodEnd}
+                onChange={setPeriodEnd}
+                dateFormat={settings?.dateFormat}
+                timeFormat={settings?.timeFormat}
+                language={settings?.language}
+              />
+            </label>
+            <p className="muted small">
+              {(settings?.language ?? '').toLowerCase().startsWith('en')
+                ? 'Date above is the payment date; period is the coverage window.'
+                : '上方日期为缴费日期；周期为保单保障区间。'}
+            </p>
+          </>
         )}
 
         {type !== 'ticket' && (
