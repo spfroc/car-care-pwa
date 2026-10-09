@@ -94,3 +94,44 @@ describe('combinedEconomy', () => {
     expect(r!.economyPer100).toBeCloseTo(7.224, 3);
   });
 });
+
+describe('multi-energy economy scenarios', () => {
+  it('EV charge intervals produce non-blank kWh/100km (seed-like)', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'e1', vehicleId: 'ev', type: 'charge', date: '2026-01-01T10:00:00.000Z', odometer: 5000, kWh: 45, stationName: '家充', stationKind: 'home', socBefore: 15, socAfter: 95 },
+      { ...base, id: 'e2', vehicleId: 'ev', type: 'charge', date: '2026-01-10T10:00:00.000Z', odometer: 5200, kWh: 30, stationName: '公桩', stationKind: 'public', socBefore: 20, socAfter: 80 },
+      { ...base, id: 'e3', vehicleId: 'ev', type: 'charge', date: '2026-01-20T10:00:00.000Z', odometer: 5400, kWh: 28, stationName: '公桩', stationKind: 'public', socBefore: 25, socAfter: 78 },
+    ];
+    const ivs = electricIntervals(records);
+    expect(ivs.length).toBeGreaterThanOrEqual(2);
+    expect(ivs[0].economyPer100).toBeCloseTo(15, 5); // 30/200*100
+    expect(weightedAverage(ivs)).not.toBeNull();
+  });
+
+  it('HEV fuel-only intervals (no plug) yield L/100km', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'h1', vehicleId: 'hev', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 15000, liters: 30, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'h2', vehicleId: 'hev', type: 'fuel', date: '2026-01-15T10:00:00.000Z', odometer: 15550, liters: 30, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'h3', vehicleId: 'hev', type: 'fuel', date: '2026-02-01T10:00:00.000Z', odometer: 16100, liters: 28, fuelGrade: '95#', filledUp: true },
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs[0].economyPer100).toBeCloseTo(30 / 550 * 100, 5);
+    expect(electricIntervals(records)).toHaveLength(0);
+  });
+
+  it('PHEV fuel + charge support both interval kinds and combined', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'pf1', vehicleId: 'phev', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 8000, liters: 35, fuelGrade: '95#', filledUp: true, amountPaid: 1 },
+      { ...base, id: 'pc1', vehicleId: 'phev', type: 'charge', date: '2026-01-05T10:00:00.000Z', odometer: 8100, kWh: 18, stationName: '家充', stationKind: 'home', amountPaid: 0, socBefore: 20, socAfter: 95 },
+      { ...base, id: 'pf2', vehicleId: 'phev', type: 'fuel', date: '2026-01-20T10:00:00.000Z', odometer: 8500, liters: 20, fuelGrade: '95#', filledUp: true, amountPaid: 1 },
+      { ...base, id: 'pc2', vehicleId: 'phev', type: 'charge', date: '2026-01-25T10:00:00.000Z', odometer: 8700, kWh: 20, stationName: '公桩', stationKind: 'public', amountPaid: 0, socBefore: 15, socAfter: 90 },
+    ];
+    expect(fuelIntervals(records).length).toBeGreaterThanOrEqual(1);
+    expect(electricIntervals(records).length).toBeGreaterThanOrEqual(1);
+    const c = combinedEconomy(records, 0.112);
+    expect(c).not.toBeNull();
+    expect(c!.deltaKm).toBe(700);
+    expect(c!.economyPer100).toBeGreaterThan(0);
+  });
+});

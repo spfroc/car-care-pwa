@@ -21,3 +21,23 @@ export function homeCardFlags(energy: EnergyType, hevAllowCharge = false) {
       energy === 'EV' || energy === 'PHEV' || energy === 'REEV' || (energy === 'HEV' && hevAllowCharge),
   };
 }
+
+/**
+ * Parse optional SOC % from charge form input.
+ * Empty → undefined; otherwise must be 0–100.
+ */
+export function parseSocPercent(raw: string, label: string): number | undefined {
+  if (raw === '') return undefined;
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < 0 || n > 100) {
+    throw new Error(`${label}须为 0–100 的电量百分比`);
+  }
+  return n;
+}
+
+/** Charge form: after must not be below before when both set. */
+export function assertSocOrder(before?: number, after?: number): void {
+  if (before != null && after != null && after < before) {
+    throw new Error('充电后电量不能低于充电前电量');
+  }
+}

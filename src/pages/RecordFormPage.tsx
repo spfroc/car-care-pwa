@@ -8,6 +8,7 @@ import { putMediaFromFile } from '../repositories/media';
 import { useSettings } from '../hooks/useAppData';
 import { DateTimeField } from '../components/DateTimeField';
 import { formatDateTimeLocal, nowISO, parkingKindLabel, recordTypeLabel, uid } from '../lib/constants';
+import { assertSocOrder, parseSocPercent } from '../lib/energy';
 import type {
   CareRecord,
   ChargeStationKind,
@@ -269,19 +270,9 @@ export function RecordFormPage() {
       } else if (type === 'charge') {
         if (!stationName.trim()) throw new Error('请填写充电站/地点');
         if (!kWh) throw new Error('请填写充电量');
-        const parseSoc = (raw: string, label: string): number | undefined => {
-          if (raw === '') return undefined;
-          const n = Number(raw);
-          if (Number.isNaN(n) || n < 0 || n > 100) {
-            throw new Error(`${label}须为 0–100 的电量百分比`);
-          }
-          return n;
-        };
-        const socB = parseSoc(socBefore, '充电前电量');
-        const socA = parseSoc(socAfter, '充电后电量');
-        if (socB != null && socA != null && socA < socB) {
-          throw new Error('充电后电量不能低于充电前电量');
-        }
+        const socB = parseSocPercent(socBefore, '充电前电量');
+        const socA = parseSocPercent(socAfter, '充电后电量');
+        assertSocOrder(socB, socA);
         rec = {
           ...common,
           type: 'charge',

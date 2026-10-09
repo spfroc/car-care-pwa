@@ -33,6 +33,7 @@ export function SettingsPage() {
   const [newGrade, setNewGrade] = useState('');
   const [exportSize, setExportSize] = useState<number | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
 
   async function refresh() {
     setSettings(await loadAppSettings());
@@ -248,6 +249,25 @@ export function SettingsPage() {
           />
           HEV 允许录充电（默认关闭）
         </label>
+      </section>
+
+
+      <section className="card">
+        <h2>安装到主屏幕</h2>
+        <p className="hint">
+          已安装时（独立窗口 / 无浏览器地址栏）会显示「已安装」提示。未安装时可在首页顶部横幅点「安装」或「怎么装」。
+        </p>
+        <button type="button" className="btn block" onClick={() => setInstallGuideOpen((v) => !v)}>
+          {installGuideOpen ? '收起安装说明' : '查看安装说明'}
+        </button>
+        {installGuideOpen && (
+          <div className="muted small" style={{ marginTop: 10 }}>
+            <p><strong>iOS Safari：</strong>分享 → 添加到主屏幕。</p>
+            <p><strong>Android Chrome：</strong>菜单 ⋮ → 安装应用 / 添加到主屏幕。若「已安装」但桌面无图标，检查 Chrome 的桌面快捷方式权限；应用抽屉里也可能有图标。</p>
+            <p><strong>国产浏览器 / 无 GMS：</strong>多为「添加到主屏幕」快捷方式，不一定有 WebAPK；勿用微信内置浏览器安装。</p>
+            <p>技术说明见仓库 <code>docs/pwa-install.md</code>。</p>
+          </div>
+        )}
       </section>
 
       <section className="card ocr-card">

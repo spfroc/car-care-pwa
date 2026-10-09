@@ -9,6 +9,7 @@ import { StatsPage } from './pages/StatsPage';
 import { useEffect } from 'react';
 import { useAppBootstrap, useSettings } from './hooks/useAppData';
 import { documentLangFor } from './lib/datetime';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
 
 export default function App() {
   const { ready, error, persisted } = useAppBootstrap();
@@ -46,6 +47,7 @@ export default function App() {
       {!persisted && (
         <div className="banner">存储持久化未启用，浏览器可能清理数据；请定期导出备份。</div>
       )}
+      <PwaInstallBanner />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />

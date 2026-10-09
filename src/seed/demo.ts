@@ -57,6 +57,19 @@ export async function loadDemoSeed(replace = true): Promise<void> {
       createdAt,
       updatedAt: createdAt,
     },
+    {
+      id: 'seed-vehicle-hev-001',
+      name: '油电混动轿车',
+      plate: '沪D·77777',
+      energyType: 'HEV',
+      bodyType: 'SEDAN',
+      fuelGrade: '95#',
+      tankCapacityL: 45,
+      initialOdometer: 15000,
+      note: '演示油电混动（默认无外接充电）',
+      createdAt,
+      updatedAt: createdAt,
+    },
   ];
 
   const stations: Station[] = [
@@ -71,6 +84,7 @@ export async function loadDemoSeed(replace = true): Promise<void> {
   const iceId = 'seed-vehicle-ice-001';
   const evId = 'seed-vehicle-ev-001';
   const phevId = 'seed-vehicle-phev-001';
+  const hevId = 'seed-vehicle-hev-001';
 
   const fuel = (
     id: string,
@@ -163,6 +177,17 @@ export async function loadDemoSeed(replace = true): Promise<void> {
     charge('seed-chg-phev-5', phevId, 8, 10400, 17, 15, 'home', { before: 22, after: 98 }),
   ];
 
+
+  // HEV: fuel only by default (~5.5 L/100km) — no charge unless hevAllowCharge
+  const hevFuels: CareRecord[] = [
+    fuel('seed-fuel-hev-1', hevId, 88, 15000, 30, 240),
+    fuel('seed-fuel-hev-2', hevId, 70, 15550, 30, 240), // 30/550*100 ≈ 5.45
+    fuel('seed-fuel-hev-3', hevId, 52, 16100, 28, 224),
+    fuel('seed-fuel-hev-4', hevId, 35, 16620, 29, 232),
+    fuel('seed-fuel-hev-5', hevId, 18, 17150, 27, 216),
+    fuel('seed-fuel-hev-6', hevId, 6, 17680, 28.5, 228),
+  ];
+
   const extras: CareRecord[] = [
     {
       id: 'seed-maint-ice-1', vehicleId: iceId, type: 'maintenance', date: ts(40), category: 'service',
@@ -230,6 +255,14 @@ export async function loadDemoSeed(replace = true): Promise<void> {
       amountPaid: 120, mediaIds: [], createdAt, updatedAt: createdAt,
     },
     {
+      id: 'seed-maint-hev-1', vehicleId: hevId, type: 'maintenance', date: ts(40), category: 'service',
+      title: '混动系统检查', amountPaid: 350, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-wash-hev-1', vehicleId: hevId, type: 'wash', date: ts(12), washKind: 'basic',
+      amountPaid: 30, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
       id: 'seed-ins-ice-1', vehicleId: iceId, type: 'insurance', date: ts(90),
       insurer: '人保车险', policyName: '交强险+商业险', periodStart: ts(90), periodEnd: ts(-275),
       amountPaid: 5200, mediaIds: [], createdAt, updatedAt: createdAt,
@@ -243,6 +276,6 @@ export async function loadDemoSeed(replace = true): Promise<void> {
 
   for (const v of vehicles) await db.put('vehicles', v);
   for (const s of stations) await db.put('stations', s);
-  for (const r of [...iceFuels, ...evCharges, ...phevRecords, ...extras]) await db.put('records', r);
+  for (const r of [...iceFuels, ...evCharges, ...phevRecords, ...hevFuels, ...extras]) await db.put('records', r);
   await db.put('meta', { key: 'seedLoadedAt', value: nowISO() });
 }
