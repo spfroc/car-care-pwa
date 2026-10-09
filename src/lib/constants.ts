@@ -90,6 +90,38 @@ export const RECORD_TYPE_ICONS: Record<string, string> = {
   insurance: '🛡️',
 };
 
+/** Stable stack / legend colors per expense type (distinct, readable on light tracks). */
+export const RECORD_TYPE_COLORS: Record<string, string> = {
+  fuel: '#f59e0b',
+  charge: '#14b8a6',
+  maintenance: '#3b82f6',
+  modification: '#ec4899',
+  wash: '#06b6d4',
+  goods: '#84cc16',
+  ticket: '#ef4444',
+  parking: '#0ea5e9',
+  toll: '#6366f1',
+  insurance: '#8b5cf6',
+};
+
+/** Display / stack order for monthly spend segments (matches filter chips). */
+export const RECORD_TYPE_ORDER = [
+  'fuel',
+  'charge',
+  'maintenance',
+  'modification',
+  'wash',
+  'goods',
+  'ticket',
+  'parking',
+  'toll',
+  'insurance',
+] as const;
+
+export function recordTypeColor(type: string): string {
+  return RECORD_TYPE_COLORS[type] ?? '#94a3b8';
+}
+
 export const PARKING_KIND_LABELS: Record<string, string> = {
   fixed: '固定停车费',
   temporary: '临时停车费',

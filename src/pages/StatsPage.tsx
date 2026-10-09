@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { listVehicles } from '../repositories/vehicles';
 import { listAllRecords, listRecordsByVehicle } from '../repositories/records';
 import { useSettings } from '../hooks/useAppData';
-import type { CareRecord, Vehicle } from '../types';
-import { formatMoney } from '../lib/constants';
-import { summarizeSpend, filterByRange } from '../lib/spend';
+import type { CareRecord, RecordType, Vehicle } from '../types';
+import { formatMoney, recordTypeColor, recordTypeLabel, RECORD_TYPE_ORDER } from '../lib/constants';
+import { summarizeSpend, filterByRange, monthlySpendByType } from '../lib/spend';
 import {
   combinedEconomy,
   electricIntervals,
@@ -87,16 +87,15 @@ export function StatsPage() {
   // months must be computed with useMemo BEFORE any conditional return —
   // an early return above this hook caused a Rules of Hooks crash (blank Stats page)
   // once settings finished loading.
-  const months = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of filtered) {
-      const d = new Date(r.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      map.set(key, (map.get(key) ?? 0) + (r.amountPaid || 0));
+  const months = useMemo(() => monthlySpendByType(filtered, 6), [filtered]);
+  const maxMonth = Math.max(1, ...months.map((m) => m.total));
+  const legendTypes = useMemo(() => {
+    const present = new Set<RecordType>();
+    for (const m of months) {
+      for (const s of m.segments) present.add(s.type);
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-  }, [filtered]);
-  const maxMonth = Math.max(1, ...months.map(([, v]) => v));
+    return RECORD_TYPE_ORDER.filter((t) => present.has(t));
+  }, [months]);
 
   const vehicle = vehicles.find((v) => v.id === vehicleId);
   const hev = settings?.hevAllowCharge ?? false;
@@ -257,16 +256,44 @@ export function StatsPage() {
         <h2>近月花费</h2>
         <div className="bars">
           {months.length === 0 && <p className="muted">暂无数据</p>}
-          {months.map(([k, v]) => (
-            <div key={k} className="bar-row">
-              <span className="bar-label">{k}</span>
-              <div className="bar-track">
-                <div className="bar-fill" style={{ width: `${(v / maxMonth) * 100}%` }} />
+          {months.map((row) => (
+            <div key={row.key} className="bar-row">
+              <span className="bar-label">{row.key}</span>
+              <div
+                className="bar-track"
+                role="img"
+                aria-label={`${row.key} ${formatMoney(row.total)}`}
+              >
+                {row.segments.map((seg) => (
+                  <div
+                    key={seg.type}
+                    className="bar-seg"
+                    style={{
+                      width: `${(seg.amount / maxMonth) * 100}%`,
+                      background: recordTypeColor(seg.type),
+                    }}
+                    title={`${recordTypeLabel(seg.type, settings.language)} ${formatMoney(seg.amount)}`}
+                  />
+                ))}
               </div>
-              <span className="bar-val">{formatMoney(v)}</span>
+              <span className="bar-val">{formatMoney(row.total)}</span>
             </div>
           ))}
         </div>
+        {legendTypes.length > 0 && (
+          <ul className="bar-legend" aria-label="花费类型图例">
+            {legendTypes.map((type) => (
+              <li key={type} className="bar-legend-item">
+                <span
+                  className="bar-legend-swatch"
+                  style={{ background: recordTypeColor(type) }}
+                  aria-hidden
+                />
+                <span>{recordTypeLabel(type, settings.language)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

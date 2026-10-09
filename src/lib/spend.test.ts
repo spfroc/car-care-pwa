@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterByRange, summarizeSpend } from './spend';
+import { filterByRange, monthlySpendByType, summarizeSpend } from './spend';
 import type { CareRecord } from '../types';
 
 const base = {
@@ -65,5 +65,48 @@ describe('filterByRange', () => {
     ];
     const mid = filterByRange(records, new Date('2026-01-15T00:00:00.000Z'), new Date('2026-02-15T00:00:00.000Z'));
     expect(mid.map((r) => r.id)).toEqual(['b']);
+  });
+});
+
+describe('monthlySpendByType', () => {
+  it('stacks amounts by type per local month and omits empty types', () => {
+    const records: CareRecord[] = [
+      rec({ id: '1', type: 'fuel', fuelGrade: '95#', liters: 40, filledUp: true, odometer: 1000, date: '2026-05-10T12:00:00.000Z', amountPaid: 300 }),
+      rec({ id: '2', type: 'parking', parkingKind: 'temporary', date: '2026-05-20T12:00:00.000Z', amountPaid: 15 }),
+      rec({ id: '3', type: 'charge', stationName: 'home', stationKind: 'home', kWh: 10, odometer: 1100, date: '2026-06-05T12:00:00.000Z', amountPaid: 40 }),
+      rec({ id: '4', type: 'fuel', fuelGrade: '95#', liters: 30, filledUp: true, odometer: 1200, date: '2026-06-15T12:00:00.000Z', amountPaid: 200 }),
+      rec({ id: '5', type: 'toll', route: 'G2', date: '2026-06-20T12:00:00.000Z', amountPaid: 0 }),
+    ];
+    const rows = monthlySpendByType(records, 6);
+    expect(rows.map((r) => r.key)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^2026-0[56]$/)]),
+    );
+    const may = rows.find((r) => r.key.endsWith('-05'));
+    const june = rows.find((r) => r.key.endsWith('-06'));
+    expect(may?.total).toBe(315);
+    expect(may?.segments.map((s) => s.type)).toEqual(['fuel', 'parking']);
+    expect(june?.total).toBe(240);
+    expect(june?.segments.map((s) => s.type)).toEqual(['fuel', 'charge']);
+    // zero-amount toll omitted
+    expect(june?.segments.some((s) => s.type === 'toll')).toBe(false);
+  });
+
+  it('keeps only the last N months', () => {
+    const records: CareRecord[] = [];
+    for (let m = 1; m <= 8; m++) {
+      records.push(
+        rec({
+          id: `m${m}`,
+          type: 'wash',
+          washKind: 'basic',
+          date: `2026-${String(m).padStart(2, '0')}-15T12:00:00.000Z`,
+          amountPaid: m * 10,
+        }),
+      );
+    }
+    const rows = monthlySpendByType(records, 6);
+    expect(rows).toHaveLength(6);
+    expect(rows[0].key).toMatch(/2026-0[23]/); // first of last 6
+    expect(rows[rows.length - 1].key).toMatch(/2026-08/);
   });
 });

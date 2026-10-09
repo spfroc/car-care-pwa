@@ -1,4 +1,5 @@
-import type { CareRecord, VehicleSpendSummary } from '../types';
+import type { CareRecord, RecordType, VehicleSpendSummary } from '../types';
+import { RECORD_TYPE_ORDER } from './constants';
 
 export function summarizeSpend(vehicleId: string, records: CareRecord[]): VehicleSpendSummary {
   const s: VehicleSpendSummary = {
@@ -44,4 +45,47 @@ export function filterByRange(records: CareRecord[], from?: Date, to?: Date): Ca
     if (to && t > to.getTime()) return false;
     return true;
   });
+}
+
+export type MonthlySpendSegment = { type: RecordType; amount: number };
+
+export type MonthlySpendRow = {
+  /** Local calendar month key `YYYY-MM`. */
+  key: string;
+  total: number;
+  /** Non-zero segments in stable RECORD_TYPE_ORDER. */
+  segments: MonthlySpendSegment[];
+};
+
+/** Aggregate filtered records into the last `limit` calendar months, stacked by type. */
+export function monthlySpendByType(records: CareRecord[], limit = 6): MonthlySpendRow[] {
+  const map = new Map<string, Map<RecordType, number>>();
+  for (const r of records) {
+    const d = new Date(r.date);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const amount = r.amountPaid || 0;
+    if (!amount) continue;
+    let byType = map.get(key);
+    if (!byType) {
+      byType = new Map();
+      map.set(key, byType);
+    }
+    byType.set(r.type, (byType.get(r.type) ?? 0) + amount);
+  }
+
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-limit)
+    .map(([key, byType]) => {
+      const segments: MonthlySpendSegment[] = [];
+      let total = 0;
+      for (const type of RECORD_TYPE_ORDER) {
+        const amount = byType.get(type) ?? 0;
+        if (amount > 0) {
+          segments.push({ type, amount });
+          total += amount;
+        }
+      }
+      return { key, total, segments };
+    });
 }

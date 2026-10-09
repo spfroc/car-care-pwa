@@ -303,8 +303,34 @@ button, input, select, textarea {
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { display: grid; grid-template-columns: 70px 1fr 70px; gap: 6px; align-items: center; }
 .bar-label, .bar-val { font-size: 12px; color: var(--muted); }
-.bar-track { height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.bar-track {
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+.bar-seg { height: 100%; flex-shrink: 0; min-width: 0; }
 .bar-fill { height: 100%; background: var(--primary); }
+.bar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bar-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.bar-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
 
 .banner {
   background: #fef3c7;
