@@ -10,6 +10,11 @@ import {
   type QuickEntryPrefill,
 } from '../lib/quickEntryParse';
 import {
+  findNicknameCandidate,
+  type QuickEntryLearnSnapshot,
+} from '../lib/quickEntryLearn';
+import { loadLearningBundle } from '../repositories/learning';
+import {
   getSpeechRecognitionCtor,
   isSpeechRecognitionAvailable,
   type SpeechRecognitionLike,
@@ -19,6 +24,8 @@ import type { CareRecord, RecordType, Station, Vehicle } from '../types';
 export type QuickEntryNavState = {
   prefill: QuickEntryPrefill;
   quickEntryText?: string;
+  /** Present when opened from quick-entry; used for silent local learn on save. */
+  learnSnapshot?: QuickEntryLearnSnapshot;
 };
 
 type Props = {
@@ -68,7 +75,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
   }, []);
 
   const runParse = useCallback(
-    (utterance: string) => {
+    async (utterance: string) => {
       const inputs = buildVehicleMatchInputs(vehicles, records);
       const stationInputs = stations.map((s) => ({
         id: s.id,
@@ -76,7 +83,13 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
         stationType: s.stationType,
         brand: s.brand,
       }));
-      const r = parseQuickEntry(utterance, inputs, { stations: stationInputs });
+      const learning = await loadLearningBundle();
+      const r = parseQuickEntry(utterance, inputs, {
+        stations: stationInputs,
+        learnedStationAliases: learning.stationAliases,
+        learnedVehicleAliases: learning.vehicleAliases,
+        amountDialect: learning.amountDialect,
+      });
       setParsed(r);
       setPickVehicleId(r.vehicleId ?? (r.vehicleIds[0] ?? ''));
       setPickType(r.type ?? (r.types[0] ?? ''));
@@ -142,12 +155,12 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
     }
   }
 
-  function onParseClick() {
+  async function onParseClick() {
     if (!text.trim()) {
       setErr('请先输入或语音录入内容');
       return;
     }
-    runParse(text);
+    await runParse(text);
   }
 
   function resolveVehicleId(r: QuickEntryParseResult): string | undefined {
@@ -162,9 +175,9 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
     return r.type;
   }
 
-  function goToForm() {
+  async function goToForm() {
     if (!parsed && text.trim()) {
-      const r = runParse(text);
+      const r = await runParse(text);
       return goWith(r);
     }
     if (!parsed) {
@@ -185,9 +198,21 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
       setErr('请选择记录类型');
       return;
     }
+    let pendingVehicleAlias: string | undefined;
+    if (vehicleId && (!r.vehicleId || r.vehicleId !== vehicleId)) {
+      pendingVehicleAlias = findNicknameCandidate(r.raw, vehicles);
+    }
+    const learnSnapshot: QuickEntryLearnSnapshot = {
+      raw: r.raw,
+      vehicleId: r.vehicleId,
+      stationQuery: r.stationQuery,
+      fields: { ...r.fields },
+      pendingVehicleAlias,
+    };
     const state: QuickEntryNavState = {
       prefill: r.fields,
       quickEntryText: r.raw,
+      learnSnapshot,
     };
     onClose();
     nav(`/vehicles/${vehicleId}/records/new/${type}`, { state });

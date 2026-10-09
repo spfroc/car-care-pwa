@@ -253,4 +253,29 @@ export interface CarCareExportV1 {
     createdAt: ISODateTime;
   }>;
   meta?: SettingRow[];
+  /** Quick-entry local learning (aliases / amount dialect); schema ≥ 3. */
+  learning?: LearningRow[];
+}
+
+/** Bare amount + 优惠 dialect: treat bare N块 as 实付 or 应付. */
+export type AmountDialectPreference = 'bareAsPaid' | 'bareAsDue';
+
+export type LearningKind = 'stationAlias' | 'vehicleAlias' | 'amountDialect';
+
+/** Local-only quick-entry corrections (never uploaded). */
+export interface LearningRow {
+  /** e.g. stationAlias:中凯 | vehicleAlias:小黑 | amountDialect */
+  key: string;
+  kind: LearningKind;
+  /** Normalized alias text (station/vehicle kinds). */
+  alias?: string;
+  stationId?: UUID;
+  stationName?: string;
+  vehicleId?: UUID;
+  preference?: AmountDialectPreference;
+  paidVotes?: number;
+  dueVotes?: number;
+  hitCount: number;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 }

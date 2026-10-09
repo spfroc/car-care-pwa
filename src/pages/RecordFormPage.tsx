@@ -2,7 +2,8 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { QuickEntryNavState } from '../components/QuickEntrySheet';
 import type { QuickEntryPrefill } from '../lib/quickEntryParse';
-import { getVehicle, putVehicle } from '../repositories/vehicles';
+import { learnFromQuickEntrySave } from '../lib/quickEntryLearn';
+import { getVehicle, listVehicles, putVehicle } from '../repositories/vehicles';
 import { getRecord, latestOdometer, putRecord } from '../repositories/records';
 import { listStations } from '../repositories/stations';
 import { getSetting } from '../repositories/settings';
@@ -29,7 +30,9 @@ export function RecordFormPage() {
   const isNew = recordId === 'new' || !recordId;
   const nav = useNavigate();
   const routeLocation = useLocation();
-  const quickPrefill = (routeLocation.state as QuickEntryNavState | null)?.prefill;
+  const qeNav = routeLocation.state as QuickEntryNavState | null;
+  const quickPrefill = qeNav?.prefill;
+  const learnSnapshot = qeNav?.learnSnapshot;
   const { settings } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [type, setType] = useState<RecordType>((typeParam as RecordType) || 'fuel');
@@ -419,6 +422,20 @@ export function RecordFormPage() {
     try {
       await putRecord(rec);
       await putVehicle({ ...vehicle, updatedAt: t });
+      // Silent local learn from quick-entry corrections (never upload; only after user save).
+      if (isNew && learnSnapshot) {
+        try {
+          const allVehicles = await listVehicles();
+          await learnFromQuickEntrySave({
+            snapshot: learnSnapshot,
+            vehicleId,
+            record: rec,
+            vehicles: allVehicles,
+          });
+        } catch {
+          /* learning must not block save */
+        }
+      }
       nav(`/vehicles/${vehicleId}`);
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : '保存失败');

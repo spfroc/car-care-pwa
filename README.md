@@ -21,7 +21,7 @@ npm test         # 油耗/电耗/综合公式单测
 
 ## M1 已实现
 
-- IndexedDB schema（vehicles / records / stations / settings / media / meta）与 repositories
+- IndexedDB schema（vehicles / records / stations / settings / media / meta / **learning**）与 repositories
 - 车辆 CRUD、能源类型约束（ICE 仅加油；EV 仅充电；PHEV/REEV 两者；HEV 默认禁充电，可用 `hevAllowCharge` 开启）
 - 记录：加油 / 充电 / 维保 / 改装 / 洗车 / 配件 / 罚单 / **停车费**（固定·临时）/ **高速通行费** / **保险**；图片 canvas JPEG 压缩
 - 收藏加油站 / 充电站
@@ -106,4 +106,8 @@ Native `datetime-local` is replaced by `DateTimeField` so format/locale follow a
 | 高速通行费 | `toll` | 可选 `route`（入口→出口 / 路段） |
 | 保险 | `insurance` | 可选 `insurer`、`policyName`、保障/计费 `periodStart`/`periodEnd`；`date` 为缴费日 |
 
-录入入口：车辆详情 →「+ 新增记录」。导出 `appSchemaVersion` 现为 **2**；旧版 `car-care-export-v1`（schema 1）仍可合并导入。
+录入入口：车辆详情 →「+ 新增记录」。导出 `appSchemaVersion` 现为 **3**（含快捷记账本地学习）；旧版 `car-care-export-v1`（schema 1/2）仍可合并导入。
+
+### 快捷记账本地学习
+
+从首页「快捷」预填表单并**保存**后，本机 IndexedDB `learning` 会记住站点简称（如 中凯→收藏站）、车辆别名、以及「N块+优惠」按实付/应付的口径偏好。设置页有说明；识别不会自动保存记录；学习数据从不上传，导出/导入可备份。

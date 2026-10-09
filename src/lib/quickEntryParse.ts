@@ -1,5 +1,6 @@
 import { allowsCharge, allowsFuel } from './energy';
-import type { EnergyType, ParkingKind, RecordType, Station, StationType, Vehicle } from '../types';
+import type { AmountDialectPreference, EnergyType, ParkingKind, RecordType, Station, StationType, Vehicle } from '../types';
+export type { AmountDialectPreference };
 
 /** Prefill payload passed to the record form (never written to IDB by itself). */
 export type QuickEntryPrefill = {
@@ -35,10 +36,14 @@ export type QuickEntryParseResult = {
   types: RecordType[];
   confidence: { vehicle: MatchConfidence; type: MatchConfidence };
   fields: QuickEntryPrefill;
+  /** Raw station snippet before favorite / learned match expanded the name. */
+  stationQuery?: string;
 };
 
 export type VehicleMatchInput = Pick<Vehicle, 'id' | 'name' | 'plate'> & {
   energyType?: EnergyType;
+  /** Spoken / typed short names that should resolve to this vehicle (incl. learned). */
+  aliases?: string[];
   /** ISO time of most recent fuel record for this vehicle. */
   lastFuelAt?: string;
   /** ISO time of most recent charge record for this vehicle. */
@@ -57,6 +62,18 @@ export type ParseQuickEntryOptions = {
   now?: Date;
   /** Favorite / common stations for short-name → stationId matching. */
   stations?: StationMatchInput[];
+  /**
+   * Learned station aliases applied before generic name/brand rules.
+   * Prefer exact alias → stationId when the station is in `stations`.
+   */
+  learnedStationAliases?: Array<{ alias: string; stationId: string; stationName: string }>;
+  /** Learned vehicle aliases merged into vehicle match inputs. */
+  learnedVehicleAliases?: Array<{ alias: string; vehicleId: string }>;
+  /**
+   * When bare「N块」+优惠: prefer treating bare as 实付 (paid) or 应付 (due).
+   * Default (unset): bareAsDue (current generic rule).
+   */
+  amountDialect?: AmountDialectPreference;
 };
 
 /** Keyword rules: longer / more specific phrases first within each type. */
@@ -173,6 +190,16 @@ export function matchVehicles(text: string, vehicles: VehicleMatchInput[]): Vehi
       const nameRe = new RegExp(escapeRegExp(v.name), 'i');
       if (nameRe.test(raw)) score = Math.max(score, 75 + v.name.length);
     }
+    // Learned / explicit aliases (before generic sole-vehicle fallback)
+    for (const alias of v.aliases ?? []) {
+      const a = normalizeLoose(alias);
+      if (!a || a.length < 2) continue;
+      if (loose.includes(a) || a === loose) score = Math.max(score, 95 + a.length);
+      else {
+        const aliasRe = new RegExp(escapeRegExp(alias), 'i');
+        if (aliasRe.test(raw)) score = Math.max(score, 90 + alias.length);
+      }
+    }
     if (score > 0) scored.push({ v, score });
   }
 
@@ -197,6 +224,20 @@ export function matchStations(
   if (!stations.length) return [];
   const q = normalizeLoose(query.trim());
   if (!q || q.length < 1) return [];
+
+  // Learned / explicit aliases first: exact alias match outranks generic name/brand.
+  const exactAliasHits: StationMatchInput[] = [];
+  for (const s of stations) {
+    for (const alias of s.aliases ?? []) {
+      if (normalizeLoose(alias) === q) {
+        exactAliasHits.push(s);
+        break;
+      }
+    }
+  }
+  if (exactAliasHits.length === 1) {
+    return exactAliasHits;
+  }
 
   const scored: { s: StationMatchInput; score: number }[] = [];
 
@@ -223,7 +264,7 @@ export function matchStations(
     for (const alias of s.aliases ?? []) {
       const a = normalizeLoose(alias);
       if (!a) continue;
-      if (a === q) score = Math.max(score, 110 + a.length);
+      if (a === q) score = Math.max(score, 200 + a.length); // learned/explicit alias
       else if (a.startsWith(q) || q.startsWith(a)) score = Math.max(score, 95 + Math.min(a.length, q.length));
       else if (q.length >= 2 && (a.includes(q) || q.includes(a))) {
         score = Math.max(score, 85 + Math.min(a.length, q.length));
@@ -376,6 +417,7 @@ export function extractFields(
   text: string,
   preferredType?: RecordType,
   now: Date = new Date(),
+  amountDialect: AmountDialectPreference = 'bareAsDue',
 ): QuickEntryPrefill {
   const fields: QuickEntryPrefill = {};
 
@@ -447,9 +489,14 @@ export function extractFields(
       fields.amountPaid = roundMoney(dueExplicit);
     }
   } else if (bareGross != null && fields.discount != null && fields.discount > 0) {
-    // Bare amount + 优惠 → treat bare as 应付 (due).
-    fields.amountDue = roundMoney(bareGross);
-    fields.amountPaid = roundMoney(Math.max(0, bareGross - fields.discount));
+    // Bare amount + 优惠: default 应付 (due); learned dialect may prefer 实付 (paid).
+    if (amountDialect === 'bareAsPaid') {
+      fields.amountPaid = roundMoney(bareGross);
+      fields.amountDue = roundMoney(bareGross + fields.discount);
+    } else {
+      fields.amountDue = roundMoney(bareGross);
+      fields.amountPaid = roundMoney(Math.max(0, bareGross - fields.discount));
+    }
   } else if (bareGross != null) {
     fields.amountPaid = roundMoney(bareGross);
   }
@@ -530,8 +577,20 @@ export function parseQuickEntry(
   const raw = text.trim();
   const now = options.now ?? new Date();
 
-  // 1) Vehicle-first: explicit plate/name, else sole / fuel-capable / last-used.
-  const explicitHits = matchVehicles(raw, vehicles);
+  // Merge learned vehicle aliases before generic plate/name rules.
+  let vehicleInputs = vehicles;
+  if (options.learnedVehicleAliases?.length) {
+    vehicleInputs = vehicles.map((v) => {
+      const extras = options.learnedVehicleAliases!
+        .filter((a) => a.vehicleId === v.id)
+        .map((a) => a.alias);
+      if (!extras.length) return v;
+      return { ...v, aliases: [...new Set([...(v.aliases ?? []), ...extras])] };
+    });
+  }
+
+  // 1) Vehicle-first: explicit plate/name/alias, else sole / fuel-capable / last-used.
+  const explicitHits = matchVehicles(raw, vehicleInputs);
   const typeHitsEarly = detectRecordTypes(raw);
   const earlyType = typeHitsEarly.length === 1 ? typeHitsEarly[0] : undefined;
 
@@ -545,7 +604,7 @@ export function parseQuickEntry(
   } else if (explicitHits.length > 1) {
     vehicleConf = 'low';
   } else {
-    const fb = resolveVehicleWithoutMention(vehicles, earlyType);
+    const fb = resolveVehicleWithoutMention(vehicleInputs, earlyType);
     vehicleHits = fb.vehicles.length ? fb.vehicles : [];
     vehicleConf = fb.confidence;
     if (fb.picked) vehicleId = fb.picked.id;
@@ -562,18 +621,52 @@ export function parseQuickEntry(
     typeConf = 'low';
   }
 
-  const fields = extractFields(raw, type ?? typeHits[0], now);
+  const dialect = options.amountDialect ?? 'bareAsDue';
+  const fields = extractFields(raw, type ?? typeHits[0], now, dialect);
+  const stationQuery = fields.stationName;
 
-  // 3) Resolve spoken/typed short station name → favorite station id + full name.
-  const stations = options.stations ?? [];
-  if (fields.stationName && stations.length) {
+  // 3) Resolve spoken/typed short station name → favorite / learned station.
+  let stations = options.stations ?? [];
+  if (options.learnedStationAliases?.length) {
+    stations = stations.map((s) => {
+      const extras = options.learnedStationAliases!
+        .filter((a) => a.stationId === s.id)
+        .map((a) => a.alias);
+      if (!extras.length) return s;
+      return { ...s, aliases: [...new Set([...(s.aliases ?? []), ...extras])] };
+    });
+    // If learned alias points at a station id not yet in list, still resolve by id map.
+    if (stationQuery) {
+      const q = stationQuery.replace(/\s+/g, '').toLowerCase();
+      const learnedHit = options.learnedStationAliases.filter(
+        (a) => a.alias.replace(/\s+/g, '').toLowerCase() === q,
+      );
+      if (learnedHit.length === 1) {
+        const hit = learnedHit[0];
+        const inList = stations.find((s) => s.id === hit.stationId);
+        if (inList) {
+          fields.stationId = inList.id;
+          fields.stationName = inList.name;
+        } else {
+          fields.stationId = hit.stationId;
+          fields.stationName = hit.stationName;
+        }
+      }
+    }
+  }
+
+  if (fields.stationName && stations.length && !fields.stationId) {
     const preferredStationType: StationType | undefined =
       type === 'fuel' || typeHits[0] === 'fuel'
         ? 'gas'
         : type === 'charge' || typeHits[0] === 'charge'
           ? 'charge'
           : undefined;
-    const stationHits = matchStations(fields.stationName, stations, preferredStationType);
+    const stationHits = matchStations(
+      stationQuery ?? fields.stationName,
+      stations,
+      preferredStationType,
+    );
     if (stationHits.length === 1) {
       fields.stationId = stationHits[0].id;
       fields.stationName = stationHits[0].name;
@@ -589,6 +682,7 @@ export function parseQuickEntry(
     types: typeHits,
     confidence: { vehicle: vehicleConf, type: typeConf },
     fields,
+    stationQuery,
   };
 }
 

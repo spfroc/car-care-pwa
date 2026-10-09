@@ -1,8 +1,7 @@
-import { getDB } from '../db';
-import type { CarCareExportV1, CareRecord, Media, SettingRow, Station, Vehicle } from '../types';
+import { getDB, ensureDefaultSettings } from '../db';
+import type { CarCareExportV1, CareRecord, LearningRow, Media, SettingRow, Station, Vehicle } from '../types';
 import { blobToBase64, base64ToBlob } from '../lib/image';
-import { nowISO } from '../lib/constants';
-import { ensureDefaultSettings } from '../db';
+import { APP_SCHEMA_VERSION, nowISO } from '../lib/constants';
 
 const WARN_BYTES = 8 * 1024 * 1024; // 8MB soft warn
 
@@ -12,7 +11,8 @@ export async function estimateExportSize(includeImages: boolean): Promise<number
   const records = await db.getAll('records');
   const stations = await db.getAll('stations');
   const settings = await db.getAll('settings');
-  let size = JSON.stringify({ vehicles, records, stations, settings }).length;
+  const learning = await db.getAll('learning');
+  let size = JSON.stringify({ vehicles, records, stations, settings, learning }).length;
   if (includeImages) {
     const media = await db.getAll('media');
     for (const m of media) size += m.byteSize * 1.37; // base64 overhead
@@ -35,6 +35,7 @@ export async function exportData(includeImages: boolean): Promise<{ json: string
   const stations = await db.getAll('stations');
   const settings = await db.getAll('settings');
   const meta = await db.getAll('meta');
+  const learning = await db.getAll('learning');
   let mediaOut: CarCareExportV1['media'] = [];
   if (includeImages) {
     const media = await db.getAll('media');
@@ -50,13 +51,12 @@ export async function exportData(includeImages: boolean): Promise<{ json: string
       })),
     );
   } else {
-    // strip mediaIds from records copy for consistency? keep ids but no blobs
     mediaOut = [];
   }
   const payload: CarCareExportV1 = {
     format: 'car-care-export-v1',
     exportedAt: nowISO(),
-    appSchemaVersion: 2,
+    appSchemaVersion: APP_SCHEMA_VERSION,
     vehicles,
     records: includeImages
       ? records
@@ -65,6 +65,7 @@ export async function exportData(includeImages: boolean): Promise<{ json: string
     settings,
     media: mediaOut,
     meta: meta.map((m) => ({ key: m.key, value: m.value, updatedAt: nowISO() })),
+    learning,
   };
   const json = JSON.stringify(payload, null, 2);
   await db.put('meta', { key: 'lastExportAt', value: payload.exportedAt });
@@ -83,10 +84,9 @@ export async function importData(jsonText: string, mode: ImportMode): Promise<{ 
   if (data.format !== 'car-care-export-v1') {
     return { ok: false, message: '格式不正确：需要 car-care-export-v1' };
   }
-  // appSchemaVersion 1 (pre parking/toll/insurance) and 2+ are both loadable; unknown types are stored as-is.
   const db = await getDB();
   if (mode === 'replace') {
-    const stores = ['vehicles', 'records', 'stations', 'settings', 'media'] as const;
+    const stores = ['vehicles', 'records', 'stations', 'settings', 'media', 'learning'] as const;
     const tx = db.transaction(stores, 'readwrite');
     for (const s of stores) await tx.objectStore(s).clear();
     await tx.done;
@@ -131,6 +131,13 @@ export async function importData(jsonText: string, mode: ImportMode): Promise<{ 
         /* skip bad image */
       }
     }
+    for (const row of data.learning ?? []) {
+      if (mode === 'merge') {
+        const exist = await db.get('learning', row.key);
+        if (exist) continue;
+      }
+      await db.put('learning', row as LearningRow);
+    }
   };
   await putAll();
   await ensureDefaultSettings();
@@ -139,7 +146,7 @@ export async function importData(jsonText: string, mode: ImportMode): Promise<{ 
 
 export async function clearAllData(): Promise<void> {
   const db = await getDB();
-  const stores = ['vehicles', 'records', 'stations', 'media'] as const;
+  const stores = ['vehicles', 'records', 'stations', 'media', 'learning'] as const;
   const tx = db.transaction(stores, 'readwrite');
   for (const s of stores) await tx.objectStore(s).clear();
   await tx.done;

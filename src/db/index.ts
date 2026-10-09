@@ -1,9 +1,10 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { CareRecord, Media, MetaRow, SettingRow, Station, Vehicle } from '../types';
-import { DEFAULT_FUEL_GRADES, OCR_DEFAULTS, nowISO } from '../lib/constants';
+import type { CareRecord, LearningRow, Media, MetaRow, SettingRow, Station, Vehicle } from '../types';
+import { APP_SCHEMA_VERSION, DEFAULT_FUEL_GRADES, OCR_DEFAULTS, nowISO } from '../lib/constants';
 
 export const DB_NAME = 'car-care-db';
-export const DB_VERSION = 1;
+/** IndexedDB open version. 2 = learning store for quick-entry corrections. */
+export const DB_VERSION = 2;
 
 export interface CarCareDB extends DBSchema {
   vehicles: { key: string; value: Vehicle; indexes: { byEnergy: string; byUpdated: string } };
@@ -22,6 +23,8 @@ export interface CarCareDB extends DBSchema {
   settings: { key: string; value: SettingRow };
   media: { key: string; value: Media };
   meta: { key: string; value: MetaRow };
+  /** Local-only quick-entry learning (aliases / amount dialect). Never uploaded. */
+  learning: { key: string; value: LearningRow; indexes: { byKind: string } };
 }
 
 let dbPromise: Promise<IDBPDatabase<CarCareDB>> | null = null;
@@ -35,24 +38,30 @@ export async function getDB(): Promise<IDBPDatabase<CarCareDB>> {
   if (openError) throw openError;
   if (!dbPromise) {
     dbPromise = openDB<CarCareDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const vehicles = db.createObjectStore('vehicles', { keyPath: 'id' });
-        vehicles.createIndex('byEnergy', 'energyType');
-        vehicles.createIndex('byUpdated', 'updatedAt');
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const vehicles = db.createObjectStore('vehicles', { keyPath: 'id' });
+          vehicles.createIndex('byEnergy', 'energyType');
+          vehicles.createIndex('byUpdated', 'updatedAt');
 
-        const records = db.createObjectStore('records', { keyPath: 'id' });
-        records.createIndex('byVehicle', 'vehicleId');
-        records.createIndex('byType', 'type');
-        records.createIndex('byDate', 'date');
-        records.createIndex('byVehicleDate', ['vehicleId', 'date']);
-        records.createIndex('byVehicleTypeDate', ['vehicleId', 'type', 'date']);
+          const records = db.createObjectStore('records', { keyPath: 'id' });
+          records.createIndex('byVehicle', 'vehicleId');
+          records.createIndex('byType', 'type');
+          records.createIndex('byDate', 'date');
+          records.createIndex('byVehicleDate', ['vehicleId', 'date']);
+          records.createIndex('byVehicleTypeDate', ['vehicleId', 'type', 'date']);
 
-        const stations = db.createObjectStore('stations', { keyPath: 'id' });
-        stations.createIndex('byType', 'stationType');
+          const stations = db.createObjectStore('stations', { keyPath: 'id' });
+          stations.createIndex('byType', 'stationType');
 
-        db.createObjectStore('settings', { keyPath: 'key' });
-        db.createObjectStore('media', { keyPath: 'id' });
-        db.createObjectStore('meta', { keyPath: 'key' });
+          db.createObjectStore('settings', { keyPath: 'key' });
+          db.createObjectStore('media', { keyPath: 'id' });
+          db.createObjectStore('meta', { keyPath: 'key' });
+        }
+        if (oldVersion < 2) {
+          const learning = db.createObjectStore('learning', { keyPath: 'key' });
+          learning.createIndex('byKind', 'kind');
+        }
       },
     }).catch((e) => {
       openError = e instanceof Error ? e : new Error(String(e));
@@ -93,9 +102,9 @@ export async function ensureDefaultSettings(): Promise<void> {
   }
   await tx.done;
   const meta = await db.get('meta', 'schemaVersion');
-  if (!meta) await db.put('meta', { key: 'schemaVersion', value: 2 });
-  else if (typeof meta.value === 'number' && meta.value < 2) {
-    await db.put('meta', { key: 'schemaVersion', value: 2 });
+  if (!meta) await db.put('meta', { key: 'schemaVersion', value: APP_SCHEMA_VERSION });
+  else if (typeof meta.value === 'number' && meta.value < APP_SCHEMA_VERSION) {
+    await db.put('meta', { key: 'schemaVersion', value: APP_SCHEMA_VERSION });
   }
 }
 

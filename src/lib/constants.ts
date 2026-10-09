@@ -184,3 +184,6 @@ export function formatDate(iso: string, dateFormat: string = DEFAULT_DATE_FORMAT
 export function formatDateTimeLocal(iso: string): string {
   return toLocalDateTimeValue(partsFromDate(new Date(iso)));
 }
+
+/** App logical schema (export / meta.schemaVersion). 3 = quick-entry learning store. */
+export const APP_SCHEMA_VERSION = 3;

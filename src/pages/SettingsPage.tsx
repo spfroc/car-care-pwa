@@ -345,6 +345,13 @@ export function SettingsPage() {
       </section>
 
       <section className="card">
+        <h2>快捷识别</h2>
+        <p className="muted small">
+          识别会记住你的纠正（仅本机）。从快捷记账预填并保存后，站点简称、车辆别名与「N块+优惠」口径会写入本地学习库，不会上传；导出/导入 JSON 可一并备份。
+        </p>
+      </section>
+
+      <section className="card">
         <h2>数据</h2>
         {exportSize != null && (
           <p className="muted small">
