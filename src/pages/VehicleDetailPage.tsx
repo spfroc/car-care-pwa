@@ -110,7 +110,7 @@ export function VehicleDetailPage() {
   const { settings } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [records, setRecords] = useState<CareRecord[]>([]);
-  const [filter, setFilter] = useState<'all' | RecordType>('all');
+  const [filter, setFilter] = useState<'all' | RecordType>('fuel');
   const [showAdd, setShowAdd] = useState(false);
 
   async function refresh() {
@@ -122,6 +122,13 @@ export function VehicleDetailPage() {
   useEffect(() => {
     refresh();
   }, [id]);
+
+  useEffect(() => {
+    if (!vehicle || !settings) return;
+    const fuelOk = allowsFuel(vehicle.energyType);
+    const chargeOk = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
+    setFilter(fuelOk ? 'fuel' : chargeOk ? 'charge' : 'all');
+  }, [vehicle?.id, settings?.hevAllowCharge]);
 
   const filtered = useMemo(
     () => (filter === 'all' ? records : records.filter((r) => r.type === filter)),
@@ -233,13 +240,55 @@ export function VehicleDetailPage() {
         </div>
       </div>
 
-      <div className="toolbar">
-        <button type="button" className="btn primary" onClick={() => setShowAdd((s) => !s)}>
-          + 新增记录
-        </button>
-        <Link to={`/stats?vehicle=${vehicle.id}`} className="btn ghost">
-          统计
-        </Link>
+      <div className="toolbar list-toolbar">
+        <label className="filter-select-wrap">
+          <span className="sr-only">筛选类型</span>
+          <select
+            className="filter-select"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as 'all' | RecordType)}
+            aria-label="筛选类型"
+          >
+            {filterLabels(settings.language)
+              .filter((f) => {
+                if (f.key === 'fuel' && !canFuel) return false;
+                if (f.key === 'charge' && !canCharge) return false;
+                return true;
+              })
+              .map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+          </select>
+        </label>
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="btn primary icon-btn"
+            onClick={() => setShowAdd((s) => !s)}
+            aria-label="新增记录"
+            aria-expanded={showAdd}
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+          <Link
+            to={`/stats?vehicle=${vehicle.id}`}
+            className="btn ghost icon-btn"
+            aria-label="统计"
+            title="统计"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 19V10M10 19V5M16 19v-7M22 19H2"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+        </div>
       </div>
 
       {showAdd && (
@@ -281,23 +330,6 @@ export function VehicleDetailPage() {
         </div>
       )}
 
-      <div className="chip-row">
-        {filterLabels(settings.language).filter((f) => {
-          if (f.key === 'fuel' && !canFuel) return false;
-          if (f.key === 'charge' && !canCharge) return false;
-          return true;
-        }).map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            className={filter === f.key ? 'chip active' : 'chip'}
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
       <div className="timeline">
         {filtered.length === 0 && <p className="muted">暂无记录</p>}
         {filtered.map((r) => {
@@ -327,8 +359,22 @@ export function VehicleDetailPage() {
                 </div>
                 <div className="ti-amount">{formatMoney(r.amountPaid)}</div>
               </Link>
-              <button type="button" className="btn ghost danger-text" onClick={() => onDelete(r.id)}>
-                删
+              <button
+                type="button"
+                className="btn ghost danger-text icon-btn"
+                onClick={() => onDelete(r.id)}
+                aria-label="删除"
+                title="删除"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6h12zM10 11v6M14 11v6"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
           );
