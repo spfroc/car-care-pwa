@@ -298,13 +298,81 @@ button, input, select, textarea {
 }
 .mini-stats .label { display: block; white-space: nowrap; }
 
-.hero-cost-hint {
-  display: block;
-  margin-top: 2px;
+.mini-stats .label.label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.help-tip-btn {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.help-tip-btn:hover,
+.help-tip-btn:focus-visible {
+  border-color: var(--primary);
+  color: var(--primary);
+  outline: none;
+}
+
+.help-tip-bubble {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(14em, 70vw);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
   white-space: normal;
-  overflow-wrap: anywhere;
-  max-width: 11em;
-  line-height: 1.3;
+  text-align: left;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.help-tip-bubble::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: #1e293b;
+}
+
+.help-tip:hover .help-tip-bubble,
+.help-tip:focus-within .help-tip-bubble,
+.help-tip.open .help-tip-bubble {
+  display: block;
 }
 
 .mini-stats strong {

@@ -32,6 +32,35 @@ import {
   totalFuelLiters,
 } from '../lib/vehicleStats';
 
+
+/** Hover (desktop) / tap·focus (mobile) formula tip after a metric label. */
+function HelpTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className={`help-tip${open ? ' open' : ''}`}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="help-tip-btn"
+        aria-label={`计算方法：${text}`}
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onBlur={() => setOpen(false)}
+      >
+        ?
+      </button>
+      <span className="help-tip-bubble" role="tooltip">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function filterLabels(lang?: string): { key: 'all' | RecordType; label: string }[] {
   const en = (lang ?? '').toLowerCase().startsWith('en');
   return [
@@ -213,11 +242,13 @@ export function VehicleDetailPage() {
             </div>
           )}
           <div>
-            <span className="label">每公里成本</span>
+            <span className="label label-with-help">
+              每公里成本
+              <HelpTip text={energyCosts.costPerKmHint} />
+            </span>
             <strong>
               {perKm == null ? '—' : formatMoney(perKm, settings.currency.symbol)}
             </strong>
-            <span className="field-hint hero-cost-hint">{energyCosts.costPerKmHint}</span>
           </div>
           {canFuel && (
             <div>
