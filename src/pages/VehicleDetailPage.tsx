@@ -206,6 +206,11 @@ export function VehicleDetailPage() {
     [records, filter],
   );
 
+  const filterAmountSum = useMemo(
+    () => filtered.reduce((sum, r) => sum + (r.amountPaid || 0), 0),
+    [filtered],
+  );
+
   if (!vehicle || !settings) return <div className="page"><p className="muted">加载中…</p></div>;
 
   const canFuel = allowsFuel(vehicle.energyType);
@@ -357,6 +362,13 @@ export function VehicleDetailPage() {
               ))}
           </select>
         </label>
+        <div
+          className="toolbar-filter-sum"
+          title={filter === 'all' ? '当前车辆全部记录实付合计' : '当前筛选类型实付合计'}
+          aria-label={filter === 'all' ? '全部实付合计' : '筛选实付合计'}
+        >
+          {formatMoney(filterAmountSum, settings.currency.symbol)}
+        </div>
         <div className="toolbar-actions">
           <button
             type="button"
