@@ -78,6 +78,20 @@ export function StatsPage() {
     return summarizeSpend(vehicleId, filtered);
   }, [filtered, vehicleId, vehicles]);
 
+  // months must be computed with useMemo BEFORE any conditional return —
+  // an early return above this hook caused a Rules of Hooks crash (blank Stats page)
+  // once settings finished loading.
+  const months = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of filtered) {
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map.set(key, (map.get(key) ?? 0) + (r.amountPaid || 0));
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
+  }, [filtered]);
+  const maxMonth = Math.max(1, ...months.map(([, v]) => v));
+
   const vehicle = vehicles.find((v) => v.id === vehicleId);
   const hev = settings?.hevAllowCharge ?? false;
 
@@ -95,17 +109,6 @@ export function StatsPage() {
   const showElecEco = vehicle ? allowsCharge(vehicle.energyType, hev) : true;
   const showCombined =
     vehicle && (vehicle.energyType === 'PHEV' || vehicle.energyType === 'REEV');
-
-  const months = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of filtered) {
-      const d = new Date(r.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      map.set(key, (map.get(key) ?? 0) + (r.amountPaid || 0));
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-  }, [filtered]);
-  const maxMonth = Math.max(1, ...months.map(([, v]) => v));
 
   return (
     <div className="page">

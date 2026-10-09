@@ -97,7 +97,8 @@ export function uid(): string {
 }
 
 export function formatMoney(n: number, symbol = '¥'): string {
-  return `${symbol}${n.toFixed(2)}`;
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 0;
+  return `${symbol}${v.toFixed(2)}`;
 }
 
 /** Display date using settings dateFormat (default yyyy-mm-dd). */
