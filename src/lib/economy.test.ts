@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  averageFuelEconomy,
   combinedEconomy,
   electricIntervals,
+  formatEconomy,
   fuelIntervals,
+  latestFuelEconomy,
   weightedAverage,
 } from './economy';
 import type { CareRecord } from '../types';
@@ -133,5 +136,29 @@ describe('multi-energy economy scenarios', () => {
     expect(c).not.toBeNull();
     expect(c!.deltaKm).toBe(700);
     expect(c!.economyPer100).toBeGreaterThan(0);
+  });
+});
+
+describe('averageFuelEconomy / formatEconomy', () => {
+  it('matches weightedAverage of fuel intervals (home = detail hero)', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'a', vehicleId: 'v', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '92#', filledUp: true },
+      { ...base, id: 'b', vehicleId: 'v', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1600, liters: 36, fuelGrade: '92#', filledUp: true },
+      { ...base, id: 'c', vehicleId: 'v', type: 'fuel', date: '2026-01-20T10:00:00.000Z', odometer: 2100, liters: 40, fuelGrade: '92#', filledUp: true },
+    ];
+    const avg = averageFuelEconomy(records);
+    expect(avg).toBeCloseTo(weightedAverage(fuelIntervals(records))!, 10);
+    // (36+40)/(600+500)*100 = 76/1100*100 ≈ 6.90909
+    expect(avg).toBeCloseTo((76 / 1100) * 100, 5);
+    expect(formatEconomy(avg!)).toBe('6.91');
+    // latest interval only differs from average
+    expect(latestFuelEconomy(records)).toBeCloseTo((40 / 500) * 100, 5);
+    expect(formatEconomy(latestFuelEconomy(records)!)).toBe('8.00');
+  });
+
+  it('formatEconomy always uses 2 decimal places', () => {
+    expect(formatEconomy(6.1)).toBe('6.10');
+    expect(formatEconomy(6.09)).toBe('6.09');
+    expect(formatEconomy(6)).toBe('6.00');
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   costPerKm,
   formatMileagePair,
+  fuelSpendAfterBaseline,
   summarizeMileage,
   totalChargeKWh,
   totalFuelLiters,
@@ -137,5 +138,133 @@ describe('totals', () => {
     ];
     expect(totalFuelLiters(records)).toBeCloseTo(50.5, 5);
     expect(totalChargeKWh(records)).toBeCloseTo(12.25, 5);
+  });
+});
+
+describe('fuelSpendAfterBaseline', () => {
+  it('sums only fuel amountPaid with odometer strictly after baseline', () => {
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'before',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-01T10:00:00.000Z',
+        odometer: 100,
+        liters: 40,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 300,
+      },
+      {
+        ...base,
+        id: 'at',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-02T10:00:00.000Z',
+        odometer: 34448,
+        liters: 40,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 350,
+      },
+      {
+        ...base,
+        id: 'after1',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-02-01T10:00:00.000Z',
+        odometer: 35000,
+        liters: 38,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 280,
+      },
+      {
+        ...base,
+        id: 'maint',
+        vehicleId: 'v',
+        type: 'maintenance',
+        date: '2026-02-05T10:00:00.000Z',
+        odometer: 35100,
+        category: 'service',
+        title: '保养',
+        amountPaid: 2000,
+      },
+      {
+        ...base,
+        id: 'after2',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-03-01T10:00:00.000Z',
+        odometer: 36000,
+        liters: 40,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 320,
+      },
+    ];
+    expect(fuelSpendAfterBaseline(records, 34448)).toBeCloseTo(280 + 320, 5);
+  });
+
+  it('hero 每公里成本 = fuel spend / tracked mileage', () => {
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'f1',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-01T10:00:00.000Z',
+        odometer: 100,
+        liters: 40,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 999,
+      },
+      {
+        ...base,
+        id: 'f2',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-02-01T10:00:00.000Z',
+        odometer: 1100,
+        liters: 40,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 400,
+      },
+      {
+        ...base,
+        id: 'ins',
+        vehicleId: 'v',
+        type: 'insurance',
+        date: '2026-02-02T10:00:00.000Z',
+        insurer: '人保',
+        amountPaid: 5000,
+      },
+    ];
+    const mileage = summarizeMileage({ initialOdometer: 100 }, records);
+    expect(mileage.trackedMileage).toBe(1000);
+    const fuelSpend = fuelSpendAfterBaseline(records, mileage.baselineOdometer);
+    expect(fuelSpend).toBe(400); // excludes fill at baseline 100 and insurance
+    expect(costPerKm(fuelSpend, mileage.trackedMileage)).toBeCloseTo(0.4, 5);
+  });
+
+  it('includes all fuel when baseline is null', () => {
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'f1',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-01T10:00:00.000Z',
+        odometer: 100,
+        liters: 10,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 80,
+      },
+    ];
+    expect(fuelSpendAfterBaseline(records, null)).toBe(80);
   });
 });

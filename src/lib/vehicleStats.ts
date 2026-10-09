@@ -11,7 +11,10 @@ import type { CareRecord, Km, KWh, Liter, Money, Vehicle } from '../types';
  * - **统计里程** (tracked mileage): distance driven while the app has been
  *   tracking = 行驶里程 − baseline. Baseline is `initialOdometer` when set;
  *   otherwise the earliest (minimum) odometer among records. Never negative.
- * - **每公里成本**: total spend ÷ 统计里程 (¥/km when currency is CNY).
+ * - **加油花费** (hero): Σ amountPaid on fuel records with odometer **strictly
+ *   after** the stats baseline (same baseline as 统计里程). Non-fuel expenses
+ *   are excluded from the hero; full totals remain on the Stats page / home expand.
+ * - **每公里成本** (hero): 加油花费 ÷ 统计里程 (¥/km when currency is CNY).
  * - **总加油量 / 总充电量**: Σ liters on fuel records / Σ kWh on charge records.
  */
 
@@ -65,6 +68,29 @@ export function summarizeMileage(
   }
 
   return { drivingOdometer, trackedMileage, baselineOdometer };
+}
+
+/**
+ * Sum amountPaid on fuel (加油) records after stats tracking started.
+ * Includes only fuel with odometer strictly greater than baseline
+ * (initialOdometer, or earliest record odo when initial is unset).
+ * When baseline is null, all fuel amountPaid are included.
+ */
+export function fuelSpendAfterBaseline(
+  records: CareRecord[],
+  baselineOdometer: Km | null | undefined,
+): Money {
+  let sum = 0;
+  for (const r of records) {
+    if (r.type !== 'fuel') continue;
+    if (typeof r.odometer !== 'number' || !Number.isFinite(r.odometer)) continue;
+    if (baselineOdometer != null && Number.isFinite(baselineOdometer) && r.odometer <= baselineOdometer) {
+      continue;
+    }
+    const p = r.amountPaid;
+    if (typeof p === 'number' && Number.isFinite(p)) sum += p;
+  }
+  return sum;
 }
 
 /** Cost per tracked km; null when tracked mileage is missing or ≤ 0. */

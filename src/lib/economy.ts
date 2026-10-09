@@ -108,14 +108,37 @@ export function combinedEconomy(
   };
 }
 
+/**
+ * Average fuel economy for home card / detail hero / stats summary.
+ * Same formula everywhere: distance-weighted average of full-tank intervals.
+ */
+export function averageFuelEconomy(records: CareRecord[]): number | null {
+  return weightedAverage(fuelIntervals(records));
+}
+
+/**
+ * Average electric economy for home card / detail hero / stats summary.
+ * Same formula everywhere: distance-weighted average of charge intervals.
+ */
+export function averageElectricEconomy(records: CareRecord[]): number | null {
+  return weightedAverage(electricIntervals(records));
+}
+
+/** Most recent single fuel interval economy (not used for hero cards). */
 export function latestFuelEconomy(records: CareRecord[]): number | null {
   const ivs = fuelIntervals(records);
   if (!ivs.length) return null;
   return ivs[ivs.length - 1].economyPer100;
 }
 
+/** Most recent single electric interval economy (not used for hero cards). */
 export function latestElectricEconomy(records: CareRecord[]): number | null {
   const ivs = electricIntervals(records);
   if (!ivs.length) return null;
   return ivs[ivs.length - 1].economyPer100;
+}
+
+/** Display economy with unified 2 decimal places (home, detail, timeline, stats). */
+export function formatEconomy(n: number): string {
+  return n.toFixed(2);
 }

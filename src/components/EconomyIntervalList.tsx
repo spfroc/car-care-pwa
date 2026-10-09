@@ -1,4 +1,5 @@
 import type { EconomyInterval } from '../types';
+import { formatEconomy } from '../lib/economy';
 
 type Props = {
   intervals: EconomyInterval[];
@@ -41,7 +42,7 @@ export function EconomyIntervalList({
               </span>
             </div>
             <div className="iv-eco">
-              {iv.economyPer100.toFixed(2)} {unitLabel}
+              {formatEconomy(iv.economyPer100)} {unitLabel}
             </div>
           </li>
         );

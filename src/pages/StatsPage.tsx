@@ -7,10 +7,12 @@ import type { CareRecord, RecordType, Vehicle } from '../types';
 import { formatMoney, recordTypeColor, recordTypeLabel, RECORD_TYPE_ORDER } from '../lib/constants';
 import { summarizeSpend, filterByRange, monthlySpendByType } from '../lib/spend';
 import {
+  averageElectricEconomy,
+  averageFuelEconomy,
   combinedEconomy,
   electricIntervals,
+  formatEconomy,
   fuelIntervals,
-  weightedAverage,
 } from '../lib/economy';
 import { allowsCharge, allowsFuel } from '../lib/energy';
 import { EconomyIntervalList } from '../components/EconomyIntervalList';
@@ -102,8 +104,8 @@ export function StatsPage() {
 
   const fuelIvs = fuelIntervals(filtered);
   const elecIvs = electricIntervals(filtered);
-  const fuelAvg = weightedAverage(fuelIvs);
-  const elecAvg = weightedAverage(elecIvs);
+  const fuelAvg = averageFuelEconomy(filtered);
+  const elecAvg = averageElectricEconomy(filtered);
   const combined = settings ? combinedEconomy(filtered, settings.kwhToLiterFactor) : null;
 
   if (!settings) return <div className="page"><p className="muted">加载中…</p></div>;
@@ -207,7 +209,7 @@ export function StatsPage() {
             <p>
               平均油耗：{' '}
               <strong>
-                {fuelAvg == null ? '数据不足' : `${fuelAvg.toFixed(2)} ${settings.fuelEconomyUnit}`}
+                {fuelAvg == null ? '数据不足' : `${formatEconomy(fuelAvg)} ${settings.fuelEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -227,7 +229,7 @@ export function StatsPage() {
               <strong>
                 {elecAvg == null
                   ? '数据不足'
-                  : `${elecAvg.toFixed(2)} ${settings.electricEconomyUnit}`}
+                  : `${formatEconomy(elecAvg)} ${settings.electricEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -244,7 +246,7 @@ export function StatsPage() {
           <p style={{ marginTop: 14 }}>
             综合油耗（折算）：{' '}
             <strong>
-              {combined == null ? '数据不足' : `${combined.economyPer100.toFixed(2)} L/100km`}
+              {combined == null ? '数据不足' : `${formatEconomy(combined.economyPer100)} L/100km`}
             </strong>
           </p>
         )}

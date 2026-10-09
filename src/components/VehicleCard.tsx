@@ -4,7 +4,7 @@ import type { CareRecord, Vehicle } from '../types';
 import { ENERGY_COLORS, ENERGY_LABELS, bodyIcon, formatMoney } from '../lib/constants';
 import { homeCardFlags } from '../lib/energy';
 import { summarizeSpend } from '../lib/spend';
-import { latestElectricEconomy, latestFuelEconomy } from '../lib/economy';
+import { averageElectricEconomy, averageFuelEconomy, formatEconomy } from '../lib/economy';
 import { summarizeMileage } from '../lib/vehicleStats';
 
 function formatKm(n: number): string {
@@ -28,8 +28,8 @@ export function VehicleCard({
   const mine = records.filter((r) => r.vehicleId === vehicle.id);
   const spend = summarizeSpend(vehicle.id, mine);
   const flags = homeCardFlags(vehicle.energyType, hevAllowCharge);
-  const fuelEco = latestFuelEconomy(mine);
-  const elecEco = latestElectricEconomy(mine);
+  const fuelEco = averageFuelEconomy(mine);
+  const elecEco = averageElectricEconomy(mine);
   const mileage = summarizeMileage(vehicle, mine);
   const bg = ENERGY_COLORS[vehicle.energyType];
   const detailTo = `/vehicles/${vehicle.id}`;
@@ -58,7 +58,7 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">油耗</div>
                 <div className="value">
-                  {fuelEco == null ? '—' : `${fuelEco.toFixed(1)} ${fuelUnit}`}
+                  {fuelEco == null ? '—' : `${formatEconomy(fuelEco)} ${fuelUnit}`}
                 </div>
               </div>
             )}
@@ -66,7 +66,7 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">电耗</div>
                 <div className="value">
-                  {elecEco == null ? '—' : `${elecEco.toFixed(1)} ${electricUnit}`}
+                  {elecEco == null ? '—' : `${formatEconomy(elecEco)} ${electricUnit}`}
                 </div>
               </div>
             )}

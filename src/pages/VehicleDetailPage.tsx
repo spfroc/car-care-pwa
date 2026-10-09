@@ -15,16 +15,18 @@ import {
   recordTypeLabel,
 } from '../lib/constants';
 import { allowsCharge, allowsFuel } from '../lib/energy';
-import { summarizeSpend } from '../lib/spend';
 import {
+  averageElectricEconomy,
+  averageFuelEconomy,
   combinedEconomy,
-  weightedAverage,
-  fuelIntervals,
   electricIntervals,
+  formatEconomy,
+  fuelIntervals,
 } from '../lib/economy';
 import {
   costPerKm,
   formatMileagePair,
+  fuelSpendAfterBaseline,
   summarizeMileage,
   totalChargeKWh,
   totalFuelLiters,
@@ -94,13 +96,13 @@ function intervalLine(
     const iv = fuelByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${iv.economyPer100.toFixed(2)} ${fuelUnit}`;
+    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100)} ${fuelUnit}`;
   }
   if (r.type === 'charge') {
     const iv = elecByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${iv.economyPer100.toFixed(2)} ${elecUnit}`;
+    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100)} ${elecUnit}`;
   }
   return null;
 }
@@ -137,19 +139,19 @@ export function VehicleDetailPage() {
 
   if (!vehicle || !settings) return <div className="page"><p className="muted">加载中…</p></div>;
 
-  const spend = summarizeSpend(vehicle.id, records);
   const canFuel = allowsFuel(vehicle.energyType);
   const canCharge = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
   const fuelIvs = fuelIntervals(records);
   const elecIvs = electricIntervals(records);
-  const fuelAvg = weightedAverage(fuelIvs);
-  const elecAvg = weightedAverage(elecIvs);
+  const fuelAvg = averageFuelEconomy(records);
+  const elecAvg = averageElectricEconomy(records);
   const combined = combinedEconomy(records, settings.kwhToLiterFactor);
   const fuelByEnd = new Map(fuelIvs.map((iv) => [iv.endRecordId, iv]));
   const elecByEnd = new Map(elecIvs.map((iv) => [iv.endRecordId, iv]));
   const bg = ENERGY_COLORS[vehicle.energyType];
   const mileage = summarizeMileage(vehicle, records);
-  const perKm = costPerKm(spend.total, mileage.trackedMileage);
+  const fuelSpend = fuelSpendAfterBaseline(records, mileage.baselineOdometer);
+  const perKm = costPerKm(fuelSpend, mileage.trackedMileage);
   const fuelLiters = totalFuelLiters(records);
   const chargeKWh = totalChargeKWh(records);
 
@@ -188,8 +190,8 @@ export function VehicleDetailPage() {
         </div>
         <div className="mini-stats">
           <div>
-            <span className="label">总花费</span>
-            <strong>{formatMoney(spend.total, settings.currency.symbol)}</strong>
+            <span className="label">加油花费</span>
+            <strong>{formatMoney(fuelSpend, settings.currency.symbol)}</strong>
           </div>
           <div>
             <span className="label">每公里成本</span>
@@ -201,7 +203,7 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">油耗</span>
               <strong>
-                {fuelAvg == null ? '—' : `${fuelAvg.toFixed(2)} ${settings.fuelEconomyUnit}`}
+                {fuelAvg == null ? '—' : `${formatEconomy(fuelAvg)} ${settings.fuelEconomyUnit}`}
               </strong>
             </div>
           )}
@@ -209,7 +211,7 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">电耗</span>
               <strong>
-                {elecAvg == null ? '—' : `${elecAvg.toFixed(2)} ${settings.electricEconomyUnit}`}
+                {elecAvg == null ? '—' : `${formatEconomy(elecAvg)} ${settings.electricEconomyUnit}`}
               </strong>
             </div>
           )}
@@ -233,7 +235,7 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">综合</span>
               <strong>
-                {combined == null ? '—' : `${combined.economyPer100.toFixed(2)} L/100km`}
+                {combined == null ? '—' : `${formatEconomy(combined.economyPer100)} L/100km`}
               </strong>
             </div>
           )}
