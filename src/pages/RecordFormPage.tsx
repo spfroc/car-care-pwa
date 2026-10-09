@@ -7,13 +7,14 @@ import { getSetting } from '../repositories/settings';
 import { putMediaFromFile } from '../repositories/media';
 import { useSettings } from '../hooks/useAppData';
 import { DateTimeField } from '../components/DateTimeField';
-import { formatDateTimeLocal, nowISO, uid } from '../lib/constants';
+import { formatDateTimeLocal, nowISO, parkingKindLabel, recordTypeLabel, uid } from '../lib/constants';
 import type {
   CareRecord,
   ChargeStationKind,
   GoodsCategory,
   MaintenanceCategory,
   ModArea,
+  ParkingKind,
   RecordType,
   Station,
   Vehicle,
@@ -84,6 +85,15 @@ export function RecordFormPage() {
   const [paid, setPaid] = useState(true);
   const [paidAt, setPaidAt] = useState('');
 
+  // parking
+  const [parkingKind, setParkingKind] = useState<ParkingKind>('temporary');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [parkDuration, setParkDuration] = useState('');
+
+  // toll
+  const [route, setRoute] = useState('');
+
   useEffect(() => {
     if (!vehicleId) return;
     getVehicle(vehicleId).then((v) => setVehicle(v ?? null));
@@ -145,6 +155,14 @@ export function RecordFormPage() {
           setPoints(r.points?.toString() ?? '');
           setPaid(r.paid);
           setPaidAt(r.paidAt ? formatDateTimeLocal(r.paidAt).slice(0, 10) : '');
+        } else if (r.type === 'parking') {
+          setParkingKind(r.parkingKind);
+          setPlace(r.place ?? '');
+          setPeriodStart(r.periodStart ? formatDateTimeLocal(r.periodStart).slice(0, 10) : '');
+          setPeriodEnd(r.periodEnd ? formatDateTimeLocal(r.periodEnd).slice(0, 10) : '');
+          setParkDuration(r.durationMinutes?.toString() ?? '');
+        } else if (r.type === 'toll') {
+          setRoute(r.route ?? '');
         }
       });
     } else if (isNew && vehicleId) {
@@ -304,7 +322,7 @@ export function RecordFormPage() {
           unitPrice: goodsUnit === '' ? undefined : Number(goodsUnit),
           channel: channel || undefined,
         };
-      } else {
+      } else if (type === 'ticket') {
         rec = {
           ...common,
           type: 'ticket',
@@ -313,6 +331,38 @@ export function RecordFormPage() {
           points: points === '' ? undefined : Number(points),
           paid,
           paidAt: paid && paidAt ? new Date(paidAt).toISOString() : paid ? t : undefined,
+        };
+      } else if (type === 'parking') {
+        if (parkingKind === 'fixed' && periodStart && periodEnd) {
+          const ps = new Date(periodStart).getTime();
+          const pe = new Date(periodEnd).getTime();
+          if (!Number.isNaN(ps) && !Number.isNaN(pe) && pe < ps) {
+            throw new Error('计费周期结束不能早于开始');
+          }
+        }
+        rec = {
+          ...common,
+          type: 'parking',
+          parkingKind,
+          place: place.trim() || undefined,
+          periodStart:
+            parkingKind === 'fixed' && periodStart
+              ? new Date(periodStart).toISOString()
+              : undefined,
+          periodEnd:
+            parkingKind === 'fixed' && periodEnd
+              ? new Date(periodEnd).toISOString()
+              : undefined,
+          durationMinutes:
+            parkingKind === 'temporary' && parkDuration !== ''
+              ? Number(parkDuration)
+              : undefined,
+        };
+      } else {
+        rec = {
+          ...common,
+          type: 'toll',
+          route: route.trim() || undefined,
         };
       }
     } catch (ex) {
@@ -339,13 +389,7 @@ export function RecordFormPage() {
         </Link>
         <h1>
           {isNew ? '新增' : '编辑'}
-          {type === 'fuel' && '加油'}
-          {type === 'charge' && '充电'}
-          {type === 'maintenance' && '维保'}
-          {type === 'modification' && '改装'}
-          {type === 'wash' && '洗车'}
-          {type === 'goods' && '配件'}
-          {type === 'ticket' && '罚单'}
+          {recordTypeLabel(type, settings?.language)}
         </h1>
       </header>
 
@@ -645,6 +689,66 @@ export function RecordFormPage() {
             )}
             <p className="muted small">仅记录单笔金额与扣分，不做驾驶证周期统计</p>
           </>
+        )}
+
+        {type === 'parking' && (
+          <>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Parking type' : '停车类型'} *
+              <select value={parkingKind} onChange={(e) => setParkingKind(e.target.value as ParkingKind)}>
+                <option value="fixed">{parkingKindLabel('fixed', settings?.language)}</option>
+                <option value="temporary">{parkingKindLabel('temporary', settings?.language)}</option>
+              </select>
+            </label>
+            <label>
+              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Place / lot' : '停车场/地点'}
+              <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. community lot' : '如：小区车库 / 商场'} />
+            </label>
+            {parkingKind === 'fixed' && (
+              <>
+                <label>
+                  {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Period start' : '计费周期开始'}
+                  <DateTimeField
+                    mode="date"
+                    value={periodStart}
+                    onChange={setPeriodStart}
+                    dateFormat={settings?.dateFormat}
+                    timeFormat={settings?.timeFormat}
+                    language={settings?.language}
+                  />
+                </label>
+                <label>
+                  {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Period end' : '计费周期结束'}
+                  <DateTimeField
+                    mode="date"
+                    value={periodEnd}
+                    onChange={setPeriodEnd}
+                    dateFormat={settings?.dateFormat}
+                    timeFormat={settings?.timeFormat}
+                    language={settings?.language}
+                  />
+                </label>
+                <p className="muted small">
+                  {(settings?.language ?? '').toLowerCase().startsWith('en')
+                    ? 'Date above is the payment date; period is the billing window (e.g. month).'
+                    : '上方日期为缴费日期；周期为月租等计费区间。'}
+                </p>
+              </>
+            )}
+            {parkingKind === 'temporary' && (
+              <label>
+                {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Duration (minutes)' : '停车时长 (分钟)'}
+                <input type="number" value={parkDuration} onChange={(e) => setParkDuration(e.target.value)} />
+              </label>
+            )}
+          </>
+        )}
+
+        {type === 'toll' && (
+          <label>
+            {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Route / entry→exit' : '路线 / 入口→出口'}
+            <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. Shanghai → Hangzhou' : '如：上海→杭州 / G92'} />
+          </label>
         )}
 
         {type !== 'ticket' && (

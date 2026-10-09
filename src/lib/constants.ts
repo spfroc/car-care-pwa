@@ -59,6 +59,20 @@ export const RECORD_TYPE_LABELS: Record<string, string> = {
   wash: '洗车',
   goods: '配件',
   ticket: '罚单',
+  parking: '停车费',
+  toll: '高速费',
+};
+
+export const RECORD_TYPE_LABELS_EN: Record<string, string> = {
+  fuel: 'Fuel',
+  charge: 'Charge',
+  maintenance: 'Service',
+  modification: 'Mods',
+  wash: 'Wash',
+  goods: 'Parts',
+  ticket: 'Ticket',
+  parking: 'Parking',
+  toll: 'Toll',
 };
 
 export const RECORD_TYPE_ICONS: Record<string, string> = {
@@ -69,7 +83,32 @@ export const RECORD_TYPE_ICONS: Record<string, string> = {
   wash: '🧼',
   goods: '📦',
   ticket: '📄',
+  parking: '🅿️',
+  toll: '🛣️',
 };
+
+export const PARKING_KIND_LABELS: Record<string, string> = {
+  fixed: '固定停车费',
+  temporary: '临时停车费',
+};
+
+export const PARKING_KIND_LABELS_EN: Record<string, string> = {
+  fixed: 'Fixed parking',
+  temporary: 'Temporary parking',
+};
+
+/** Resolve record-type label for zh-CN / en. */
+export function recordTypeLabel(type: string, language?: string): string {
+  const en = (language ?? '').toLowerCase().startsWith('en');
+  if (en) return RECORD_TYPE_LABELS_EN[type] ?? type;
+  return RECORD_TYPE_LABELS[type] ?? type;
+}
+
+export function parkingKindLabel(kind: string, language?: string): string {
+  const en = (language ?? '').toLowerCase().startsWith('en');
+  if (en) return PARKING_KIND_LABELS_EN[kind] ?? kind;
+  return PARKING_KIND_LABELS[kind] ?? kind;
+}
 
 export const OCR_DEFAULTS = {
   main: '油量,升,L,单价,金额,加油站,充电量,度,kWh,实付,合计',

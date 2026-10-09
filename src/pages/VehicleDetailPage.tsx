@@ -8,10 +8,11 @@ import {
   ENERGY_COLORS,
   ENERGY_LABELS,
   RECORD_TYPE_ICONS,
-  RECORD_TYPE_LABELS,
   bodyIcon,
   formatDate,
   formatMoney,
+  parkingKindLabel,
+  recordTypeLabel,
 } from '../lib/constants';
 import { allowsCharge, allowsFuel } from '../lib/energy';
 import { summarizeSpend } from '../lib/spend';
@@ -29,21 +30,26 @@ import {
   totalFuelLiters,
 } from '../lib/vehicleStats';
 
-const FILTERS: { key: 'all' | RecordType; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'fuel', label: '加油' },
-  { key: 'charge', label: '充电' },
-  { key: 'maintenance', label: '维保' },
-  { key: 'modification', label: '改装' },
-  { key: 'wash', label: '洗车' },
-  { key: 'goods', label: '配件' },
-  { key: 'ticket', label: '罚单' },
-];
+function filterLabels(lang?: string): { key: 'all' | RecordType; label: string }[] {
+  const en = (lang ?? '').toLowerCase().startsWith('en');
+  return [
+    { key: 'all', label: en ? 'All' : '全部' },
+    { key: 'fuel', label: recordTypeLabel('fuel', lang) },
+    { key: 'charge', label: recordTypeLabel('charge', lang) },
+    { key: 'maintenance', label: recordTypeLabel('maintenance', lang) },
+    { key: 'modification', label: recordTypeLabel('modification', lang) },
+    { key: 'wash', label: recordTypeLabel('wash', lang) },
+    { key: 'goods', label: recordTypeLabel('goods', lang) },
+    { key: 'ticket', label: recordTypeLabel('ticket', lang) },
+    { key: 'parking', label: recordTypeLabel('parking', lang) },
+    { key: 'toll', label: recordTypeLabel('toll', lang) },
+  ];
+}
 
-function recordTitle(r: CareRecord): string {
+function recordTitle(r: CareRecord, lang?: string): string {
   switch (r.type) {
     case 'fuel':
-      return `${r.fuelGrade} ${r.liters}L · ${r.stationName || '加油'}`;
+      return `${r.fuelGrade} ${r.liters}L · ${r.stationName || recordTypeLabel('fuel', lang)}`;
     case 'charge': {
       const soc =
         r.socBefore != null || r.socAfter != null
@@ -56,11 +62,17 @@ function recordTitle(r: CareRecord): string {
     case 'modification':
       return r.title;
     case 'wash':
-      return RECORD_TYPE_LABELS.wash + (r.place ? ` · ${r.place}` : '');
+      return recordTypeLabel('wash', lang) + (r.place ? ` · ${r.place}` : '');
     case 'goods':
       return r.name;
     case 'ticket':
-      return r.violationType || '罚单';
+      return r.violationType || recordTypeLabel('ticket', lang);
+    case 'parking': {
+      const kind = parkingKindLabel(r.parkingKind, lang);
+      return kind + (r.place ? ` · ${r.place}` : '');
+    }
+    case 'toll':
+      return r.route || recordTypeLabel('toll', lang);
   }
 }
 
@@ -228,34 +240,40 @@ export function VehicleDetailPage() {
         <div className="add-menu">
           {canFuel && (
             <Link to={`/vehicles/${vehicle.id}/records/new/fuel`} className="btn block">
-              ⛽ 加油
+              ⛽ {recordTypeLabel('fuel', settings.language)}
             </Link>
           )}
           {canCharge && (
             <Link to={`/vehicles/${vehicle.id}/records/new/charge`} className="btn block">
-              🔌 充电
+              🔌 {recordTypeLabel('charge', settings.language)}
             </Link>
           )}
           <Link to={`/vehicles/${vehicle.id}/records/new/maintenance`} className="btn block">
-            🔧 维保
+            🔧 {recordTypeLabel('maintenance', settings.language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/modification`} className="btn block">
-            🛠️ 改装
+            🛠️ {recordTypeLabel('modification', settings.language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/wash`} className="btn block">
-            🧼 洗车
+            🧼 {recordTypeLabel('wash', settings.language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/goods`} className="btn block">
-            📦 配件
+            📦 {recordTypeLabel('goods', settings.language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/ticket`} className="btn block">
-            📄 罚单
+            📄 {recordTypeLabel('ticket', settings.language)}
+          </Link>
+          <Link to={`/vehicles/${vehicle.id}/records/new/parking`} className="btn block">
+            🅿️ {recordTypeLabel('parking', settings.language)}
+          </Link>
+          <Link to={`/vehicles/${vehicle.id}/records/new/toll`} className="btn block">
+            🛣️ {recordTypeLabel('toll', settings.language)}
           </Link>
         </div>
       )}
 
       <div className="chip-row">
-        {FILTERS.filter((f) => {
+        {filterLabels(settings.language).filter((f) => {
           if (f.key === 'fuel' && !canFuel) return false;
           if (f.key === 'charge' && !canCharge) return false;
           return true;
@@ -286,9 +304,9 @@ export function VehicleDetailPage() {
               <Link to={`/vehicles/${vehicle.id}/records/${r.id}`} className="ti-main">
                 <span className="ti-icon">{RECORD_TYPE_ICONS[r.type]}</span>
                 <div>
-                  <div className="ti-title">{recordTitle(r)}</div>
+                  <div className="ti-title">{recordTitle(r, settings.language)}</div>
                   <div className="muted small">
-                    {RECORD_TYPE_LABELS[r.type]} · {formatDate(r.date, settings.dateFormat)}
+                    {recordTypeLabel(r.type, settings.language)} · {formatDate(r.date, settings.dateFormat)}
                     {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
                     {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
                     {r.type === 'fuel' && !r.filledUp ? ' · 未加满' : ''}

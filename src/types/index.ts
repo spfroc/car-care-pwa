@@ -14,13 +14,15 @@ export type BodyType =
   | 'BIKE' | 'RV' | 'BUS' | 'OTHER';
 
 export type RecordType =
-  | 'fuel' | 'charge' | 'maintenance' | 'modification' | 'wash' | 'goods' | 'ticket';
+  | 'fuel' | 'charge' | 'maintenance' | 'modification' | 'wash' | 'goods' | 'ticket'
+  | 'parking' | 'toll';
 
 export type ChargeStationKind = 'public' | 'home' | 'destination' | 'other';
 export type MaintenanceCategory = 'service' | 'repair' | 'beauty' | 'tire' | 'other';
 export type ModArea = 'exterior' | 'interior' | 'power' | 'chassis' | 'electronics' | 'other';
 export type WashKind = 'basic' | 'detail' | 'coating' | 'interior' | 'other';
 export type GoodsCategory = 'oil' | 'filter' | 'tire' | 'electronics' | 'other';
+export type ParkingKind = 'fixed' | 'temporary';
 export type StationType = 'gas' | 'charge';
 
 export interface Vehicle {
@@ -126,6 +128,27 @@ export interface TicketRecord extends RecordBase {
   paidAt?: ISODateTime;
 }
 
+/** Fixed (periodic lot) or temporary (out-trip) parking fee. */
+export interface ParkingRecord extends RecordBase {
+  type: 'parking';
+  parkingKind: ParkingKind;
+  /** Lot name / place. */
+  place?: string;
+  /** Billing period start (fixed parking). */
+  periodStart?: ISODateTime;
+  /** Billing period end (fixed parking). */
+  periodEnd?: ISODateTime;
+  /** Parking duration in minutes (temporary). */
+  durationMinutes?: number;
+}
+
+/** Highway / toll-road fee. */
+export interface TollRecord extends RecordBase {
+  type: 'toll';
+  /** Route or entry→exit description. */
+  route?: string;
+}
+
 export type CareRecord =
   | FuelRecord
   | ChargeRecord
@@ -133,7 +156,9 @@ export type CareRecord =
   | ModificationRecord
   | WashRecord
   | GoodsRecord
-  | TicketRecord;
+  | TicketRecord
+  | ParkingRecord
+  | TollRecord;
 
 export interface Station {
   id: UUID;
@@ -180,6 +205,8 @@ export interface VehicleSpendSummary {
   washCost: Money;
   goodsCost: Money;
   ticketCost: Money;
+  parkingCost: Money;
+  tollCost: Money;
   total: Money;
 }
 

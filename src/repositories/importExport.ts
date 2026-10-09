@@ -56,7 +56,7 @@ export async function exportData(includeImages: boolean): Promise<{ json: string
   const payload: CarCareExportV1 = {
     format: 'car-care-export-v1',
     exportedAt: nowISO(),
-    appSchemaVersion: 1,
+    appSchemaVersion: 2,
     vehicles,
     records: includeImages
       ? records
@@ -83,6 +83,7 @@ export async function importData(jsonText: string, mode: ImportMode): Promise<{ 
   if (data.format !== 'car-care-export-v1') {
     return { ok: false, message: '格式不正确：需要 car-care-export-v1' };
   }
+  // appSchemaVersion 1 (pre-parking/toll) and 2+ are both loadable; unknown types are stored as-is.
   const db = await getDB();
   if (mode === 'replace') {
     const stores = ['vehicles', 'records', 'stations', 'settings', 'media'] as const;

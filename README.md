@@ -23,10 +23,10 @@ npm test         # 油耗/电耗/综合公式单测
 
 - IndexedDB schema（vehicles / records / stations / settings / media / meta）与 repositories
 - 车辆 CRUD、能源类型约束（ICE 仅加油；EV 仅充电；PHEV/REEV 两者；HEV 默认禁充电，可用 `hevAllowCharge` 开启）
-- 记录：加油 / 充电 / 维保 / 改装 / 洗车 / 配件 / 罚单；图片 canvas JPEG 压缩
+- 记录：加油 / 充电 / 维保 / 改装 / 洗车 / 配件 / 罚单 / **停车费**（固定·临时）/ **高速通行费**；图片 canvas JPEG 压缩
 - 收藏加油站 / 充电站
 - 设置：燃油标号、默认燃油、`kwhToLiterFactor`、油耗/电耗显示单位、OCR 四白名单（紫卡 + 重置 +「下次识别时生效」）、导入（默认合并去重 / 可选覆盖）、导出（含图体积警告 / 不含图）、演示种子、清空
-- 首页花费矩阵 + 近况能耗；车辆时间线筛选；统计汇总卡 + 近月柱状；综合油耗折算
+- 首页花费矩阵 + 近况能耗；车辆时间线筛选（含停车/高速）；统计汇总卡 + 近月柱状；综合油耗折算
 - Service Worker + manifest；`storage.persist` 尝试；IDB 不可用时非白屏错误页
 - Vitest：油耗 / 电耗 / 加权平均 / 综合油耗
 
@@ -69,3 +69,15 @@ Settings → 通用:
 - `timeFormat` (default `24h`, or `12h`)
 
 Native `datetime-local` is replaced by `DateTimeField` so format/locale follow app settings, not the browser locale.
+
+
+## 停车费与高速费
+
+新增两类花费记录（与维保/洗车等同属费用，计入总花费与统计）：
+
+| 类型 | `type` | 要点 |
+|---|---|---|
+| 停车费 | `parking` | `parkingKind`: `fixed`（周期月租等，可选 `periodStart`/`periodEnd`、车场名）或 `temporary`（外出临停，可选时长分钟、地点） |
+| 高速通行费 | `toll` | 可选 `route`（入口→出口 / 路段） |
+
+录入入口：车辆详情 →「+ 新增记录」。导出 `appSchemaVersion` 现为 **2**；旧版 `car-care-export-v1`（schema 1）仍可合并导入。

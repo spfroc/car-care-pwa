@@ -205,6 +205,29 @@ export async function loadDemoSeed(replace = true): Promise<void> {
       id: 'seed-ticket-phev-1', vehicleId: phevId, type: 'ticket', date: ts(22), violationType: '超速',
       amountPaid: 200, points: 3, paid: false, mediaIds: [], createdAt, updatedAt: createdAt,
     },
+    {
+      id: 'seed-park-ice-fixed', vehicleId: iceId, type: 'parking', date: ts(5), parkingKind: 'fixed',
+      place: '小区地下车库', periodStart: ts(30), periodEnd: ts(0), amountPaid: 450,
+      mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-park-ice-temp', vehicleId: iceId, type: 'parking', date: ts(3), parkingKind: 'temporary',
+      place: '商场B1', durationMinutes: 120, amountPaid: 20,
+      mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-toll-ice-1', vehicleId: iceId, type: 'toll', date: ts(10), route: '上海→苏州',
+      amountPaid: 55, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-park-ev-temp', vehicleId: evId, type: 'parking', date: ts(4), parkingKind: 'temporary',
+      place: '办公楼访客位', durationMinutes: 480, amountPaid: 40,
+      mediaIds: [], createdAt, updatedAt: createdAt,
+    },
+    {
+      id: 'seed-toll-phev-1', vehicleId: phevId, type: 'toll', date: ts(14), route: 'G15 沈海高速',
+      amountPaid: 120, mediaIds: [], createdAt, updatedAt: createdAt,
+    },
   ];
 
   for (const v of vehicles) await db.put('vehicles', v);

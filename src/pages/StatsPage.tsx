@@ -60,6 +60,8 @@ export function StatsPage() {
         washCost: 0,
         goodsCost: 0,
         ticketCost: 0,
+        parkingCost: 0,
+        tollCost: 0,
         total: 0,
       };
       for (const v of vehicles) {
@@ -71,6 +73,8 @@ export function StatsPage() {
         base.washCost += s.washCost;
         base.goodsCost += s.goodsCost;
         base.ticketCost += s.ticketCost;
+        base.parkingCost += s.parkingCost;
+        base.tollCost += s.tollCost;
         base.total += s.total;
       }
       return base;
@@ -180,6 +184,14 @@ export function StatsPage() {
         <div className="stat-card">
           <div className="label">罚单</div>
           <div className="big">{formatMoney(spend.ticketCost)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">停车费</div>
+          <div className="big">{formatMoney(spend.parkingCost)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">高速费</div>
+          <div className="big">{formatMoney(spend.tollCost)}</div>
         </div>
       </div>
 

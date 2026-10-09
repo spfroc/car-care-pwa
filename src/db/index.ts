@@ -93,7 +93,10 @@ export async function ensureDefaultSettings(): Promise<void> {
   }
   await tx.done;
   const meta = await db.get('meta', 'schemaVersion');
-  if (!meta) await db.put('meta', { key: 'schemaVersion', value: 1 });
+  if (!meta) await db.put('meta', { key: 'schemaVersion', value: 2 });
+  else if (typeof meta.value === 'number' && meta.value < 2) {
+    await db.put('meta', { key: 'schemaVersion', value: 2 });
+  }
 }
 
 export async function tryPersistStorage(): Promise<boolean> {
