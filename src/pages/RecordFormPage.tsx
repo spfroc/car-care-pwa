@@ -147,6 +147,12 @@ export function RecordFormPage() {
           setPaidAt(r.paidAt ? formatDateTimeLocal(r.paidAt).slice(0, 10) : '');
         }
       });
+    } else if (isNew && vehicleId) {
+      // Prefill 行驶里程 hint: last record odo, else vehicle initialOdometer.
+      Promise.all([latestOdometer(vehicleId), getVehicle(vehicleId)]).then(([last, v]) => {
+        const seed = last ?? v?.initialOdometer;
+        if (seed != null) setOdometer(String(seed));
+      });
     }
   }, [vehicleId, recordId, isNew, typeParam]);
 
@@ -359,8 +365,11 @@ export function RecordFormPage() {
 
         {(type === 'fuel' || type === 'charge' || type === 'maintenance' || type === 'modification' || type === 'wash') && (
           <label>
-            当前里程 (km){type === 'fuel' || type === 'charge' ? ' *' : ''}
+            当前里程 / 行驶里程 (km){type === 'fuel' || type === 'charge' ? ' *' : ''}
             <input type="number" value={odometer} onChange={(e) => setOdometer(e.target.value)} required={type === 'fuel' || type === 'charge'} />
+            {(type === 'fuel' || type === 'charge') && (
+              <span className="field-hint">保存后详情卡「行驶里程」取各记录中的最大里程。</span>
+            )}
           </label>
         )}
 

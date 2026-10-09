@@ -156,6 +156,12 @@ button, input, select, textarea {
 }
 .row { display: flex; gap: 8px; }
 .row input { flex: 1; }
+.field-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 2px;
+}
 .error { color: var(--danger); margin: 0; }
 .empty {
   text-align: center;
@@ -173,13 +179,39 @@ button, input, select, textarea {
   padding: 14px;
   margin-bottom: 12px;
 }
+.detail-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.detail-hero-top .vc-title { flex: 1; min-width: 0; }
+.detail-hero-top h1 { margin: 0; font-size: 1.25rem; }
+.mileage-pair {
+  text-align: right;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.mileage-pair .label { display: block; font-size: 11px; color: var(--muted); }
+.mileage-pair strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
 .mini-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-top: 12px;
+  gap: 10px 8px;
+  margin-top: 14px;
 }
 .mini-stats .label { display: block; }
+.mini-stats strong {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 420px) {
+  .mini-stats { grid-template-columns: repeat(3, 1fr); }
+}
 .toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
 .add-menu {
   display: grid;

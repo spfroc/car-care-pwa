@@ -21,6 +21,13 @@ import {
   fuelIntervals,
   electricIntervals,
 } from '../lib/economy';
+import {
+  costPerKm,
+  formatMileagePair,
+  summarizeMileage,
+  totalChargeKWh,
+  totalFuelLiters,
+} from '../lib/vehicleStats';
 
 const FILTERS: { key: 'all' | RecordType; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -116,6 +123,10 @@ export function VehicleDetailPage() {
   const fuelByEnd = new Map(fuelIvs.map((iv) => [iv.endRecordId, iv]));
   const elecByEnd = new Map(elecIvs.map((iv) => [iv.endRecordId, iv]));
   const bg = ENERGY_COLORS[vehicle.energyType];
+  const mileage = summarizeMileage(vehicle, records);
+  const perKm = costPerKm(spend.total, mileage.trackedMileage);
+  const fuelLiters = totalFuelLiters(records);
+  const chargeKWh = totalChargeKWh(records);
 
   async function onDelete(rid: string) {
     if (!confirm('删除这条记录？')) return;
@@ -135,25 +146,37 @@ export function VehicleDetailPage() {
       </header>
 
       <div className="detail-hero" style={{ borderColor: bg }}>
-        <div className="vc-title">
-          <span className="vc-icon lg">{bodyIcon(vehicle.bodyType)}</span>
-          <div>
-            <h1>{vehicle.name}</h1>
-            <p className="muted">
-              {vehicle.plate || '无车牌'} · {ENERGY_LABELS[vehicle.energyType]}
-            </p>
+        <div className="detail-hero-top">
+          <div className="vc-title">
+            <span className="vc-icon lg">{bodyIcon(vehicle.bodyType)}</span>
+            <div>
+              <h1>{vehicle.name}</h1>
+              <p className="muted">
+                {vehicle.plate || '无车牌'} · {ENERGY_LABELS[vehicle.energyType]}
+              </p>
+            </div>
+          </div>
+          <div className="mileage-pair" title="统计里程 / 行驶里程">
+            <span className="label">统计/行驶</span>
+            <strong>{formatMileagePair(mileage)}</strong>
           </div>
         </div>
         <div className="mini-stats">
           <div>
             <span className="label">总花费</span>
-            <strong>{formatMoney(spend.total)}</strong>
+            <strong>{formatMoney(spend.total, settings.currency.symbol)}</strong>
+          </div>
+          <div>
+            <span className="label">每公里成本</span>
+            <strong>
+              {perKm == null ? '—' : formatMoney(perKm, settings.currency.symbol)}
+            </strong>
           </div>
           {canFuel && (
             <div>
               <span className="label">油耗</span>
               <strong>
-                {fuelAvg == null ? '—' : `${fuelAvg.toFixed(1)} ${settings.fuelEconomyUnit}`}
+                {fuelAvg == null ? '—' : `${fuelAvg.toFixed(2)} ${settings.fuelEconomyUnit}`}
               </strong>
             </div>
           )}
@@ -161,7 +184,23 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">电耗</span>
               <strong>
-                {elecAvg == null ? '—' : `${elecAvg.toFixed(1)} ${settings.electricEconomyUnit}`}
+                {elecAvg == null ? '—' : `${elecAvg.toFixed(2)} ${settings.electricEconomyUnit}`}
+              </strong>
+            </div>
+          )}
+          {canFuel && (
+            <div>
+              <span className="label">总加油量</span>
+              <strong>
+                {fuelLiters > 0 ? `${fuelLiters.toFixed(2)} ${settings.volumeUnit}` : '—'}
+              </strong>
+            </div>
+          )}
+          {canCharge && (
+            <div>
+              <span className="label">总充电量</span>
+              <strong>
+                {chargeKWh > 0 ? `${chargeKWh.toFixed(2)} ${settings.energyUnit}` : '—'}
               </strong>
             </div>
           )}
@@ -169,7 +208,7 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">综合</span>
               <strong>
-                {combined == null ? '—' : `${combined.economyPer100.toFixed(1)} L/100km`}
+                {combined == null ? '—' : `${combined.economyPer100.toFixed(2)} L/100km`}
               </strong>
             </div>
           )}

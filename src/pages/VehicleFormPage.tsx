@@ -134,8 +134,16 @@ export function VehicleFormPage() {
           <input type="number" step="0.1" value={battery} onChange={(e) => setBattery(e.target.value)} />
         </label>
         <label>
-          初始里程 (km)
-          <input type="number" value={odo} onChange={(e) => setOdo(e.target.value)} />
+          初始行驶里程 (km)
+          <input
+            type="number"
+            value={odo}
+            onChange={(e) => setOdo(e.target.value)}
+            placeholder="建档时的表显总里程"
+          />
+          <span className="field-hint">
+            用作统计里程基线；之后加油/充电填写的里程会更新「行驶里程」展示。
+          </span>
         </label>
         <label>
           备注
