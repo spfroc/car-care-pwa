@@ -324,3 +324,120 @@ button, input, select, textarea {
   color: var(--primary);
   font-weight: 600;
 }
+
+
+/* DateTimeField — custom picker (locale + format from settings) */
+.dt-field {
+  position: relative;
+  font-weight: 400;
+}
+.dt-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.dt-field.open .dt-trigger {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgb(109 40 217 / 15%);
+}
+.dt-placeholder { color: var(--muted); }
+.dt-cal-icon { opacity: 0.7; }
+.dt-hidden-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.dt-popover {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 12%);
+  padding: 10px;
+}
+.dt-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.dt-month-title { font-weight: 700; font-size: 14px; }
+.dt-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.dt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.dt-day {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+.dt-day.muted { color: #cbd5e1; }
+.dt-day.selected {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+.dt-day:not(.selected):hover { background: var(--primary-soft); }
+.dt-time {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 140px;
+}
+.dt-time.with-period { grid-template-columns: 1fr 1fr 1fr; }
+.dt-time-col {
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 140px;
+}
+.dt-time-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+}
+.dt-time-item.selected {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+.dt-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 4px;
+}

@@ -16,6 +16,13 @@ import {
 } from '../repositories/importExport';
 import { loadDemoSeed } from '../seed/demo';
 import { nowISO, uid } from '../lib/constants';
+import {
+  DATE_FORMAT_OPTIONS,
+  LANGUAGE_OPTIONS,
+  TIME_FORMAT_OPTIONS,
+  documentLangFor,
+  normalizeLanguage,
+} from '../lib/datetime';
 import type { Station } from '../types';
 
 export function SettingsPage() {
@@ -38,10 +45,19 @@ export function SettingsPage() {
     refresh();
   }, []);
 
+  useEffect(() => {
+    if (settings?.language) {
+      document.documentElement.lang = documentLangFor(settings.language);
+    }
+  }, [settings?.language]);
+
   if (!settings) return <div className="page"><p className="muted">加载中…</p></div>;
 
   async function saveKey(key: string, value: unknown) {
     await setSetting(key, value);
+    if (key === 'language' && typeof value === 'string') {
+      document.documentElement.lang = documentLangFor(value);
+    }
     setMsg('已保存');
     await refresh();
   }
@@ -94,6 +110,51 @@ export function SettingsPage() {
         <h1>设置</h1>
       </header>
       {msg && <p className="toast">{msg}</p>}
+
+
+      <section className="card">
+        <h2>通用</h2>
+        <label>
+          语言
+          <select
+            value={normalizeLanguage(settings.language)}
+            onChange={(e) => saveKey('language', e.target.value)}
+          >
+            {LANGUAGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          日期显示格式
+          <select
+            value={settings.dateFormat}
+            onChange={(e) => saveKey('dateFormat', e.target.value)}
+          >
+            {DATE_FORMAT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          时间显示格式
+          <select
+            value={settings.timeFormat}
+            onChange={(e) => saveKey('timeFormat', e.target.value)}
+          >
+            {TIME_FORMAT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {normalizeLanguage(settings.language) === 'en' ? o.labelEn : o.labelZh}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="muted small">日期时间选择器的月份、星期与按钮文案跟随语言；输入框展示跟随上述格式（默认 yyyy-mm-dd + 24 小时制）。</p>
+      </section>
 
       <section className="card">
         <h2>燃油</h2>
@@ -321,7 +382,7 @@ export function SettingsPage() {
       </section>
 
       <section className="card muted small">
-        <p>语言 {settings.language} · 货币 {settings.currency.symbol} · 体积 {settings.volumeUnit}</p>
+        <p>语言 {settings.language} · 日期 {settings.dateFormat} · 时间 {settings.timeFormat} · 货币 {settings.currency.symbol}</p>
         <p>OCR 引擎属 M2；当前仅保存白名单配置。</p>
       </section>
     </div>

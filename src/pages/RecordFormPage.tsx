@@ -5,6 +5,8 @@ import { getRecord, latestOdometer, putRecord } from '../repositories/records';
 import { listStations } from '../repositories/stations';
 import { getSetting } from '../repositories/settings';
 import { putMediaFromFile } from '../repositories/media';
+import { useSettings } from '../hooks/useAppData';
+import { DateTimeField } from '../components/DateTimeField';
 import { formatDateTimeLocal, nowISO, uid } from '../lib/constants';
 import type {
   CareRecord,
@@ -22,6 +24,7 @@ export function RecordFormPage() {
   const { vehicleId, recordId, type: typeParam } = useParams();
   const isNew = recordId === 'new' || !recordId;
   const nav = useNavigate();
+  const { settings } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [type, setType] = useState<RecordType>((typeParam as RecordType) || 'fuel');
   const [date, setDate] = useState(formatDateTimeLocal(new Date().toISOString()));
@@ -343,7 +346,15 @@ export function RecordFormPage() {
       <form className="form" onSubmit={onSubmit}>
         <label>
           日期时间 *
-          <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <DateTimeField
+            mode="datetime"
+            value={date}
+            onChange={setDate}
+            required
+            dateFormat={settings?.dateFormat}
+            timeFormat={settings?.timeFormat}
+            language={settings?.language}
+          />
         </label>
 
         {(type === 'fuel' || type === 'charge' || type === 'maintenance' || type === 'modification' || type === 'wash') && (
@@ -505,7 +516,14 @@ export function RecordFormPage() {
             </label>
             <label>
               下次保养日期
-              <input type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
+              <DateTimeField
+                mode="date"
+                value={nextDate}
+                onChange={setNextDate}
+                dateFormat={settings?.dateFormat}
+                timeFormat={settings?.timeFormat}
+                language={settings?.language}
+              />
             </label>
             <p className="muted small">下次保养仅存储，不产生提醒</p>
           </>
@@ -606,7 +624,14 @@ export function RecordFormPage() {
             {paid && (
               <label>
                 缴费日期
-                <input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                <DateTimeField
+                  mode="date"
+                  value={paidAt}
+                  onChange={setPaidAt}
+                  dateFormat={settings?.dateFormat}
+                  timeFormat={settings?.timeFormat}
+                  language={settings?.language}
+                />
               </label>
             )}
             <p className="muted small">仅记录单笔金额与扣分，不做驾驶证周期统计</p>

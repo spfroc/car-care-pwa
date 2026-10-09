@@ -249,7 +249,7 @@ export function VehicleDetailPage() {
                 <div>
                   <div className="ti-title">{recordTitle(r)}</div>
                   <div className="muted small">
-                    {RECORD_TYPE_LABELS[r.type]} · {formatDate(r.date)}
+                    {RECORD_TYPE_LABELS[r.type]} · {formatDate(r.date, settings.dateFormat)}
                     {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
                     {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
                     {r.type === 'fuel' && !r.filledUp ? ' · 未加满' : ''}

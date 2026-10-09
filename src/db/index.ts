@@ -68,6 +68,7 @@ export async function ensureDefaultSettings(): Promise<void> {
   const defaults: Record<string, unknown> = {
     language: 'zh-CN',
     dateFormat: 'YYYY-MM-DD',
+    timeFormat: '24h',
     currency: { code: 'CNY', symbol: '¥' },
     volumeUnit: 'L',
     energyUnit: 'kWh',

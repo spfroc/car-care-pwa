@@ -1,4 +1,10 @@
 import type { BodyType, EnergyType } from '../types';
+import {
+  DEFAULT_DATE_FORMAT,
+  formatDateBySetting,
+  partsFromDate,
+  toLocalDateTimeValue,
+} from './datetime';
 
 export const ENERGY_LABELS: Record<EnergyType, string> = {
   ICE: '燃油',
@@ -94,20 +100,12 @@ export function formatMoney(n: number, symbol = '¥'): string {
   return `${symbol}${n.toFixed(2)}`;
 }
 
-export function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+/** Display date using settings dateFormat (default yyyy-mm-dd). */
+export function formatDate(iso: string, dateFormat: string = DEFAULT_DATE_FORMAT): string {
+  return formatDateBySetting(iso, dateFormat);
 }
 
+/** Local `YYYY-MM-DDTHH:mm` for form state / DateTimeField value. */
 export function formatDateTimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const h = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${day}T${h}:${min}`;
+  return toLocalDateTimeValue(partsFromDate(new Date(iso)));
 }

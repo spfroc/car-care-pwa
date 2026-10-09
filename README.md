@@ -45,3 +45,12 @@ npm test         # 油耗/电耗/综合公式单测
 3. HEV 默认禁充电 + `hevAllowCharge`  
 4. 油耗/电耗单位默认 L/100km、kWh/100km  
 5. 罚单仅金额+扣分，无驾驶证周期统计  
+
+## Date/time display
+
+Settings → 通用:
+- `language` (zh-CN | en) — picker chrome (month/weekdays/Clear/Today/AM·PM)
+- `dateFormat` (default `YYYY-MM-DD` / yyyy-mm-dd) — also `YYYY/MM/DD`, `DD/MM/YYYY`, `MM/DD/YYYY`
+- `timeFormat` (default `24h`, or `12h`)
+
+Native `datetime-local` is replaced by `DateTimeField` so format/locale follow app settings, not the browser locale.

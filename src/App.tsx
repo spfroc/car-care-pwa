@@ -6,10 +6,19 @@ import { VehicleFormPage } from './pages/VehicleFormPage';
 import { RecordFormPage } from './pages/RecordFormPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StatsPage } from './pages/StatsPage';
-import { useAppBootstrap } from './hooks/useAppData';
+import { useEffect } from 'react';
+import { useAppBootstrap, useSettings } from './hooks/useAppData';
+import { documentLangFor } from './lib/datetime';
 
 export default function App() {
   const { ready, error, persisted } = useAppBootstrap();
+  const { settings } = useSettings();
+
+  useEffect(() => {
+    if (settings?.language) {
+      document.documentElement.lang = documentLangFor(settings.language);
+    }
+  }, [settings?.language]);
 
   if (error) {
     return (

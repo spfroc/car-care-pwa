@@ -26,6 +26,7 @@ export async function resetOcrWhitelist(field: 'main' | 'date' | 'amountDue' | '
 export type AppSettings = {
   language: string;
   dateFormat: string;
+  timeFormat: string;
   currency: { code: string; symbol: string };
   volumeUnit: string;
   energyUnit: string;
@@ -46,6 +47,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
   return {
     language: await g('language', 'zh-CN'),
     dateFormat: await g('dateFormat', 'YYYY-MM-DD'),
+    timeFormat: await g('timeFormat', '24h'),
     currency: await g('currency', { code: 'CNY', symbol: '¥' }),
     volumeUnit: await g('volumeUnit', 'L'),
     energyUnit: await g('energyUnit', 'kWh'),
