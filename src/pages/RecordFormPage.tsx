@@ -204,9 +204,10 @@ export function RecordFormPage() {
       });
     } else if (isNew && vehicleId) {
       // Prefill 行驶里程 hint: last record odo, else vehicle initialOdometer.
+      // Parser-provided odometer must win over the default latest seed.
       Promise.all([latestOdometer(vehicleId), getVehicle(vehicleId)]).then(([last, v]) => {
         const seed = last ?? v?.initialOdometer;
-        if (seed != null) setOdometer(String(seed));
+        if (seed != null && quickPrefill?.odometer == null) setOdometer(String(seed));
         // Quick-entry prefill overlays defaults (still user must submit to save).
         applyQuickPrefill(quickPrefill);
       });

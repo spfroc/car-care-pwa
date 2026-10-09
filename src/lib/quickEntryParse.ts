@@ -411,19 +411,47 @@ export function extractFields(
     work = work.replace(discountM[0], ' ');
   }
 
-  // Gross / due: prefer fuel phrasing `加了300块的油`, else ¥ / 元 / 块.
+  // Explicit 实付 / 应付 before bare amounts.
+  // 实付 N + 优惠 D → paid=N, due=N+D; 应付 N + 优惠 → due=N, paid=N-D.
+  const paidExplicitM = work.match(
+    /实付(?:金额)?\s*[为是:]?\s*(\d+(?:\.\d+)?)\s*(?:元|块钱|块)?/,
+  );
+  const dueExplicitM = work.match(
+    /应付(?:金额)?\s*[为是:]?\s*(\d+(?:\.\d+)?)\s*(?:元|块钱|块)?/,
+  );
+  const paidExplicit = num(paidExplicitM);
+  const dueExplicit = num(dueExplicitM);
+  if (paidExplicitM) work = work.replace(paidExplicitM[0], ' ');
+  if (dueExplicitM) work = work.replace(dueExplicitM[0], ' ');
+
+  // Bare / fuel phrasing `加了300块的油` (no 实付/应付): may mean due or paid.
   const dueFromFuel =
     num(work.match(/加(?:了|了个)?\s*(\d+(?:\.\d+)?)\s*(?:元|块钱|块)(?:钱)?(?:的油)?/)) ??
     num(work.match(/(\d+(?:\.\d+)?)\s*(?:元|块钱|块)\s*的油/));
   const yen = work.match(/(?:¥|￥)\s*(\d+(?:\.\d+)?)/);
   const yuanBare = work.match(/(\d+(?:\.\d+)?)\s*(?:元|块钱|块)/);
-  const gross = dueFromFuel ?? num(yen) ?? num(yuanBare);
+  const bareGross = dueFromFuel ?? num(yen) ?? num(yuanBare);
 
-  if (gross != null && fields.discount != null && fields.discount > 0) {
-    fields.amountDue = roundMoney(gross);
-    fields.amountPaid = roundMoney(Math.max(0, gross - fields.discount));
-  } else if (gross != null) {
-    fields.amountPaid = roundMoney(gross);
+  if (paidExplicit != null) {
+    fields.amountPaid = roundMoney(paidExplicit);
+    if (dueExplicit != null) {
+      fields.amountDue = roundMoney(dueExplicit);
+    } else if (fields.discount != null && fields.discount > 0) {
+      fields.amountDue = roundMoney(paidExplicit + fields.discount);
+    }
+  } else if (dueExplicit != null) {
+    fields.amountDue = roundMoney(dueExplicit);
+    if (fields.discount != null && fields.discount > 0) {
+      fields.amountPaid = roundMoney(Math.max(0, dueExplicit - fields.discount));
+    } else {
+      fields.amountPaid = roundMoney(dueExplicit);
+    }
+  } else if (bareGross != null && fields.discount != null && fields.discount > 0) {
+    // Bare amount + 优惠 → treat bare as 应付 (due).
+    fields.amountDue = roundMoney(bareGross);
+    fields.amountPaid = roundMoney(Math.max(0, bareGross - fields.discount));
+  } else if (bareGross != null) {
+    fields.amountPaid = roundMoney(bareGross);
   }
 
   const liters = num(text.match(/(\d+(?:\.\d+)?)\s*(?:L|升|公升)/i));
@@ -432,9 +460,11 @@ export function extractFields(
   const kWh = num(text.match(/(\d+(?:\.\d+)?)\s*(?:度|kWh|千瓦时)/i));
   if (kWh != null) fields.kWh = kWh;
 
+  // Note: do not use \b after 公里 — JS word boundaries fail at CJK / end-of-string.
   const odo =
-    num(text.match(/(?:里程|码表|表显)\s*[为是:]?\s*(\d{3,7})/i)) ??
-    num(text.match(/(\d{4,7})\s*(?:公里|千米|km)\b/i));
+    num(text.match(/(?:里程|码表|表显|行驶里程)\s*[为是:]?\s*(\d{3,7})/i)) ??
+    num(text.match(/(\d{4,7})\s*(?:公里|千米|km)\b/i)) ??
+    num(text.match(/(\d{4,7})\s*(?:公里|千米)/i));
   if (odo != null) fields.odometer = odo;
 
   const grade = text.match(/(?:^|[^0-9])(92|95|98)\s*[#号]?/) ?? text.match(/(0\s*#\s*柴油)/);
@@ -474,6 +504,7 @@ export function extractFields(
   }
 
   // Derive liters from paid/due ÷ unit price when not spoken.
+  // Prefer 实付 (amountPaid) when present; else 应付.
   if (fields.liters == null && fields.unitPrice != null && fields.unitPrice > 0) {
     const basis = fields.amountPaid ?? fields.amountDue;
     if (basis != null && basis > 0) {

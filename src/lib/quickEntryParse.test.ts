@@ -48,6 +48,9 @@ const stations = [
 ];
 
 const FAIL_SENTENCE = '昨天在中凯加了300块的油, 优惠20块, 8块7毛2一升.';
+/** 实付 N + 优惠 → paid=N, due=N+discount; odometer from N公里. */
+const SHIFU_ODO_SENTENCE =
+  '昨天在中凯加了 实付300块的油, 优惠20块, 7块5毛5一升，42563公里';
 
 describe('detectRecordTypes', () => {
   it('detects fuel from 加油 / 升', () => {
@@ -222,6 +225,20 @@ describe('extractFields', () => {
       new Date('2026-10-08T14:30:00+08:00').toDateString(),
     );
   });
+  it('实付300 + 优惠20 → paid=300 due=320; 42563公里; liters from paid/price', () => {
+    const now = new Date('2026-10-09T15:18:00+08:00');
+    const f = extractFields(SHIFU_ODO_SENTENCE, 'fuel', now);
+    expect(f.stationName).toBe('中凯');
+    expect(f.amountPaid).toBe(300);
+    expect(f.discount).toBe(20);
+    expect(f.amountDue).toBe(320);
+    expect(f.unitPrice).toBe(7.55);
+    expect(f.odometer).toBe(42563);
+    expect(f.liters).toBeCloseTo(300 / 7.55, 3);
+    expect(new Date(f.date!).toDateString()).toBe(
+      new Date('2026-10-08T15:18:00+08:00').toDateString(),
+    );
+  });
 });
 
 describe('parseQuickEntry', () => {
@@ -308,5 +325,24 @@ describe('parseQuickEntry', () => {
     expect(new Date(r.fields.date!).toDateString()).toBe(
       new Date('2026-10-08T14:30:00+08:00').toDateString(),
     );
+  });
+
+  it('parses 实付300+优惠20+7.55+42563公里 exactly (station match)', () => {
+    const now = new Date('2026-10-09T15:18:00+08:00');
+    const r = parseQuickEntry(SHIFU_ODO_SENTENCE, [vehicles[0], vehicles[2]], {
+      now,
+      stations,
+    });
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBe('v-spacy');
+    expect(r.fields.stationName).toBe('中凯石油窑头路');
+    expect(r.fields.stationId).toBe('st-zhongkai');
+    expect(r.fields.amountPaid).toBe(300);
+    expect(r.fields.discount).toBe(20);
+    expect(r.fields.amountDue).toBe(320);
+    expect(r.fields.unitPrice).toBe(7.55);
+    expect(r.fields.odometer).toBe(42563);
+    expect(r.fields.liters).toBeCloseTo(300 / 7.55, 3);
+    expect(isParseReady(r)).toBe(true);
   });
 });
