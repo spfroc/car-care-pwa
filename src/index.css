@@ -299,7 +299,7 @@ button, input, select, textarea {
 .mini-stats .label { display: block; white-space: nowrap; }
 
 .mini-stats .label.label-with-help {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
 }
