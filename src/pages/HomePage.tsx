@@ -4,15 +4,18 @@ import { QuickEntryFab } from '../components/QuickEntrySheet';
 import { VehicleCard } from '../components/VehicleCard';
 import { useSettings, useVehicles } from '../hooks/useAppData';
 import { listAllRecords } from '../repositories/records';
-import type { CareRecord } from '../types';
+import { listStations } from '../repositories/stations';
+import type { CareRecord, Station } from '../types';
 
 export function HomePage() {
   const { vehicles, loading, refresh } = useVehicles();
   const { settings } = useSettings();
   const [records, setRecords] = useState<CareRecord[]>([]);
+  const [stations, setStations] = useState<Station[]>([]);
 
   useEffect(() => {
     listAllRecords().then(setRecords);
+    listStations().then(setStations);
     refresh();
   }, [refresh]);
 
@@ -53,7 +56,7 @@ export function HomePage() {
         </div>
       )}
 
-      <QuickEntryFab vehicles={vehicles} records={records} />
+      <QuickEntryFab vehicles={vehicles} records={records} stations={stations} />
     </div>
   );
 }

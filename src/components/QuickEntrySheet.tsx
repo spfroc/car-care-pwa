@@ -14,7 +14,7 @@ import {
   isSpeechRecognitionAvailable,
   type SpeechRecognitionLike,
 } from '../lib/speechRecognition';
-import type { CareRecord, RecordType, Vehicle } from '../types';
+import type { CareRecord, RecordType, Station, Vehicle } from '../types';
 
 export type QuickEntryNavState = {
   prefill: QuickEntryPrefill;
@@ -27,9 +27,11 @@ type Props = {
   vehicles: Vehicle[];
   /** Optional records for last-used fuel/charge vehicle fallback. */
   records?: CareRecord[];
+  /** Favorite / common stations for short-name matching. */
+  stations?: Station[];
 };
 
-export function QuickEntrySheet({ open, onClose, vehicles, records = [] }: Props) {
+export function QuickEntrySheet({ open, onClose, vehicles, records = [], stations = [] }: Props) {
   const nav = useNavigate();
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
@@ -68,14 +70,20 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [] }: Props
   const runParse = useCallback(
     (utterance: string) => {
       const inputs = buildVehicleMatchInputs(vehicles, records);
-      const r = parseQuickEntry(utterance, inputs);
+      const stationInputs = stations.map((s) => ({
+        id: s.id,
+        name: s.name,
+        stationType: s.stationType,
+        brand: s.brand,
+      }));
+      const r = parseQuickEntry(utterance, inputs, { stations: stationInputs });
       setParsed(r);
       setPickVehicleId(r.vehicleId ?? (r.vehicleIds[0] ?? ''));
       setPickType(r.type ?? (r.types[0] ?? ''));
       setErr('');
       return r;
     },
-    [vehicles, records],
+    [vehicles, records, stations],
   );
 
   function stopListening() {
@@ -332,7 +340,12 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [] }: Props
               {parsed.fields.kWh != null && <li>充电 {parsed.fields.kWh} kWh</li>}
               {parsed.fields.odometer != null && <li>里程 {parsed.fields.odometer}</li>}
               {parsed.fields.fuelGrade && <li>标号 {parsed.fields.fuelGrade}</li>}
-              {parsed.fields.stationName && <li>站点 {parsed.fields.stationName}</li>}
+              {parsed.fields.stationName && (
+                <li>
+                  站点 {parsed.fields.stationName}
+                  {parsed.fields.stationId ? '（已匹配收藏）' : ''}
+                </li>
+              )}
               {parsed.fields.place && <li>地点 {parsed.fields.place}</li>}
               {parsed.fields.parkingKind && <li>停车 {parsed.fields.parkingKind}</li>}
             </ul>
@@ -349,10 +362,11 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [] }: Props
 type FabProps = {
   vehicles: Vehicle[];
   records?: CareRecord[];
+  stations?: Station[];
 };
 
 /** Fixed FAB above the tab bar (home). Does not scroll with the list. */
-export function QuickEntryFab({ vehicles, records = [] }: FabProps) {
+export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProps) {
   const [open, setOpen] = useState(false);
   if (vehicles.length === 0) return null;
 
@@ -375,6 +389,7 @@ export function QuickEntryFab({ vehicles, records = [] }: FabProps) {
         onClose={() => setOpen(false)}
         vehicles={vehicles}
         records={records}
+        stations={stations}
       />
     </>
   );

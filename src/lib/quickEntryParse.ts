@@ -1,5 +1,5 @@
 import { allowsCharge, allowsFuel } from './energy';
-import type { EnergyType, ParkingKind, RecordType, Vehicle } from '../types';
+import type { EnergyType, ParkingKind, RecordType, Station, StationType, Vehicle } from '../types';
 
 /** Prefill payload passed to the record form (never written to IDB by itself). */
 export type QuickEntryPrefill = {
@@ -11,6 +11,8 @@ export type QuickEntryPrefill = {
   odometer?: number;
   unitPrice?: number;
   stationName?: string;
+  /** Matched favorite/common station id when short name resolves. */
+  stationId?: string;
   fuelGrade?: string;
   note?: string;
   place?: string;
@@ -43,9 +45,18 @@ export type VehicleMatchInput = Pick<Vehicle, 'id' | 'name' | 'plate'> & {
   lastChargeAt?: string;
 };
 
+
+export type StationMatchInput = Pick<Station, 'id' | 'name' | 'stationType'> & {
+  brand?: string;
+  /** Spoken / typed short names that should resolve to this station. */
+  aliases?: string[];
+};
+
 export type ParseQuickEntryOptions = {
   /** Clock for relative dates (昨天/今天); defaults to now. */
   now?: Date;
+  /** Favorite / common stations for short-name → stationId matching. */
+  stations?: StationMatchInput[];
 };
 
 /** Keyword rules: longer / more specific phrases first within each type. */
@@ -171,6 +182,65 @@ export function matchVehicles(text: string, vehicles: VehicleMatchInput[]): Vehi
   const top = scored[0].score;
   // Keep near-ties as ambiguous
   return scored.filter((s) => s.score >= top - 15).map((s) => s.v);
+}
+
+
+/**
+ * Match stations by exact / prefix / substring name, brand, or alias.
+ * Longer and more specific matches rank higher; optional preferredType boosts gas/charge.
+ */
+export function matchStations(
+  query: string,
+  stations: StationMatchInput[],
+  preferredType?: StationType,
+): StationMatchInput[] {
+  if (!stations.length) return [];
+  const q = normalizeLoose(query.trim());
+  if (!q || q.length < 1) return [];
+
+  const scored: { s: StationMatchInput; score: number }[] = [];
+
+  for (const s of stations) {
+    let score = 0;
+    const name = normalizeLoose(s.name);
+    const brand = s.brand ? normalizeLoose(s.brand) : '';
+
+    if (name) {
+      if (name === q) score = Math.max(score, 120 + name.length);
+      else if (name.startsWith(q)) score = Math.max(score, 100 + q.length);
+      else if (q.startsWith(name) && name.length >= 2) score = Math.max(score, 90 + name.length);
+      else if (q.length >= 2 && name.includes(q)) score = Math.max(score, 80 + q.length);
+      else if (name.length >= 2 && q.includes(name)) score = Math.max(score, 70 + name.length);
+    }
+
+    if (brand) {
+      if (brand === q) score = Math.max(score, 95 + brand.length);
+      else if (brand.startsWith(q) || (q.length >= 2 && brand.includes(q))) {
+        score = Math.max(score, 75 + Math.min(q.length, brand.length));
+      }
+    }
+
+    for (const alias of s.aliases ?? []) {
+      const a = normalizeLoose(alias);
+      if (!a) continue;
+      if (a === q) score = Math.max(score, 110 + a.length);
+      else if (a.startsWith(q) || q.startsWith(a)) score = Math.max(score, 95 + Math.min(a.length, q.length));
+      else if (q.length >= 2 && (a.includes(q) || q.includes(a))) {
+        score = Math.max(score, 85 + Math.min(a.length, q.length));
+      }
+    }
+
+    if (score > 0) {
+      if (preferredType && s.stationType === preferredType) score += 15;
+      scored.push({ s, score });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score || b.s.name.length - a.s.name.length);
+  if (!scored.length) return [];
+
+  const top = scored[0].score;
+  return scored.filter((x) => x.score >= top - 15).map((x) => x.s);
 }
 
 function escapeRegExp(s: string): string {
@@ -462,6 +532,23 @@ export function parseQuickEntry(
   }
 
   const fields = extractFields(raw, type ?? typeHits[0], now);
+
+  // 3) Resolve spoken/typed short station name → favorite station id + full name.
+  const stations = options.stations ?? [];
+  if (fields.stationName && stations.length) {
+    const preferredStationType: StationType | undefined =
+      type === 'fuel' || typeHits[0] === 'fuel'
+        ? 'gas'
+        : type === 'charge' || typeHits[0] === 'charge'
+          ? 'charge'
+          : undefined;
+    const stationHits = matchStations(fields.stationName, stations, preferredStationType);
+    if (stationHits.length === 1) {
+      fields.stationId = stationHits[0].id;
+      fields.stationName = stationHits[0].name;
+    }
+    // Ambiguous (≥2 near-ties): keep free-text stationName only.
+  }
 
   return {
     raw,

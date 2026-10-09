@@ -114,6 +114,7 @@ export function RecordFormPage() {
     if (p.odometer != null) setOdometer(String(p.odometer));
     if (p.unitPrice != null) setUnitPrice(String(p.unitPrice));
     if (p.stationName) setStationName(p.stationName);
+    if (p.stationId) setStationId(p.stationId);
     if (p.fuelGrade) setFuelGrade(p.fuelGrade);
     if (p.note) setNote(p.note);
     if (p.place) setPlace(p.place);

@@ -5,6 +5,7 @@ import {
   extractFields,
   extractRelativeDate,
   isParseReady,
+  matchStations,
   matchVehicles,
   parseChineseYuan,
   parseQuickEntry,
@@ -15,6 +16,35 @@ const vehicles = [
   { id: 'v-spacy', name: 'Spacy125', plate: '鲁AZ7G61', energyType: 'ICE' as const },
   { id: 'v-xrv', name: 'X-RV', plate: '鲁A4GC10', energyType: 'ICE' as const },
   { id: 'v-ev', name: '城市纯电轿车', plate: '沪A12345', energyType: 'EV' as const },
+];
+
+
+const stations = [
+  {
+    id: 'st-zhongkai',
+    name: '中凯石油窑头路',
+    stationType: 'gas' as const,
+    brand: '中凯',
+    aliases: ['中凯'],
+  },
+  {
+    id: 'st-sinopec',
+    name: '中石化浦东站',
+    stationType: 'gas' as const,
+    brand: '中石化',
+  },
+  {
+    id: 'st-shell',
+    name: '壳牌世纪大道',
+    stationType: 'gas' as const,
+    brand: 'Shell',
+  },
+  {
+    id: 'st-tely',
+    name: '特来电商场桩',
+    stationType: 'charge' as const,
+    brand: '特来电',
+  },
 ];
 
 const FAIL_SENTENCE = '昨天在中凯加了300块的油, 优惠20块, 8块7毛2一升.';
@@ -118,6 +148,40 @@ describe('resolveVehicleWithoutMention / vehicle-first', () => {
   });
 });
 
+
+describe('matchStations', () => {
+  it('maps 中凯 → 中凯石油窑头路 (prefix / alias)', () => {
+    const hits = matchStations('中凯', stations, 'gas');
+    expect(hits.map((s) => s.id)).toEqual(['st-zhongkai']);
+    expect(hits[0].name).toBe('中凯石油窑头路');
+  });
+  it('matches full station name', () => {
+    const hits = matchStations('中凯石油窑头路', stations);
+    expect(hits.map((s) => s.id)).toEqual(['st-zhongkai']);
+  });
+  it('matches brand 壳牌', () => {
+    const hits = matchStations('壳牌', stations, 'gas');
+    expect(hits.map((s) => s.id)).toEqual(['st-shell']);
+  });
+  it('returns empty when no station matches', () => {
+    expect(matchStations('不存在的站', stations)).toEqual([]);
+  });
+  it('leaves ambiguous short prefix unresolved (multiple hits)', () => {
+    const both = [
+      ...stations,
+      {
+        id: 'st-zhongkai-2',
+        name: '中凯石油解放路',
+        stationType: 'gas' as const,
+        brand: '中凯',
+        aliases: ['中凯'],
+      },
+    ];
+    const hits = matchStations('中凯', both, 'gas');
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe('extractFields', () => {
   it('extracts amount, liters, odometer, grade', () => {
     const f = extractFields('加了 40 升 320 元 95号 里程 12345', 'fuel');
@@ -210,6 +274,27 @@ describe('parseQuickEntry', () => {
     expect(r.fields.liters).toBeCloseTo(32.11, 2);
     expect(isParseReady(r)).toBe(true);
   });
+
+  it('resolves 中凯 → 中凯石油窑头路 stationId when stations passed', () => {
+    const now = new Date('2026-10-09T14:30:00+08:00');
+    const r = parseQuickEntry(FAIL_SENTENCE, [vehicles[0], vehicles[2]], {
+      now,
+      stations,
+    });
+    expect(r.type).toBe('fuel');
+    expect(r.fields.stationName).toBe('中凯石油窑头路');
+    expect(r.fields.stationId).toBe('st-zhongkai');
+    expect(r.fields.amountPaid).toBe(280);
+  });
+  it('keeps free-text stationName when stations list empty', () => {
+    const r = parseQuickEntry(FAIL_SENTENCE, [vehicles[0]], {
+      now: new Date('2026-10-09T14:30:00+08:00'),
+      stations: [],
+    });
+    expect(r.fields.stationName).toBe('中凯');
+    expect(r.fields.stationId).toBeUndefined();
+  });
+
   it('parses exact fail sentence with sole ICE vehicle', () => {
     const now = new Date('2026-10-09T14:30:00+08:00');
     const r = parseQuickEntry(FAIL_SENTENCE, [vehicles[0], vehicles[2]], { now });
