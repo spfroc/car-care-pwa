@@ -254,11 +254,13 @@ export function StatsPage() {
 
       <section className="card">
         <h2>近月花费</h2>
-        <div className="bars">
+        <div className="bars" role="list">
           {months.length === 0 && <p className="muted">暂无数据</p>}
           {months.map((row) => (
-            <div key={row.key} className="bar-row">
-              <span className="bar-label">{row.key}</span>
+            <div key={row.key} className="bar-col" role="listitem">
+              <span className="bar-val" title={formatMoney(row.total)}>
+                {formatMoney(row.total)}
+              </span>
               <div
                 className="bar-track"
                 role="img"
@@ -269,14 +271,14 @@ export function StatsPage() {
                     key={seg.type}
                     className="bar-seg"
                     style={{
-                      width: `${(seg.amount / maxMonth) * 100}%`,
+                      height: `${(seg.amount / maxMonth) * 100}%`,
                       background: recordTypeColor(seg.type),
                     }}
                     title={`${recordTypeLabel(seg.type, settings.language)} ${formatMoney(seg.amount)}`}
                   />
                 ))}
               </div>
-              <span className="bar-val">{formatMoney(row.total)}</span>
+              <span className="bar-label">{row.key}</span>
             </div>
           ))}
         </div>
