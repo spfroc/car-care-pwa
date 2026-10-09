@@ -53,7 +53,7 @@ export function HomePage() {
         </div>
       )}
 
-      <QuickEntryFab vehicles={vehicles} />
+      <QuickEntryFab vehicles={vehicles} records={records} />
     </div>
   );
 }

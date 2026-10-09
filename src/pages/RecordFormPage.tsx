@@ -108,6 +108,7 @@ export function RecordFormPage() {
     if (!p) return;
     if (p.amountPaid != null) setAmountPaid(String(p.amountPaid));
     if (p.amountDue != null) setAmountDue(String(p.amountDue));
+    if (p.discount != null) setDiscount(String(p.discount));
     if (p.liters != null) setLiters(String(p.liters));
     if (p.kWh != null) setKWh(String(p.kWh));
     if (p.odometer != null) setOdometer(String(p.odometer));
@@ -121,6 +122,7 @@ export function RecordFormPage() {
     if (p.parkingKind) setParkingKind(p.parkingKind);
     if (p.insurer) setInsurer(p.insurer);
     if (p.policyName) setPolicyName(p.policyName);
+    if (p.date) setDate(formatDateTimeLocal(p.date));
   }
 
   useEffect(() => {

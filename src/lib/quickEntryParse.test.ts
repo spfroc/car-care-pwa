@@ -1,22 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildVehicleMatchInputs,
   detectRecordTypes,
   extractFields,
+  extractRelativeDate,
   isParseReady,
   matchVehicles,
+  parseChineseYuan,
   parseQuickEntry,
+  resolveVehicleWithoutMention,
 } from './quickEntryParse';
 
 const vehicles = [
-  { id: 'v-spacy', name: 'Spacy125', plate: '鲁AZ7G61' },
-  { id: 'v-xrv', name: 'X-RV', plate: '鲁A4GC10' },
-  { id: 'v-ev', name: '城市纯电轿车', plate: '沪A12345' },
+  { id: 'v-spacy', name: 'Spacy125', plate: '鲁AZ7G61', energyType: 'ICE' as const },
+  { id: 'v-xrv', name: 'X-RV', plate: '鲁A4GC10', energyType: 'ICE' as const },
+  { id: 'v-ev', name: '城市纯电轿车', plate: '沪A12345', energyType: 'EV' as const },
 ];
+
+const FAIL_SENTENCE = '昨天在中凯加了300块的油, 优惠20块, 8块7毛2一升.';
 
 describe('detectRecordTypes', () => {
   it('detects fuel from 加油 / 升', () => {
     expect(detectRecordTypes('今天加油花了 320 元')).toEqual(['fuel']);
     expect(detectRecordTypes('加了 40 升')).toEqual(['fuel']);
+  });
+  it('detects fuel from 加了…油 / 块…一升', () => {
+    expect(detectRecordTypes(FAIL_SENTENCE)).toEqual(['fuel']);
+    expect(detectRecordTypes('8块7毛2一升')).toContain('fuel');
   });
   it('detects charge from 充电 / 度', () => {
     expect(detectRecordTypes('充电 45 度 花了 60 块')).toEqual(['charge']);
@@ -38,6 +48,25 @@ describe('detectRecordTypes', () => {
   });
 });
 
+describe('parseChineseYuan', () => {
+  it('parses 块/毛/分', () => {
+    expect(parseChineseYuan('8块7毛2')).toBe(8.72);
+    expect(parseChineseYuan('8块7毛2分')).toBe(8.72);
+    expect(parseChineseYuan('3块5毛')).toBe(3.5);
+    expect(parseChineseYuan('10块')).toBe(10);
+  });
+});
+
+describe('extractRelativeDate', () => {
+  it('resolves 昨天/今天 relative to now', () => {
+    const now = new Date('2026-10-09T14:00:00+08:00');
+    const y = extractRelativeDate('昨天加油', now)!;
+    const t = extractRelativeDate('今天加油', now)!;
+    expect(new Date(y).toDateString()).toBe(new Date('2026-10-08T14:00:00+08:00').toDateString());
+    expect(new Date(t).toDateString()).toBe(now.toDateString());
+  });
+});
+
 describe('matchVehicles', () => {
   it('matches by nickname', () => {
     const hits = matchVehicles('给 Spacy125 加油', vehicles);
@@ -56,6 +85,36 @@ describe('matchVehicles', () => {
   });
   it('returns empty when no vehicle mentioned', () => {
     expect(matchVehicles('加油 200 元', vehicles)).toEqual([]);
+  });
+});
+
+describe('resolveVehicleWithoutMention / vehicle-first', () => {
+  it('picks sole vehicle', () => {
+    const one = [vehicles[0]];
+    const r = resolveVehicleWithoutMention(one, 'fuel');
+    expect(r.picked?.id).toBe('v-spacy');
+    expect(r.confidence).toBe('high');
+  });
+  it('picks sole fuel-capable among ICE+EV', () => {
+    const mix = [vehicles[0], vehicles[2]];
+    const r = resolveVehicleWithoutMention(mix, 'fuel');
+    expect(r.picked?.id).toBe('v-spacy');
+    expect(r.confidence).toBe('high');
+  });
+  it('picks most-recent fuel vehicle when multiple ICE', () => {
+    const withLast = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z' },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-01T00:00:00.000Z' },
+    ]);
+    const r = resolveVehicleWithoutMention(withLast, 'fuel');
+    expect(r.picked?.id).toBe('v-xrv');
+    expect(r.confidence).toBe('low');
+  });
+  it('lists fuel-capable without pick when multiple and no lastFuelAt', () => {
+    const r = resolveVehicleWithoutMention(vehicles, 'fuel');
+    expect(r.picked).toBeUndefined();
+    expect(r.vehicles.map((v) => v.id).sort()).toEqual(['v-spacy', 'v-xrv']);
+    expect(r.confidence).toBe('low');
   });
 });
 
@@ -85,6 +144,20 @@ describe('extractFields', () => {
     expect(f.policyName).toBe('交强险+商业险');
     expect(f.amountPaid).toBe(4600);
   });
+  it('parses fail-case Chinese money, discount, station, unit price, liters', () => {
+    const now = new Date('2026-10-09T14:30:00+08:00');
+    const f = extractFields(FAIL_SENTENCE, 'fuel', now);
+    expect(f.stationName).toBe('中凯');
+    expect(f.amountDue).toBe(300);
+    expect(f.discount).toBe(20);
+    expect(f.amountPaid).toBe(280);
+    expect(f.unitPrice).toBe(8.72);
+    expect(f.liters).toBeCloseTo(280 / 8.72, 3);
+    expect(f.date).toBeTruthy();
+    expect(new Date(f.date!).toDateString()).toBe(
+      new Date('2026-10-08T14:30:00+08:00').toDateString(),
+    );
+  });
 });
 
 describe('parseQuickEntry', () => {
@@ -103,10 +176,52 @@ describe('parseQuickEntry', () => {
     expect(r.type).toBeUndefined();
     expect(isParseReady(r)).toBe(false);
   });
-  it('leaves vehicle unset when not mentioned', () => {
+  it('vehicle-first: no name → ask pick among fuel vehicles (multi ICE)', () => {
     const r = parseQuickEntry('加油 100 元', vehicles);
     expect(r.vehicleId).toBeUndefined();
+    expect(r.vehicleIds.sort()).toEqual(['v-spacy', 'v-xrv']);
+    expect(r.confidence.vehicle).toBe('low');
     expect(r.type).toBe('fuel');
     expect(isParseReady(r)).toBe(false);
+  });
+  it('vehicle-first: sole fuel-capable when EV coexists', () => {
+    const r = parseQuickEntry('加油 100 元', [vehicles[0], vehicles[2]]);
+    expect(r.vehicleId).toBe('v-spacy');
+    expect(r.confidence.vehicle).toBe('high');
+    expect(r.type).toBe('fuel');
+    expect(isParseReady(r)).toBe(true);
+  });
+  it('vehicle-first: last-used fuel when plate/name omitted', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-08T12:00:00.000Z' },
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T12:00:00.000Z' },
+    ]);
+    const r = parseQuickEntry(FAIL_SENTENCE, inputs, {
+      now: new Date('2026-10-09T14:30:00+08:00'),
+    });
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBe('v-xrv');
+    expect(r.confidence.vehicle).toBe('low');
+    expect(r.fields.stationName).toBe('中凯');
+    expect(r.fields.amountDue).toBe(300);
+    expect(r.fields.discount).toBe(20);
+    expect(r.fields.amountPaid).toBe(280);
+    expect(r.fields.unitPrice).toBe(8.72);
+    expect(r.fields.liters).toBeCloseTo(32.11, 2);
+    expect(isParseReady(r)).toBe(true);
+  });
+  it('parses exact fail sentence with sole ICE vehicle', () => {
+    const now = new Date('2026-10-09T14:30:00+08:00');
+    const r = parseQuickEntry(FAIL_SENTENCE, [vehicles[0], vehicles[2]], { now });
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBe('v-spacy');
+    expect(r.fields.stationName).toBe('中凯');
+    expect(r.fields.amountPaid).toBe(280);
+    expect(r.fields.amountDue).toBe(300);
+    expect(r.fields.discount).toBe(20);
+    expect(r.fields.unitPrice).toBe(8.72);
+    expect(new Date(r.fields.date!).toDateString()).toBe(
+      new Date('2026-10-08T14:30:00+08:00').toDateString(),
+    );
   });
 });

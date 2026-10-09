@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RECORD_TYPE_ICONS, RECORD_TYPE_LABELS } from '../lib/constants';
 import {
+  buildVehicleMatchInputs,
   isParseReady,
   parseQuickEntry,
   RECORD_TYPES_ALL,
@@ -13,7 +14,7 @@ import {
   isSpeechRecognitionAvailable,
   type SpeechRecognitionLike,
 } from '../lib/speechRecognition';
-import type { RecordType, Vehicle } from '../types';
+import type { CareRecord, RecordType, Vehicle } from '../types';
 
 export type QuickEntryNavState = {
   prefill: QuickEntryPrefill;
@@ -24,9 +25,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
   vehicles: Vehicle[];
+  /** Optional records for last-used fuel/charge vehicle fallback. */
+  records?: CareRecord[];
 };
 
-export function QuickEntrySheet({ open, onClose, vehicles }: Props) {
+export function QuickEntrySheet({ open, onClose, vehicles, records = [] }: Props) {
   const nav = useNavigate();
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
@@ -64,14 +67,15 @@ export function QuickEntrySheet({ open, onClose, vehicles }: Props) {
 
   const runParse = useCallback(
     (utterance: string) => {
-      const r = parseQuickEntry(utterance, vehicles);
+      const inputs = buildVehicleMatchInputs(vehicles, records);
+      const r = parseQuickEntry(utterance, inputs);
       setParsed(r);
       setPickVehicleId(r.vehicleId ?? (r.vehicleIds[0] ?? ''));
       setPickType(r.type ?? (r.types[0] ?? ''));
       setErr('');
       return r;
     },
-    [vehicles],
+    [vehicles, records],
   );
 
   function stopListening() {
@@ -317,7 +321,13 @@ export function QuickEntrySheet({ open, onClose, vehicles }: Props) {
             )}
 
             <ul className="qe-fields small">
-              {parsed.fields.amountPaid != null && <li>金额 ¥{parsed.fields.amountPaid}</li>}
+              {parsed.fields.date && (
+                <li>日期 {new Date(parsed.fields.date).toLocaleString('zh-CN')}</li>
+              )}
+              {parsed.fields.amountDue != null && <li>应付 ¥{parsed.fields.amountDue}</li>}
+              {parsed.fields.amountPaid != null && <li>实付 ¥{parsed.fields.amountPaid}</li>}
+              {parsed.fields.discount != null && <li>优惠 ¥{parsed.fields.discount}</li>}
+              {parsed.fields.unitPrice != null && <li>单价 ¥{parsed.fields.unitPrice}/L</li>}
               {parsed.fields.liters != null && <li>加油 {parsed.fields.liters} L</li>}
               {parsed.fields.kWh != null && <li>充电 {parsed.fields.kWh} kWh</li>}
               {parsed.fields.odometer != null && <li>里程 {parsed.fields.odometer}</li>}
@@ -338,10 +348,11 @@ export function QuickEntrySheet({ open, onClose, vehicles }: Props) {
 
 type FabProps = {
   vehicles: Vehicle[];
+  records?: CareRecord[];
 };
 
 /** Fixed FAB above the tab bar (home). Does not scroll with the list. */
-export function QuickEntryFab({ vehicles }: FabProps) {
+export function QuickEntryFab({ vehicles, records = [] }: FabProps) {
   const [open, setOpen] = useState(false);
   if (vehicles.length === 0) return null;
 
@@ -359,7 +370,12 @@ export function QuickEntryFab({ vehicles }: FabProps) {
         </span>
         <span className="qe-fab-label">快捷</span>
       </button>
-      <QuickEntrySheet open={open} onClose={() => setOpen(false)} vehicles={vehicles} />
+      <QuickEntrySheet
+        open={open}
+        onClose={() => setOpen(false)}
+        vehicles={vehicles}
+        records={records}
+      />
     </>
   );
 }
