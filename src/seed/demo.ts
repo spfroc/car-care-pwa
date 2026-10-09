@@ -88,6 +88,7 @@ export async function loadDemoSeed(replace = true): Promise<void> {
     odometer: odo,
     liters,
     fuelGrade: '95#',
+    unitPrice: liters > 0 ? Math.round((paid / liters) * 100) / 100 : undefined,
     filledUp: filled,
     amountPaid: paid,
     amountDue: paid,

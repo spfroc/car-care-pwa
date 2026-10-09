@@ -317,6 +317,9 @@ export function VehicleDetailPage() {
                   <div className="muted small">
                     {recordTypeLabel(r.type, settings.language)} · {formatDate(r.date, settings.dateFormat)}
                     {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
+                    {r.type === 'fuel' && r.unitPrice != null
+                      ? ` · ${(settings.language ?? '').toLowerCase().startsWith('en') ? 'Price' : '油价'} ${formatMoney(r.unitPrice, settings.currency.symbol)}/L`
+                      : ''}
                     {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
                     {r.type === 'fuel' && !r.filledUp ? ' · 未加满' : ''}
                   </div>
