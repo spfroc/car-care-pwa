@@ -5,7 +5,7 @@ import { ENERGY_COLORS, ENERGY_LABELS, bodyIcon, formatMoney } from '../lib/cons
 import { homeCardFlags } from '../lib/energy';
 import { summarizeSpend } from '../lib/spend';
 import { averageElectricEconomy, averageFuelEconomy, formatEconomy } from '../lib/economy';
-import { summarizeMileage } from '../lib/vehicleStats';
+import { heroEnergyCosts, summarizeMileage } from '../lib/vehicleStats';
 
 function formatKm(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
@@ -31,6 +31,12 @@ export function VehicleCard({
   const fuelEco = averageFuelEconomy(mine);
   const elecEco = averageElectricEconomy(mine);
   const mileage = summarizeMileage(vehicle, mine);
+  const energyCosts = heroEnergyCosts(
+    vehicle.energyType,
+    mine,
+    mileage.baselineOdometer,
+    hevAllowCharge,
+  );
   const bg = ENERGY_COLORS[vehicle.energyType];
   const detailTo = `/vehicles/${vehicle.id}`;
 
@@ -103,18 +109,28 @@ export function VehicleCard({
       {expanded && (
         <Link to={detailTo} className="vc-grid">
           <p className="vc-spend-note muted small">
-            全部记录合计；详情页加油/充电花费按统计里程起点起算
+            加油/充电与详情一致（统计起点后）；其余为全部记录
           </p>
           {flags.showFuelCost && (
             <div>
-              <div className="label" title="全部加油记录实付合计">燃油</div>
-              <div className="value">{formatMoney(spend.fuelCost)}</div>
+              <div
+                className="label"
+                title="里程严格大于统计基线的加油实付（与详情页一致）"
+              >
+                加油
+              </div>
+              <div className="value">{formatMoney(energyCosts.fuelSpend)}</div>
             </div>
           )}
           {flags.showChargeCost && (
             <div>
-              <div className="label" title="全部充电记录实付合计">充电</div>
-              <div className="value">{formatMoney(spend.chargeCost)}</div>
+              <div
+                className="label"
+                title="里程严格大于统计基线的充电实付（与详情页一致）"
+              >
+                充电
+              </div>
+              <div className="value">{formatMoney(energyCosts.chargeSpend)}</div>
             </div>
           )}
           <div>

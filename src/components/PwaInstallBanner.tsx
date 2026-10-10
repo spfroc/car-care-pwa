@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { usePwaInstall } from '../hooks/usePwaInstall';
+
+const PERSIST_DISMISS_KEY = 'car-care-pwa-persist-dismissed';
 
 function GuideBody({ platform }: { platform: string }) {
   if (platform === 'ios') {
@@ -34,7 +36,24 @@ function GuideBody({ platform }: { platform: string }) {
   );
 }
 
-export function PwaInstallBanner() {
+function readDismissed(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeDismissed(key: string) {
+  try {
+    localStorage.setItem(key, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Compact, dismissible strip for storage persist warning + PWA install (single first-screen bar). */
+export function PwaInstallBanner({ persisted }: { persisted: boolean }) {
   const {
     platform,
     standalone,
@@ -47,6 +66,23 @@ export function PwaInstallBanner() {
   } = usePwaInstall();
   const [guideOpen, setGuideOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [persistDismissed, setPersistDismissed] = useState(() =>
+    readDismissed(PERSIST_DISMISS_KEY),
+  );
+
+  const showPersist = !persisted && !persistDismissed;
+  const showInstall = showInstallHint && !standalone;
+  const showStrip = showPersist || showInstall;
+
+  const dismissPersist = useCallback(() => {
+    setPersistDismissed(true);
+    writeDismissed(PERSIST_DISMISS_KEY);
+  }, []);
+
+  const dismissStrip = useCallback(() => {
+    if (showPersist) dismissPersist();
+    if (showInstall) dismissBanner();
+  }, [showPersist, showInstall, dismissPersist, dismissBanner]);
 
   return (
     <>
@@ -59,14 +95,23 @@ export function PwaInstallBanner() {
         </div>
       )}
 
-      {showInstallHint && !standalone && (
-        <div className="install-banner">
-          <div className="install-banner-text">
-            <strong>安装到主屏幕</strong>
-            <span className="muted small">离线记账更方便；部分国产机需手动「添加到主屏幕」。</span>
+      {showStrip && (
+        <div className="app-hints" role="status">
+          <div className="app-hints-text">
+            {showPersist && showInstall ? (
+              <span>
+                存储未持久化，建议<strong>安装到主屏幕</strong>并定期导出备份
+              </span>
+            ) : showPersist ? (
+              <span>存储未持久化，浏览器可能清理数据；请定期导出备份</span>
+            ) : (
+              <span>
+                可<strong>安装到主屏幕</strong>，离线记账更方便
+              </span>
+            )}
           </div>
-          <div className="install-banner-actions">
-            {canNativePrompt && (
+          <div className="app-hints-actions">
+            {showInstall && canNativePrompt && (
               <button
                 type="button"
                 className="btn primary tiny"
@@ -83,10 +128,17 @@ export function PwaInstallBanner() {
                 安装
               </button>
             )}
-            <button type="button" className="btn tiny" onClick={() => setGuideOpen(true)}>
-              怎么装
-            </button>
-            <button type="button" className="btn ghost tiny" onClick={dismissBanner} aria-label="关闭">
+            {showInstall && (
+              <button type="button" className="btn tiny" onClick={() => setGuideOpen(true)}>
+                怎么装
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn ghost tiny"
+              onClick={dismissStrip}
+              aria-label="关闭提示"
+            >
               ×
             </button>
           </div>
@@ -102,7 +154,9 @@ export function PwaInstallBanner() {
                 关闭
               </button>
             </header>
-            <p className="muted small">站点路径为 GitHub Pages：<code>/car-care-pwa/</code>。请用 HTTPS 系统浏览器打开。</p>
+            <p className="muted small">
+              站点路径为 GitHub Pages：<code>/car-care-pwa/</code>。请用 HTTPS 系统浏览器打开。
+            </p>
             <GuideBody platform={platform} />
             {canNativePrompt && (
               <button

@@ -17,7 +17,8 @@ import { allowsCharge, allowsFuel } from './energy';
  *   Which rows appear depends on energy type (see `heroEnergyCosts`).
  * - **每公里成本** (hero): energy-spend numerator ÷ 统计里程 (¥/km when CNY).
  *   Numerator matches energy type — fuel, charge, or fuel+charge — never
- *   maintenance/insurance/etc. Full category totals remain on Stats / home expand.
+ *   maintenance/insurance/etc. Home expand fuel/charge use the same baseline;
+ *   other category totals remain all-records on Stats / home expand.
  * - **总加油量 / 总充电量**: Σ liters on fuel records / Σ kWh on charge records.
  */
 

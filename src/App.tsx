@@ -44,10 +44,7 @@ export default function App() {
 
   return (
     <BrowserRouter basename="/car-care-pwa">
-      {!persisted && (
-        <div className="banner">存储持久化未启用，浏览器可能清理数据；请定期导出备份。</div>
-      )}
-      <PwaInstallBanner />
+      <PwaInstallBanner persisted={persisted} />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />

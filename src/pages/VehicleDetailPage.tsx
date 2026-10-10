@@ -270,7 +270,7 @@ export function VehicleDetailPage() {
         <div className="mini-stats">
           {energyCosts.showFuelSpend && (
             <div>
-              <span className="label" title="里程严格大于统计基线的加油实付（与首页「全部记录」不同）">
+              <span className="label" title="里程严格大于统计基线的加油实付（与首页展开一致）">
                 加油花费
               </span>
               <strong>{formatMoney(energyCosts.fuelSpend, settings.currency.symbol)}</strong>
@@ -278,7 +278,7 @@ export function VehicleDetailPage() {
           )}
           {energyCosts.showChargeSpend && (
             <div>
-              <span className="label" title="里程严格大于统计基线的充电实付（与首页「全部记录」不同）">
+              <span className="label" title="里程严格大于统计基线的充电实付（与首页展开一致）">
                 充电花费
               </span>
               <strong>{formatMoney(energyCosts.chargeSpend, settings.currency.symbol)}</strong>
