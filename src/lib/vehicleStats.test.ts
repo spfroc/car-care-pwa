@@ -362,7 +362,7 @@ describe('heroEnergyCosts by energy type', () => {
     expect(h.showChargeSpend).toBe(true);
     expect(h.chargeSpend).toBe(12);
     expect(h.costPerKmNumerator).toBe(12);
-    expect(h.costPerKmHint).toContain('充电');
+    expect(h.costPerKmHintKey).toBe('charge');
   });
 
   it('ICE shows fuel only; ¥/km = fuel / tracked', () => {
@@ -371,7 +371,7 @@ describe('heroEnergyCosts by energy type', () => {
     expect(h.showChargeSpend).toBe(false);
     expect(h.fuelSpend).toBe(400); // excludes baseline fill at 100
     expect(h.costPerKmNumerator).toBe(400);
-    expect(h.costPerKmHint).toContain('加油');
+    expect(h.costPerKmHintKey).toBe('fuel');
   });
 
   it('PHEV shows oil + electric; ¥/km uses combined numerator', () => {
@@ -381,7 +381,7 @@ describe('heroEnergyCosts by energy type', () => {
     expect(h.fuelSpend).toBe(400);
     expect(h.chargeSpend).toBe(12);
     expect(h.costPerKmNumerator).toBe(412);
-    expect(h.costPerKmHint).toContain('加油+充电');
+    expect(h.costPerKmHintKey).toBe('combined');
   });
 
   it('HEV with hevAllowCharge uses combined numerator', () => {

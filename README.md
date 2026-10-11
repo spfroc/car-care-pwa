@@ -95,7 +95,7 @@ npm test         # 油耗/电耗/综合公式单测
 ## Date/time display
 
 Settings → 通用:
-- `language` (zh-CN | en) — picker chrome (month/weekdays/Clear/Today/AM·PM)
+- `language` (zh-CN | en) — **full UI language** (nav, pages, forms, toasts) plus picker chrome (month/weekdays/Clear/Today/AM·PM). Implemented via `src/i18n` + shared `AppDataProvider` so changing language re-renders the whole app.
 - `dateFormat` (default `YYYY-MM-DD` / yyyy-mm-dd) — also `YYYY/MM/DD`, `DD/MM/YYYY`, `MM/DD/YYYY`
 - `timeFormat` (default `24h`, or `12h`)
 

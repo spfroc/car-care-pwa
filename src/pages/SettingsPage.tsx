@@ -1,10 +1,5 @@
-import { useEffect, useState } from 'react';
-import {
-  loadAppSettings,
-  resetOcrWhitelist,
-  setSetting,
-  type AppSettings,
-} from '../repositories/settings';
+import { useState } from 'react';
+import { resetOcrWhitelist } from '../repositories/settings';
 import { deleteStation, listStations, putStation } from '../repositories/stations';
 import {
   WARN_BYTES,
@@ -20,13 +15,14 @@ import {
   DATE_FORMAT_OPTIONS,
   LANGUAGE_OPTIONS,
   TIME_FORMAT_OPTIONS,
-  documentLangFor,
   normalizeLanguage,
 } from '../lib/datetime';
+import { useSettings } from '../hooks/useAppData';
 import type { Station } from '../types';
+import { useEffect } from 'react';
 
 export function SettingsPage() {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const { settings, saveSetting, refresh, t, language } = useSettings();
   const [msg, setMsg] = useState('');
   const [gas, setGas] = useState<Station[]>([]);
   const [charge, setCharge] = useState<Station[]>([]);
@@ -35,38 +31,32 @@ export function SettingsPage() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
 
-  async function refresh() {
-    setSettings(await loadAppSettings());
+  async function refreshLocal() {
+    await refresh();
     setGas(await listStations('gas'));
     setCharge(await listStations('charge'));
     setExportSize(await estimateExportSize(true));
   }
 
   useEffect(() => {
-    refresh();
+    refreshLocal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (settings?.language) {
-      document.documentElement.lang = documentLangFor(settings.language);
-    }
-  }, [settings?.language]);
-
-  if (!settings) return <div className="page"><p className="muted">加载中…</p></div>;
+  if (!settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   async function saveKey(key: string, value: unknown) {
-    await setSetting(key, value);
-    if (key === 'language' && typeof value === 'string') {
-      document.documentElement.lang = documentLangFor(value);
-    }
-    setMsg('已保存');
-    await refresh();
+    await saveSetting(key, value);
+    setMsg(t('common.saved'));
+    setGas(await listStations('gas'));
+    setCharge(await listStations('charge'));
+    setExportSize(await estimateExportSize(true));
   }
 
   async function onExport(withImages: boolean) {
     const size = await estimateExportSize(withImages);
     if (withImages && size > WARN_BYTES) {
-      if (!confirm(`导出体积约 ${formatBytes(size)}，可能较大。仍要含图片导出？\n也可选择「不含图片导出」。`)) return;
+      if (!confirm(t('settings.exportWarn', { size: formatBytes(size) }))) return;
     }
     const { json } = await exportData(withImages);
     const blob = new Blob([json], { type: 'application/json' });
@@ -75,48 +65,47 @@ export function SettingsPage() {
     a.download = `car-care-export-v1${withImages ? '' : '-no-media'}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    setMsg('导出完成');
+    setMsg(t('settings.exportDone'));
   }
 
   async function onImportFile(file: File | null) {
     if (!file) return;
     const text = await file.text();
     const mode = importMode;
-    if (mode === 'replace' && !confirm('覆盖导入将清空现有业务数据，确定？')) return;
+    if (mode === 'replace' && !confirm(t('settings.importReplaceConfirm'))) return;
     const r = await importData(text, mode);
     setMsg(r.message);
-    await refresh();
+    await refreshLocal();
   }
 
   async function addStation(stationType: 'gas' | 'charge') {
-    const name = prompt(stationType === 'gas' ? '加油站名称' : '充电站名称');
+    const name = prompt(stationType === 'gas' ? t('settings.promptGas') : t('settings.promptCharge'));
     if (!name?.trim()) return;
-    const t = nowISO();
+    const ts = nowISO();
     const s: Station = {
       id: uid(),
       stationType,
       name: name.trim(),
       sortOrder: (stationType === 'gas' ? gas : charge).length,
-      isHome: stationType === 'charge' ? confirm('是否家充？') : undefined,
-      createdAt: t,
-      updatedAt: t,
+      isHome: stationType === 'charge' ? confirm(t('settings.promptHomeCharge')) : undefined,
+      createdAt: ts,
+      updatedAt: ts,
     };
     await putStation(s);
-    await refresh();
+    await refreshLocal();
   }
 
   return (
     <div className="page">
       <header className="page-header">
-        <h1>设置</h1>
+        <h1>{t('settings.title')}</h1>
       </header>
       {msg && <p className="toast">{msg}</p>}
 
-
       <section className="card">
-        <h2>通用</h2>
+        <h2>{t('settings.general')}</h2>
         <label>
-          语言
+          {t('settings.language')}
           <select
             value={normalizeLanguage(settings.language)}
             onChange={(e) => saveKey('language', e.target.value)}
@@ -129,7 +118,7 @@ export function SettingsPage() {
           </select>
         </label>
         <label>
-          日期显示格式
+          {t('settings.dateFormat')}
           <select
             value={settings.dateFormat}
             onChange={(e) => saveKey('dateFormat', e.target.value)}
@@ -142,25 +131,25 @@ export function SettingsPage() {
           </select>
         </label>
         <label>
-          时间显示格式
+          {t('settings.timeFormat')}
           <select
             value={settings.timeFormat}
             onChange={(e) => saveKey('timeFormat', e.target.value)}
           >
             {TIME_FORMAT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {normalizeLanguage(settings.language) === 'en' ? o.labelEn : o.labelZh}
+                {language === 'en' ? o.labelEn : o.labelZh}
               </option>
             ))}
           </select>
         </label>
-        <p className="muted small">日期时间选择器的月份、星期与按钮文案跟随语言；输入框展示跟随上述格式（默认 yyyy-mm-dd + 24 小时制）。</p>
+        <p className="muted small">{t('settings.datetimeHint')}</p>
       </section>
 
       <section className="card">
-        <h2>燃油</h2>
+        <h2>{t('settings.fuel')}</h2>
         <label>
-          默认燃油
+          {t('settings.defaultFuel')}
           <select
             value={settings.defaultFuelGrade}
             onChange={(e) => saveKey('defaultFuelGrade', e.target.value)}
@@ -181,7 +170,7 @@ export function SettingsPage() {
                 className="chip-x"
                 onClick={async () => {
                   const next = settings.fuelGrades.filter((x) => x !== g);
-                  if (!next.length) return alert('至少保留一个标号');
+                  if (!next.length) return alert(t('settings.keepOneGrade'));
                   await saveKey('fuelGrades', next);
                   if (settings.defaultFuelGrade === g) await saveKey('defaultFuelGrade', next[0]);
                 }}
@@ -192,7 +181,7 @@ export function SettingsPage() {
           ))}
         </div>
         <div className="row">
-          <input placeholder="新标号" value={newGrade} onChange={(e) => setNewGrade(e.target.value)} />
+          <input placeholder={t('settings.newGrade')} value={newGrade} onChange={(e) => setNewGrade(e.target.value)} />
           <button
             type="button"
             className="btn"
@@ -202,15 +191,15 @@ export function SettingsPage() {
               setNewGrade('');
             }}
           >
-            添加
+            {t('common.add')}
           </button>
         </div>
       </section>
 
       <section className="card">
-        <h2>能耗与折算</h2>
+        <h2>{t('settings.economy')}</h2>
         <label>
-          油耗显示单位
+          {t('settings.fuelEcoUnit')}
           <select
             value={settings.fuelEconomyUnit}
             onChange={(e) => saveKey('fuelEconomyUnit', e.target.value)}
@@ -220,7 +209,7 @@ export function SettingsPage() {
           </select>
         </label>
         <label>
-          电耗显示单位
+          {t('settings.elecEcoUnit')}
           <select
             value={settings.electricEconomyUnit}
             onChange={(e) => saveKey('electricEconomyUnit', e.target.value)}
@@ -230,7 +219,7 @@ export function SettingsPage() {
           </select>
         </label>
         <label>
-          电油折算系数 (L/kWh)
+          {t('settings.kwhFactor')}
           <input
             type="number"
             step="0.001"
@@ -247,38 +236,35 @@ export function SettingsPage() {
             checked={settings.hevAllowCharge}
             onChange={(e) => saveKey('hevAllowCharge', e.target.checked)}
           />
-          HEV 允许录充电（默认关闭）
+          {t('settings.hevCharge')}
         </label>
       </section>
 
-
       <section className="card">
-        <h2>安装到主屏幕</h2>
-        <p className="hint">
-          已安装时（独立窗口 / 无浏览器地址栏）会显示「已安装」提示。未安装时可在首页顶部横幅点「安装」或「怎么装」。
-        </p>
+        <h2>{t('settings.install')}</h2>
+        <p className="hint">{t('settings.installHint')}</p>
         <button type="button" className="btn block" onClick={() => setInstallGuideOpen((v) => !v)}>
-          {installGuideOpen ? '收起安装说明' : '查看安装说明'}
+          {installGuideOpen ? t('settings.installToggleOpen') : t('settings.installToggleClosed')}
         </button>
         {installGuideOpen && (
           <div className="muted small" style={{ marginTop: 10 }}>
-            <p><strong>iOS Safari：</strong>分享 → 添加到主屏幕。</p>
-            <p><strong>Android Chrome：</strong>菜单 ⋮ → 安装应用 / 添加到主屏幕。若「已安装」但桌面无图标，检查 Chrome 的桌面快捷方式权限；应用抽屉里也可能有图标。</p>
-            <p><strong>国产浏览器 / 无 GMS：</strong>多为「添加到主屏幕」快捷方式，不一定有 WebAPK；勿用微信内置浏览器安装。</p>
-            <p>技术说明见仓库 <code>docs/pwa-install.md</code>。</p>
+            <p><strong>{t('settings.installIos')}</strong></p>
+            <p><strong>{t('settings.installAndroid')}</strong></p>
+            <p><strong>{t('settings.installCn')}</strong></p>
+            <p>{t('settings.installDocs')}</p>
           </div>
         )}
       </section>
 
       <section className="card ocr-card">
-        <h2>OCR 识别白名单</h2>
-        <p className="hint">更改将在下一次 OCR 识别时生效。识别仅本地/浏览器，无云 OCR。</p>
+        <h2>{t('settings.ocr')}</h2>
+        <p className="hint">{t('settings.ocrHint')}</p>
         {(
           [
-            ['main', '主要识别白名单', settings.ocrMain],
-            ['date', '日期识别白名单', settings.ocrDate],
-            ['amountDue', '应付金额识别白名单', settings.ocrAmountDue],
-            ['discount', '优惠金额识别白名单', settings.ocrDiscount],
+            ['main', t('settings.ocrMain'), settings.ocrMain],
+            ['date', t('settings.ocrDate'), settings.ocrDate],
+            ['amountDue', t('settings.ocrAmountDue'), settings.ocrAmountDue],
+            ['discount', t('settings.ocrDiscount'), settings.ocrDiscount],
           ] as const
         ).map(([field, label, value]) => (
           <div key={field} className="ocr-field">
@@ -289,11 +275,11 @@ export function SettingsPage() {
                 className="btn ghost tiny"
                 onClick={async () => {
                   await resetOcrWhitelist(field);
-                  setMsg(`${label}已重置`);
-                  refresh();
+                  setMsg(t('settings.resetDone', { label }));
+                  refreshLocal();
                 }}
               >
-                重置
+                {t('settings.reset')}
               </button>
             </div>
             <textarea
@@ -302,78 +288,76 @@ export function SettingsPage() {
               key={value}
               onBlur={(e) => saveKey(`ocrWhitelist.${field}`, e.target.value)}
             />
-            <p className="hint tiny">下次识别时生效</p>
+            <p className="hint tiny">{t('settings.nextOcr')}</p>
           </div>
         ))}
       </section>
 
       <section className="card">
-        <h2>收藏加油站</h2>
+        <h2>{t('settings.gasStations')}</h2>
         <ul className="simple-list">
           {gas.map((s) => (
             <li key={s.id}>
               <span>{s.name}</span>
-              <button type="button" className="btn ghost danger-text" onClick={() => deleteStation(s.id).then(refresh)}>
-                删
+              <button type="button" className="btn ghost danger-text" onClick={() => deleteStation(s.id).then(refreshLocal)}>
+                {t('settings.deleteShort')}
               </button>
             </li>
           ))}
         </ul>
         <button type="button" className="btn" onClick={() => addStation('gas')}>
-          + 加油站
+          {t('settings.addGas')}
         </button>
       </section>
 
       <section className="card">
-        <h2>收藏充电站</h2>
+        <h2>{t('settings.chargeStations')}</h2>
         <ul className="simple-list">
           {charge.map((s) => (
             <li key={s.id}>
               <span>
                 {s.name}
-                {s.isHome ? ' · 家充' : ''}
+                {s.isHome ? t('settings.homeCharge') : ''}
               </span>
-              <button type="button" className="btn ghost danger-text" onClick={() => deleteStation(s.id).then(refresh)}>
-                删
+              <button type="button" className="btn ghost danger-text" onClick={() => deleteStation(s.id).then(refreshLocal)}>
+                {t('settings.deleteShort')}
               </button>
             </li>
           ))}
         </ul>
         <button type="button" className="btn" onClick={() => addStation('charge')}>
-          + 充电站
+          {t('settings.addCharge')}
         </button>
       </section>
 
       <section className="card">
-        <h2>快捷识别</h2>
-        <p className="muted small">
-          识别会记住你的纠正（仅本机）。从快捷记账预填并保存后，站点简称、车辆别名与「N块+优惠」口径会写入本地学习库，不会上传；导出/导入 JSON 可一并备份。
-        </p>
+        <h2>{t('settings.quickLearn')}</h2>
+        <p className="muted small">{t('settings.quickLearnHint')}</p>
       </section>
 
       <section className="card">
-        <h2>数据</h2>
+        <h2>{t('settings.data')}</h2>
         {exportSize != null && (
           <p className="muted small">
-            含图导出约 {formatBytes(exportSize)}
-            {exportSize > WARN_BYTES ? '（体积较大，建议注意）' : ''}
+            {t('settings.exportSize', { size: formatBytes(exportSize) })}
+            {exportSize > WARN_BYTES ? t('settings.exportSizeWarn') : ''}
           </p>
         )}
         <button type="button" className="btn block" onClick={() => onExport(true)}>
-          导出 JSON（含图片）
+          {t('settings.exportWithMedia')}
         </button>
         <button type="button" className="btn block" onClick={() => onExport(false)}>
-          导出 JSON（不含图片）
+          {t('settings.exportNoMedia')}
         </button>
         <label>
-          导入模式（默认合并去重）
+          {t('settings.importMode')}
           <select value={importMode} onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}>
-            <option value="merge">合并去重</option>
-            <option value="replace">完全覆盖</option>
+            <option value="merge">{t('settings.importMerge')}</option>
+            <option value="replace">{t('settings.importReplace')}</option>
           </select>
         </label>
         <label className="btn block file-btn">
-          导入 JSON
+          {t('settings.import')}
           <input
             type="file"
             accept="application/json,.json"
@@ -385,32 +369,39 @@ export function SettingsPage() {
           type="button"
           className="btn primary block"
           onClick={async () => {
-            if (!confirm('载入演示数据将清空现有业务数据并写入种子包，确定？')) return;
+            if (!confirm(t('settings.loadDemoConfirm'))) return;
             await loadDemoSeed(true);
-            setMsg('演示数据已载入');
-            await refresh();
+            setMsg(t('settings.loadDemoDone'));
+            await refreshLocal();
           }}
         >
-          载入演示数据
+          {t('settings.loadDemo')}
         </button>
         <button
           type="button"
           className="btn danger block"
           onClick={async () => {
-            if (!confirm('清空全部车辆与记录？')) return;
-            if (!confirm('再次确认清空')) return;
+            if (!confirm(t('settings.clearConfirm1'))) return;
+            if (!confirm(t('settings.clearConfirm2'))) return;
             await clearAllData();
-            setMsg('已清空');
-            await refresh();
+            setMsg(t('settings.clearDone'));
+            await refreshLocal();
           }}
         >
-          清空数据
+          {t('settings.clearData')}
         </button>
       </section>
 
       <section className="card muted small">
-        <p>语言 {settings.language} · 日期 {settings.dateFormat} · 时间 {settings.timeFormat} · 货币 {settings.currency.symbol}</p>
-        <p>OCR 引擎属 M2；当前仅保存白名单配置。</p>
+        <p>
+          {t('settings.footerLang', {
+            language: settings.language,
+            dateFormat: settings.dateFormat,
+            timeFormat: settings.timeFormat,
+            currency: settings.currency.symbol,
+          })}
+        </p>
+        <p>{t('settings.footerOcr')}</p>
       </section>
     </div>
   );

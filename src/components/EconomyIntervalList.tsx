@@ -1,27 +1,30 @@
 import type { EconomyInterval } from '../types';
 import { formatEconomy } from '../lib/economy';
+import { useI18n } from '../i18n';
 
 type Props = {
   intervals: EconomyInterval[];
   /** e.g. L/100km or kWh/100km */
   unitLabel: string;
-  /** 加油 or 充电 */
-  kindLabel: '加油' | '充电';
+  kind: 'fuel' | 'charge';
   emptyText?: string;
 };
 
 export function EconomyIntervalList({
   intervals,
   unitLabel,
-  kindLabel,
-  emptyText = '暂无区间数据（至少两条补能记录）',
+  kind,
+  emptyText,
 }: Props) {
+  const { t } = useI18n();
+  const empty = emptyText ?? t('interval.empty');
+
   if (intervals.length === 0) {
-    return <p className="muted small">{emptyText}</p>;
+    return <p className="muted small">{empty}</p>;
   }
 
-  // Newest interval first
   const rows = [...intervals].reverse();
+  const tripKey = kind === 'fuel' ? 'interval.tripFuel' : 'interval.tripCharge';
 
   return (
     <ul className="interval-list">
@@ -33,12 +36,10 @@ export function EconomyIntervalList({
             className={`interval-row${iv.lowConfidence ? ' low-conf' : ''}`}
           >
             <div className="iv-main">
-              <span className="iv-dist">
-                本次{kindLabel}行驶里程 {dist.toFixed(0)} km
-              </span>
+              <span className="iv-dist">{t(tripKey, { dist: dist.toFixed(0) })}</span>
               <span className="interval-meta">
                 {iv.fromOdometer.toFixed(0)} → {iv.toOdometer.toFixed(0)} km
-                {iv.lowConfidence ? ' · 未加满（参考）' : ''}
+                {iv.lowConfidence ? t('interval.notFull') : ''}
               </span>
             </div>
             <div className="iv-eco">

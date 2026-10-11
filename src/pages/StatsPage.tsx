@@ -29,7 +29,7 @@ function rangeDates(key: RangeKey): { from?: Date; to?: Date } {
 
 export function StatsPage() {
   const [params] = useSearchParams();
-  const { settings } = useSettings();
+  const { settings, t, language } = useSettings();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState<string>(params.get('vehicle') || 'all');
   const [records, setRecords] = useState<CareRecord[]>([]);
@@ -86,9 +86,6 @@ export function StatsPage() {
     return summarizeSpend(vehicleId, filtered);
   }, [filtered, vehicleId, vehicles]);
 
-  // months must be computed with useMemo BEFORE any conditional return —
-  // an early return above this hook caused a Rules of Hooks crash (blank Stats page)
-  // once settings finished loading.
   const months = useMemo(() => monthlySpendByType(filtered, 6), [filtered]);
   const maxMonth = Math.max(1, ...months.map((m) => m.total));
   const legendTypes = useMemo(() => {
@@ -96,7 +93,7 @@ export function StatsPage() {
     for (const m of months) {
       for (const s of m.segments) present.add(s.type);
     }
-    return RECORD_TYPE_ORDER.filter((t) => present.has(t));
+    return RECORD_TYPE_ORDER.filter((x) => present.has(x));
   }, [months]);
 
   const vehicle = vehicles.find((v) => v.id === vehicleId);
@@ -108,7 +105,7 @@ export function StatsPage() {
   const elecAvg = averageElectricEconomy(filtered);
   const combined = settings ? combinedEconomy(filtered, settings.kwhToLiterFactor) : null;
 
-  if (!settings) return <div className="page"><p className="muted">加载中…</p></div>;
+  if (!settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   const showFuelEco = vehicle
     ? allowsFuel(vehicle.energyType) && vehicle.energyType !== 'EV' && vehicle.energyType !== 'FCEV'
@@ -117,16 +114,23 @@ export function StatsPage() {
   const showCombined =
     vehicle && (vehicle.energyType === 'PHEV' || vehicle.energyType === 'REEV');
 
+  const ranges: [RangeKey, 'stats.range30' | 'stats.range90' | 'stats.range365' | 'stats.rangeAll'][] = [
+    ['30', 'stats.range30'],
+    ['90', 'stats.range90'],
+    ['365', 'stats.range365'],
+    ['all', 'stats.rangeAll'],
+  ];
+
   return (
     <div className="page">
       <header className="page-header">
-        <h1>统计</h1>
+        <h1>{t('stats.title')}</h1>
       </header>
 
       <label>
-        车辆
+        {t('stats.vehicle')}
         <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-          <option value="all">全部车辆</option>
+          <option value="all">{t('stats.allVehicles')}</option>
           {vehicles.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
@@ -136,132 +140,125 @@ export function StatsPage() {
       </label>
 
       <div className="chip-row">
-        {(
-          [
-            ['30', '近30天'],
-            ['90', '近90天'],
-            ['365', '近1年'],
-            ['all', '全部'],
-          ] as const
-        ).map(([k, label]) => (
+        {ranges.map(([k, labelKey]) => (
           <button
             key={k}
             type="button"
             className={range === k ? 'chip active' : 'chip'}
             onClick={() => setRange(k)}
           >
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
 
       <div className="stat-grid">
         <div className="stat-card">
-          <div className="label">总计</div>
+          <div className="label">{t('stats.total')}</div>
           <div className="big">{formatMoney(spend.total)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">燃油</div>
+          <div className="label">{t('type.fuel')}</div>
           <div className="big">{formatMoney(spend.fuelCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">充电</div>
+          <div className="label">{t('type.charge')}</div>
           <div className="big">{formatMoney(spend.chargeCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">维保</div>
+          <div className="label">{t('type.maintenance')}</div>
           <div className="big">{formatMoney(spend.maintenanceCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">改装</div>
+          <div className="label">{t('type.modification')}</div>
           <div className="big">{formatMoney(spend.modificationCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">洗车</div>
+          <div className="label">{t('type.wash')}</div>
           <div className="big">{formatMoney(spend.washCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">配件</div>
+          <div className="label">{t('type.goods')}</div>
           <div className="big">{formatMoney(spend.goodsCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">罚单</div>
+          <div className="label">{t('type.ticket')}</div>
           <div className="big">{formatMoney(spend.ticketCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">停车费</div>
+          <div className="label">{t('type.parking')}</div>
           <div className="big">{formatMoney(spend.parkingCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">高速费</div>
+          <div className="label">{t('type.toll')}</div>
           <div className="big">{formatMoney(spend.tollCost)}</div>
         </div>
         <div className="stat-card">
-          <div className="label">保险</div>
+          <div className="label">{t('type.insurance')}</div>
           <div className="big">{formatMoney(spend.insuranceCost)}</div>
         </div>
       </div>
 
       <section className="card">
-        <h2>能耗</h2>
+        <h2>{t('stats.economy')}</h2>
         {showFuelEco && (
           <>
             <p>
-              平均油耗：{' '}
+              {t('stats.avgFuel')}{' '}
               <strong>
                 {fuelAvg == null
-                  ? '数据不足'
+                  ? t('stats.insufficient')
                   : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
-              油耗区间明细
+              {t('stats.fuelIntervals')}
             </h3>
             <EconomyIntervalList
               intervals={fuelIvs}
               unitLabel={settings.fuelEconomyUnit}
-              kindLabel="加油"
+              kind="fuel"
             />
           </>
         )}
         {showElecEco && (
           <>
             <p style={{ marginTop: showFuelEco ? 14 : undefined }}>
-              平均电耗：{' '}
+              {t('stats.avgElec')}{' '}
               <strong>
                 {elecAvg == null
-                  ? '数据不足'
+                  ? t('stats.insufficient')
                   : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
-              电耗区间明细
+              {t('stats.elecIntervals')}
             </h3>
             <EconomyIntervalList
               intervals={elecIvs}
               unitLabel={settings.electricEconomyUnit}
-              kindLabel="充电"
+              kind="charge"
             />
           </>
         )}
         {showCombined && (
           <p style={{ marginTop: 14 }}>
-            综合油耗（折算）：{' '}
+            {t('stats.combined')}{' '}
             <strong>
               {combined == null
-                ? '数据不足'
+                ? t('stats.insufficient')
                 : `${formatEconomy(combined.economyPer100, 'L/100km')} L/100km`}
             </strong>
           </p>
         )}
-        {!vehicle && <p className="muted small">全部车辆：油耗/电耗按各车区间分别计算后合并；综合折算请选单车</p>}
-        {vehicle?.energyType === 'FCEV' && <p className="muted">能耗公式未启用（氢燃料）</p>}
+        {!vehicle && <p className="muted small">{t('stats.allVehiclesEcoHint')}</p>}
+        {vehicle?.energyType === 'FCEV' && <p className="muted">{t('stats.fcevHint')}</p>}
       </section>
 
       <section className="card">
-        <h2>近月花费</h2>
+        <h2>{t('stats.monthly')}</h2>
         <div className="bars" role="list">
-          {months.length === 0 && <p className="muted">暂无数据</p>}
+          {months.length === 0 && <p className="muted">{t('stats.noData')}</p>}
           {months.map((row) => (
             <div key={row.key} className="bar-col" role="listitem">
               <span className="bar-val" title={formatMoney(row.total)}>
@@ -280,7 +277,7 @@ export function StatsPage() {
                       height: `${(seg.amount / maxMonth) * 100}%`,
                       background: recordTypeColor(seg.type),
                     }}
-                    title={`${recordTypeLabel(seg.type, settings.language)} ${formatMoney(seg.amount)}`}
+                    title={`${recordTypeLabel(seg.type, language)} ${formatMoney(seg.amount)}`}
                   />
                 ))}
               </div>
@@ -289,7 +286,7 @@ export function StatsPage() {
           ))}
         </div>
         {legendTypes.length > 0 && (
-          <ul className="bar-legend" aria-label="花费类型图例">
+          <ul className="bar-legend" aria-label={t('stats.legend')}>
             {legendTypes.map((type) => (
               <li key={type} className="bar-legend-item">
                 <span
@@ -297,7 +294,7 @@ export function StatsPage() {
                   style={{ background: recordTypeColor(type) }}
                   aria-hidden
                 />
-                <span>{recordTypeLabel(type, settings.language)}</span>
+                <span>{recordTypeLabel(type, language)}</span>
               </li>
             ))}
           </ul>

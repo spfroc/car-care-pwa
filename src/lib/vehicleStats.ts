@@ -137,8 +137,8 @@ export interface HeroEnergyCosts {
   chargeSpend: Money;
   /** Numerator for 每公里成本 (matches shown energy spends). */
   costPerKmNumerator: Money;
-  /** Short helper: what ÷ 统计里程. */
-  costPerKmHint: string;
+  /** Hint key for i18n: fuel | charge | combined. */
+  costPerKmHintKey: 'fuel' | 'charge' | 'combined';
 }
 
 export function heroEnergyCosts(
@@ -160,7 +160,7 @@ export function heroEnergyCosts(
       fuelSpend,
       chargeSpend,
       costPerKmNumerator: chargeSpend,
-      costPerKmHint: '充电花费 ÷ 统计里程',
+      costPerKmHintKey: 'charge',
     };
   }
 
@@ -172,7 +172,7 @@ export function heroEnergyCosts(
       fuelSpend,
       chargeSpend,
       costPerKmNumerator: fuelSpend,
-      costPerKmHint: '加油花费 ÷ 统计里程',
+      costPerKmHintKey: 'fuel',
     };
   }
 
@@ -184,7 +184,7 @@ export function heroEnergyCosts(
       fuelSpend,
       chargeSpend,
       costPerKmNumerator: fuelSpend + chargeSpend,
-      costPerKmHint: '加油+充电花费 ÷ 统计里程',
+      costPerKmHintKey: 'combined',
     };
   }
 
@@ -195,7 +195,7 @@ export function heroEnergyCosts(
     fuelSpend,
     chargeSpend,
     costPerKmNumerator: chargeSpend,
-    costPerKmHint: '充电花费 ÷ 统计里程',
+    costPerKmHintKey: 'charge',
   };
 }
 

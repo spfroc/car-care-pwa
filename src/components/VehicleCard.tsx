@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { CareRecord, Vehicle } from '../types';
-import { ENERGY_COLORS, ENERGY_LABELS, bodyIcon, formatMoney } from '../lib/constants';
+import { ENERGY_COLORS, bodyIcon, energyLabel, formatMoney } from '../lib/constants';
 import { homeCardFlags } from '../lib/energy';
 import { summarizeSpend } from '../lib/spend';
 import { averageElectricEconomy, averageFuelEconomy, formatEconomy } from '../lib/economy';
 import { heroEnergyCosts, summarizeMileage } from '../lib/vehicleStats';
+import { useI18n } from '../i18n';
 
 function formatKm(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
@@ -24,6 +25,7 @@ export function VehicleCard({
   fuelUnit: string;
   electricUnit: string;
 }) {
+  const { t, language } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const mine = records.filter((r) => r.vehicleId === vehicle.id);
   const spend = summarizeSpend(vehicle.id, mine);
@@ -49,37 +51,37 @@ export function VehicleCard({
             <div>
               <div className="vc-name">{vehicle.name}</div>
               <div className="vc-meta">
-                {vehicle.plate || '无车牌'} · {ENERGY_LABELS[vehicle.energyType]}
+                {vehicle.plate || t('common.noPlate')} · {energyLabel(vehicle.energyType, language)}
               </div>
             </div>
           </div>
           <div className="vc-head-metrics">
             <div className="vc-metric">
-              <div className="label">当前里程</div>
+              <div className="label">{t('card.odometer')}</div>
               <div className="value">
-                {mileage.drivingOdometer == null ? '—' : `${formatKm(mileage.drivingOdometer)} km`}
+                {mileage.drivingOdometer == null ? t('common.dash') : `${formatKm(mileage.drivingOdometer)} km`}
               </div>
             </div>
             {flags.showFuelEconomy && (
               <div className="vc-metric">
-                <div className="label">油耗</div>
+                <div className="label">{t('card.fuelEco')}</div>
                 <div className="value">
-                  {fuelEco == null ? '—' : `${formatEconomy(fuelEco, fuelUnit)} ${fuelUnit}`}
+                  {fuelEco == null ? t('common.dash') : `${formatEconomy(fuelEco, fuelUnit)} ${fuelUnit}`}
                 </div>
               </div>
             )}
             {flags.showElectricEconomy && (
               <div className="vc-metric">
-                <div className="label">电耗</div>
+                <div className="label">{t('card.elecEco')}</div>
                 <div className="value">
-                  {elecEco == null ? '—' : `${formatEconomy(elecEco, electricUnit)} ${electricUnit}`}
+                  {elecEco == null ? t('common.dash') : `${formatEconomy(elecEco, electricUnit)} ${electricUnit}`}
                 </div>
               </div>
             )}
             {!flags.showFuelEconomy && !flags.showElectricEconomy && (
               <div className="vc-metric">
-                <div className="label">油耗/电耗</div>
-                <div className="value">—</div>
+                <div className="label">{t('card.fuelElecEco')}</div>
+                <div className="value">{t('common.dash')}</div>
               </div>
             )}
           </div>
@@ -88,7 +90,7 @@ export function VehicleCard({
           type="button"
           className={`vc-expand${expanded ? ' open' : ''}`}
           aria-expanded={expanded}
-          aria-label={expanded ? '收起花费明细' : '展开花费明细'}
+          aria-label={expanded ? t('card.collapse') : t('card.expand')}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -108,61 +110,53 @@ export function VehicleCard({
       </div>
       {expanded && (
         <Link to={detailTo} className="vc-grid">
-          <p className="vc-spend-note muted small">
-            加油/充电与详情一致（统计起点后）；其余为全部记录
-          </p>
+          <p className="vc-spend-note muted small">{t('card.spendNote')}</p>
           {flags.showFuelCost && (
             <div>
-              <div
-                className="label"
-                title="里程严格大于统计基线的加油实付（与详情页一致）"
-              >
-                加油
+              <div className="label" title={t('card.fuelTitle')}>
+                {t('type.fuel')}
               </div>
               <div className="value">{formatMoney(energyCosts.fuelSpend)}</div>
             </div>
           )}
           {flags.showChargeCost && (
             <div>
-              <div
-                className="label"
-                title="里程严格大于统计基线的充电实付（与详情页一致）"
-              >
-                充电
+              <div className="label" title={t('card.chargeTitle')}>
+                {t('type.charge')}
               </div>
               <div className="value">{formatMoney(energyCosts.chargeSpend)}</div>
             </div>
           )}
           <div>
-            <div className="label">维保</div>
+            <div className="label">{t('type.maintenance')}</div>
             <div className="value">{formatMoney(spend.maintenanceCost)}</div>
           </div>
           <div>
-            <div className="label">改装</div>
+            <div className="label">{t('type.modification')}</div>
             <div className="value">{formatMoney(spend.modificationCost)}</div>
           </div>
           <div>
-            <div className="label">洗车</div>
+            <div className="label">{t('type.wash')}</div>
             <div className="value">{formatMoney(spend.washCost)}</div>
           </div>
           <div>
-            <div className="label">配件</div>
+            <div className="label">{t('type.goods')}</div>
             <div className="value">{formatMoney(spend.goodsCost)}</div>
           </div>
           <div>
-            <div className="label">罚单</div>
+            <div className="label">{t('type.ticket')}</div>
             <div className="value">{formatMoney(spend.ticketCost)}</div>
           </div>
           <div>
-            <div className="label">停车</div>
+            <div className="label">{t('type.parkingShort')}</div>
             <div className="value">{formatMoney(spend.parkingCost)}</div>
           </div>
           <div>
-            <div className="label">高速</div>
+            <div className="label">{t('type.tollShort')}</div>
             <div className="value">{formatMoney(spend.tollCost)}</div>
           </div>
           <div>
-            <div className="label">保险</div>
+            <div className="label">{t('type.insurance')}</div>
             <div className="value">{formatMoney(spend.insuranceCost)}</div>
           </div>
         </Link>

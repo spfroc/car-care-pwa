@@ -16,6 +16,21 @@ export const ENERGY_LABELS: Record<EnergyType, string> = {
   OTHER: '其他',
 };
 
+export const ENERGY_LABELS_EN: Record<EnergyType, string> = {
+  ICE: 'Gasoline',
+  EV: 'EV',
+  PHEV: 'PHEV',
+  HEV: 'HEV',
+  REEV: 'REEV',
+  FCEV: 'FCEV',
+  OTHER: 'Other',
+};
+
+export function energyLabel(type: EnergyType, language?: string): string {
+  const en = (language ?? '').toLowerCase().startsWith('en');
+  return (en ? ENERGY_LABELS_EN : ENERGY_LABELS)[type] ?? type;
+}
+
 export const ENERGY_COLORS: Record<EnergyType, string> = {
   ICE: '#f59e0b',
   EV: '#14b8a6',
@@ -158,7 +173,34 @@ export function bodyIcon(bodyType: BodyType): string {
   return BODY_TYPES.find((b) => b.value === bodyType)?.icon ?? '❓';
 }
 
-export function bodyLabel(bodyType: BodyType): string {
+const BODY_LABELS_EN: Record<BodyType, string> = {
+  SEDAN: 'Sedan',
+  HATCHBACK: 'Hatchback',
+  SUV: 'SUV',
+  CROSSOVER: 'Crossover',
+  MPV: 'MPV',
+  MINIVAN: 'Minivan',
+  PICKUP: 'Pickup',
+  TRUCK: 'Truck',
+  VAN: 'Van',
+  COUPE: 'Coupe',
+  CONVERTIBLE: 'Convertible',
+  WAGON: 'Wagon',
+  JEEP: 'Off-road',
+  SPORTS: 'Sports',
+  MICRO: 'Micro',
+  MOTORCYCLE: 'Motorcycle',
+  SCOOTER: 'Scooter',
+  E_BIKE: 'E-bike',
+  BIKE: 'Bicycle',
+  RV: 'RV',
+  BUS: 'Bus',
+  OTHER: 'Other',
+};
+
+export function bodyLabel(bodyType: BodyType, language?: string): string {
+  const en = (language ?? '').toLowerCase().startsWith('en');
+  if (en) return BODY_LABELS_EN[bodyType] ?? bodyType;
   return BODY_TYPES.find((b) => b.value === bodyType)?.label ?? bodyType;
 }
 

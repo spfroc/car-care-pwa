@@ -9,7 +9,7 @@ import type { CareRecord, Station } from '../types';
 
 export function HomePage() {
   const { vehicles, loading, refresh } = useVehicles();
-  const { settings } = useSettings();
+  const { settings, t } = useSettings();
   const [records, setRecords] = useState<CareRecord[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
 
@@ -19,27 +19,27 @@ export function HomePage() {
     refresh();
   }, [refresh]);
 
-  if (loading || !settings) return <div className="page"><p className="muted">加载中…</p></div>;
+  if (loading || !settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   return (
     <div className="page page-home">
       <header className="page-header">
         <div>
-          <h1>车护助手</h1>
-          <p className="muted">离线车辆养护账本</p>
+          <h1>{t('app.name')}</h1>
+          <p className="muted">{t('app.tagline')}</p>
         </div>
         <Link to="/vehicles/new" className="btn primary">
-          + 车辆
+          {t('home.addVehicle')}
         </Link>
       </header>
 
       {vehicles.length === 0 ? (
         <div className="empty">
-          <p>还没有车辆</p>
+          <p>{t('home.empty')}</p>
           <Link to="/vehicles/new" className="btn primary">
-            添加第一辆车
+            {t('home.addFirst')}
           </Link>
-          <p className="muted small">或到设置中载入演示数据</p>
+          <p className="muted small">{t('home.emptyHint')}</p>
         </div>
       ) : (
         <div className="stack">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RECORD_TYPE_ICONS, RECORD_TYPE_LABELS } from '../lib/constants';
+import { RECORD_TYPE_ICONS, recordTypeLabel } from '../lib/constants';
+import { useI18n } from '../i18n';
 import {
   buildVehicleMatchInputs,
   isParseReady,
@@ -39,6 +40,7 @@ type Props = {
 };
 
 export function QuickEntrySheet({ open, onClose, vehicles, records = [], stations = [] }: Props) {
+  const { t, language, isEn } = useI18n();
   const nav = useNavigate();
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
@@ -63,10 +65,10 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
     setErr('');
     setSpeechHint(
       speechOk
-        ? '可点麦克风说中文，或直接打字。识别后仅预填表单，不会自动保存。'
-        : '当前浏览器不支持语音识别，请打字输入。识别后仅预填表单，不会自动保存。',
+        ? (isEn ? t('qe.hintSpeechEn') : t('qe.hintSpeech'))
+        : t('qe.hintNoSpeech'),
     );
-  }, [open, speechOk]);
+  }, [open, speechOk, isEn, t]);
 
   useEffect(() => {
     return () => {
@@ -111,13 +113,13 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
   function startListening() {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
-      setSpeechHint('当前浏览器不支持语音识别，请打字输入。');
+      setSpeechHint(t('qe.hintNoSpeechShort'));
       return;
     }
     setErr('');
     try {
       const rec = new Ctor();
-      rec.lang = 'zh-CN';
+      rec.lang = isEn ? 'en-US' : 'zh-CN';
       rec.continuous = false;
       rec.interimResults = true;
       if ('processLocally' in rec) {
@@ -132,17 +134,17 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
         for (let i = 0; i < ev.results.length; i++) {
           parts.push(ev.results[i][0].transcript);
         }
-        const t = parts.join('').trim();
-        if (t) setText(t);
+        const transcript = parts.join('').trim();
+        if (transcript) setText(transcript);
       };
       rec.onerror = (ev) => {
         setListening(false);
         if (ev.error === 'not-allowed') {
-          setErr('未获得麦克风权限');
+          setErr(t('qe.errMic'));
         } else if (ev.error === 'language-not-supported') {
-          setErr('不支持 zh-CN 语音识别，请改用文字');
+          setErr(t('qe.errLang'));
         } else if (ev.error !== 'aborted') {
-          setErr(`语音识别失败：${ev.error}`);
+          setErr(t('qe.errSpeech', { error: ev.error }));
         }
       };
       rec.onend = () => setListening(false);
@@ -150,14 +152,14 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
       rec.start();
       setListening(true);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '无法启动语音识别');
+      setErr(e instanceof Error ? e.message : t('qe.errStart'));
       setListening(false);
     }
   }
 
   async function onParseClick() {
     if (!text.trim()) {
-      setErr('请先输入或语音录入内容');
+      setErr(t('qe.errEmpty'));
       return;
     }
     await runParse(text);
@@ -181,7 +183,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
       return goWith(r);
     }
     if (!parsed) {
-      setErr('请先识别内容');
+      setErr(t('qe.errParseFirst'));
       return;
     }
     goWith(parsed);
@@ -191,11 +193,11 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
     const vehicleId = resolveVehicleId(r);
     const type = resolveType(r);
     if (!vehicleId) {
-      setErr('请选择车辆');
+      setErr(t('qe.errVehicle'));
       return;
     }
     if (!type) {
-      setErr('请选择记录类型');
+      setErr(t('qe.errType'));
       return;
     }
     let pendingVehicleAlias: string | undefined;
@@ -249,15 +251,15 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
       >
         <div className="qe-sheet-handle" />
         <header className="qe-sheet-head">
-          <h2 id="qe-title">快捷记账</h2>
-          <button type="button" className="btn ghost tiny" onClick={onClose} aria-label="关闭">
+          <h2 id="qe-title">{t('qe.title')}</h2>
+          <button type="button" className="btn ghost tiny" onClick={onClose} aria-label={t('common.close')}>
             ✕
           </button>
         </header>
         <p className="muted small qe-hint">{speechHint}</p>
 
         <label className="qe-label">
-          文字 / 语音
+          {t('qe.textVoice')}
           <div className="qe-input-row">
             <textarea
               value={text}
@@ -266,7 +268,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
                 setParsed(null);
               }}
               rows={3}
-              placeholder="例：X-RV 加油 40 升 320 元 里程 12345"
+              placeholder={isEn ? t('qe.placeholderEn') : t('qe.placeholder')}
               autoFocus
             />
             {speechOk && (
@@ -275,7 +277,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
                 className={`btn qe-mic ${listening ? 'listening' : ''}`}
                 onClick={listening ? stopListening : startListening}
                 aria-pressed={listening}
-                title={listening ? '停止' : '语音输入'}
+                title={listening ? t('qe.stop') : t('qe.mic')}
               >
                 {listening ? '⏹' : '🎤'}
               </button>
@@ -285,7 +287,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
 
         <div className="qe-actions">
           <button type="button" className="btn" onClick={onParseClick} disabled={!text.trim()}>
-            识别
+            {t('qe.parse')}
           </button>
           <button
             type="button"
@@ -293,7 +295,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
             onClick={goToForm}
             disabled={!text.trim() && !parsed}
           >
-            预填并打开表单
+            {t('qe.openForm')}
           </button>
         </div>
 
@@ -301,15 +303,15 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
 
         {parsed && (
           <div className="qe-result">
-            <p className="small muted">解析结果（可改选后打开表单）</p>
+            <p className="small muted">{t('qe.result')}</p>
             {(needsVehiclePick || !parsed.vehicleId) && (
               <label>
-                车辆
+                {t('qe.vehicle')}
                 <select
                   value={pickVehicleId}
                   onChange={(e) => setPickVehicleId(e.target.value)}
                 >
-                  <option value="">请选择</option>
+                  <option value="">{t('common.pleaseSelect')}</option>
                   {vehicleOptions.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name}
@@ -321,7 +323,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
             )}
             {!needsVehiclePick && parsed.vehicleId && (
               <p className="qe-chip-line">
-                车辆：
+                {t('qe.vehicleColon')}
                 <strong>
                   {vehicles.find((v) => v.id === parsed.vehicleId)?.name ?? parsed.vehicleId}
                 </strong>
@@ -330,15 +332,15 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
 
             {(needsTypePick || !parsed.type) && (
               <label>
-                类型
+                {t('qe.type')}
                 <select
                   value={pickType}
                   onChange={(e) => setPickType(e.target.value as RecordType | '')}
                 >
-                  <option value="">请选择</option>
-                  {typeOptions.map((t) => (
-                    <option key={t} value={t}>
-                      {RECORD_TYPE_ICONS[t]} {RECORD_TYPE_LABELS[t] ?? t}
+                  <option value="">{t('common.pleaseSelect')}</option>
+                  {typeOptions.map((rt) => (
+                    <option key={rt} value={rt}>
+                      {RECORD_TYPE_ICONS[rt]} {recordTypeLabel(rt, language)}
                     </option>
                   ))}
                 </select>
@@ -346,36 +348,36 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
             )}
             {!needsTypePick && parsed.type && (
               <p className="qe-chip-line">
-                类型：
+                {t('qe.typeColon')}
                 <strong>
-                  {RECORD_TYPE_ICONS[parsed.type]} {RECORD_TYPE_LABELS[parsed.type]}
+                  {RECORD_TYPE_ICONS[parsed.type]} {recordTypeLabel(parsed.type, language)}
                 </strong>
               </p>
             )}
 
             <ul className="qe-fields small">
               {parsed.fields.date && (
-                <li>日期 {new Date(parsed.fields.date).toLocaleString('zh-CN')}</li>
+                <li>{t('qe.fieldDate', { date: new Date(parsed.fields.date).toLocaleString(isEn ? 'en' : 'zh-CN') })}</li>
               )}
-              {parsed.fields.amountDue != null && <li>应付 ¥{parsed.fields.amountDue}</li>}
-              {parsed.fields.amountPaid != null && <li>实付 ¥{parsed.fields.amountPaid}</li>}
-              {parsed.fields.discount != null && <li>优惠 ¥{parsed.fields.discount}</li>}
-              {parsed.fields.unitPrice != null && <li>单价 ¥{parsed.fields.unitPrice}/L</li>}
-              {parsed.fields.liters != null && <li>加油 {parsed.fields.liters} L</li>}
-              {parsed.fields.kWh != null && <li>充电 {parsed.fields.kWh} kWh</li>}
-              {parsed.fields.odometer != null && <li>里程 {parsed.fields.odometer}</li>}
-              {parsed.fields.fuelGrade && <li>标号 {parsed.fields.fuelGrade}</li>}
+              {parsed.fields.amountDue != null && <li>{t('qe.fieldDue', { n: parsed.fields.amountDue })}</li>}
+              {parsed.fields.amountPaid != null && <li>{t('qe.fieldPaid', { n: parsed.fields.amountPaid })}</li>}
+              {parsed.fields.discount != null && <li>{t('qe.fieldDiscount', { n: parsed.fields.discount })}</li>}
+              {parsed.fields.unitPrice != null && <li>{t('qe.fieldUnitPrice', { n: parsed.fields.unitPrice })}</li>}
+              {parsed.fields.liters != null && <li>{t('qe.fieldLiters', { n: parsed.fields.liters })}</li>}
+              {parsed.fields.kWh != null && <li>{t('qe.fieldKWh', { n: parsed.fields.kWh })}</li>}
+              {parsed.fields.odometer != null && <li>{t('qe.fieldOdo', { n: parsed.fields.odometer })}</li>}
+              {parsed.fields.fuelGrade && <li>{t('qe.fieldGrade', { grade: parsed.fields.fuelGrade })}</li>}
               {parsed.fields.stationName && (
                 <li>
-                  站点 {parsed.fields.stationName}
-                  {parsed.fields.stationId ? '（已匹配收藏）' : ''}
+                  {t('qe.fieldStation', { name: parsed.fields.stationName })}
+                  {parsed.fields.stationId ? t('qe.fieldStationMatched') : ''}
                 </li>
               )}
-              {parsed.fields.place && <li>地点 {parsed.fields.place}</li>}
-              {parsed.fields.parkingKind && <li>停车 {parsed.fields.parkingKind}</li>}
+              {parsed.fields.place && <li>{t('qe.fieldPlace', { place: parsed.fields.place })}</li>}
+              {parsed.fields.parkingKind && <li>{t('qe.fieldParking', { kind: parsed.fields.parkingKind })}</li>}
             </ul>
             {readyPreview && (
-              <p className="muted small">下一步打开表单，请确认后再保存。</p>
+              <p className="muted small">{t('qe.nextStep')}</p>
             )}
           </div>
         )}
@@ -392,6 +394,7 @@ type FabProps = {
 
 /** Fixed FAB above the tab bar (home). Does not scroll with the list. */
 export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   if (vehicles.length === 0) return null;
 
@@ -401,13 +404,13 @@ export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProp
         type="button"
         className="qe-fab"
         onClick={() => setOpen(true)}
-        aria-label="快捷记账"
-        title="文字/语音快捷记账"
+        aria-label={t('qe.title')}
+        title={t('qe.fabTitle')}
       >
         <span className="qe-fab-icon" aria-hidden>
           ✏️
         </span>
-        <span className="qe-fab-label">快捷</span>
+        <span className="qe-fab-label">{t('qe.fab')}</span>
       </button>
       <QuickEntrySheet
         open={open}

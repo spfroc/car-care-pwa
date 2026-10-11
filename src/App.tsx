@@ -6,44 +6,14 @@ import { VehicleFormPage } from './pages/VehicleFormPage';
 import { RecordFormPage } from './pages/RecordFormPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StatsPage } from './pages/StatsPage';
-import { useEffect } from 'react';
-import { useAppBootstrap, useSettings } from './hooks/useAppData';
-import { documentLangFor } from './lib/datetime';
+import { useAppBootstrap } from './hooks/useAppData';
+import { AppDataProvider } from './i18n';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { translate } from './i18n/messages';
 
-export default function App() {
-  const { ready, error, persisted } = useAppBootstrap();
-  const { settings } = useSettings();
-
-  useEffect(() => {
-    if (settings?.language) {
-      document.documentElement.lang = documentLangFor(settings.language);
-    }
-  }, [settings?.language]);
-
-  if (error) {
-    return (
-      <div className="fatal">
-        <h1>无法打开本地数据库</h1>
-        <p>{error}</p>
-        <p className="muted">请检查浏览器是否允许 IndexedDB / 是否处于隐私模式配额受限，然后刷新重试。</p>
-        <button type="button" className="btn primary" onClick={() => location.reload()}>
-          重试
-        </button>
-      </div>
-    );
-  }
-
-  if (!ready) {
-    return (
-      <div className="fatal">
-        <p>正在初始化车护助手…</p>
-      </div>
-    );
-  }
-
+function AppRoutes({ persisted }: { persisted: boolean }) {
   return (
-    <BrowserRouter basename="/car-care-pwa">
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
       <PwaInstallBanner persisted={persisted} />
       <Routes>
         <Route element={<Layout />}>
@@ -59,5 +29,36 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+  );
+}
+
+export default function App() {
+  const { ready, error, persisted } = useAppBootstrap();
+
+  if (error) {
+    return (
+      <div className="fatal">
+        <h1>{translate('zh-CN', 'app.dbFatalTitle')}</h1>
+        <p>{error}</p>
+        <p className="muted">{translate('zh-CN', 'app.dbFatalHint')}</p>
+        <button type="button" className="btn primary" onClick={() => location.reload()}>
+          {translate('zh-CN', 'app.retry')}
+        </button>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="fatal">
+        <p>{translate('zh-CN', 'app.init')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <AppDataProvider>
+      <AppRoutes persisted={persisted} />
+    </AppDataProvider>
   );
 }

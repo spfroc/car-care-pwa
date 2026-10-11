@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  base: '/car-care-pwa/',
+  base: '/',
   plugins: [
     react(),
     VitePWA({
@@ -16,7 +16,7 @@ export default defineConfig({
         'pwa-maskable-512.png',
       ],
       manifest: {
-        id: '/car-care-pwa/',
+        id: '/',
         name: '车护助手',
         short_name: '车护助手',
         description: '离线优先车辆养护账本',
@@ -24,8 +24,8 @@ export default defineConfig({
         background_color: '#f8fafc',
         display: 'standalone',
         lang: 'zh-CN',
-        start_url: '/car-care-pwa/',
-        scope: '/car-care-pwa/',
+        start_url: '/',
+        scope: '/',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

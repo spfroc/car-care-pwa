@@ -7,9 +7,9 @@ import { useSettings } from '../hooks/useAppData';
 import type { CareRecord, EconomyInterval, RecordType, Vehicle } from '../types';
 import {
   ENERGY_COLORS,
-  ENERGY_LABELS,
   RECORD_TYPE_ICONS,
   bodyIcon,
+  energyLabel,
   formatDate,
   formatMoney,
   parkingKindLabel,
@@ -37,7 +37,7 @@ import {
 /** Hover (desktop) / tap·focus (mobile) formula tip after a metric label.
  *  Bubble is portaled + position:fixed so it overlays without expanding
  *  overflow:auto parents (e.g. .mini-stats → unwanted vertical scrollbar). */
-function HelpTip({ text }: { text: string }) {
+function HelpTip({ text, ariaPrefix }: { text: string; ariaPrefix?: string }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -73,7 +73,7 @@ function HelpTip({ text }: { text: string }) {
         ref={btnRef}
         type="button"
         className="help-tip-btn"
-        aria-label={`计算方法：${text}`}
+        aria-label={ariaPrefix ? `${ariaPrefix}${text}` : text}
         aria-expanded={show}
         onClick={(e) => {
           e.stopPropagation();
@@ -158,25 +158,34 @@ function intervalLine(
   elecByEnd: Map<string, EconomyInterval>,
   fuelUnit: string,
   elecUnit: string,
+  translate: (key: 'detail.intervalFuel' | 'detail.intervalCharge', params: Record<string, string | number>) => string,
 ): string | null {
   if (r.type === 'fuel') {
     const iv = fuelByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次加油行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100, fuelUnit)} ${fuelUnit}`;
+    return translate('detail.intervalFuel', {
+      dist: dist.toFixed(0),
+      eco: formatEconomy(iv.economyPer100, fuelUnit),
+      unit: fuelUnit,
+    });
   }
   if (r.type === 'charge') {
     const iv = elecByEnd.get(r.id);
     if (!iv) return null;
     const dist = iv.toOdometer - iv.fromOdometer;
-    return `本次充电行驶里程 ${dist.toFixed(0)} km · ${formatEconomy(iv.economyPer100, elecUnit)} ${elecUnit}`;
+    return translate('detail.intervalCharge', {
+      dist: dist.toFixed(0),
+      eco: formatEconomy(iv.economyPer100, elecUnit),
+      unit: elecUnit,
+    });
   }
   return null;
 }
 
 export function VehicleDetailPage() {
   const { id } = useParams();
-  const { settings } = useSettings();
+  const { settings, t, language } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [records, setRecords] = useState<CareRecord[]>([]);
   const [filter, setFilter] = useState<'all' | RecordType>('all');
@@ -211,7 +220,7 @@ export function VehicleDetailPage() {
     [filtered],
   );
 
-  if (!vehicle || !settings) return <div className="page"><p className="muted">加载中…</p></div>;
+  if (!vehicle || !settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   const canFuel = allowsFuel(vehicle.energyType);
   const canCharge = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
@@ -235,7 +244,7 @@ export function VehicleDetailPage() {
   const chargeKWh = totalChargeKWh(records);
 
   async function onDelete(rid: string) {
-    if (!confirm('删除这条记录？')) return;
+    if (!confirm(t('detail.deleteConfirm'))) return;
     await deleteRecord(rid);
     refresh();
   }
@@ -244,10 +253,10 @@ export function VehicleDetailPage() {
     <div className="page">
       <header className="page-header">
         <Link to="/" className="btn ghost">
-          ← 首页
+          {t('common.home')}
         </Link>
         <Link to={`/vehicles/${vehicle.id}/edit`} className="btn ghost">
-          编辑
+          {t('common.edit')}
         </Link>
       </header>
 
@@ -258,82 +267,90 @@ export function VehicleDetailPage() {
             <div>
               <h1>{vehicle.name}</h1>
               <p className="muted">
-                {vehicle.plate || '无车牌'} · {ENERGY_LABELS[vehicle.energyType]}
+                {vehicle.plate || t('common.noPlate')} · {energyLabel(vehicle.energyType, language)}
               </p>
             </div>
           </div>
-          <div className="mileage-pair" title="统计里程 / 行驶里程">
-            <span className="label">统计/行驶</span>
+          <div className="mileage-pair" title={t('detail.trackedDrivingTitle')}>
+            <span className="label">{t('detail.trackedDriving')}</span>
             <strong>{formatMileagePair(mileage)}</strong>
           </div>
         </div>
         <div className="mini-stats">
           {energyCosts.showFuelSpend && (
             <div>
-              <span className="label" title="里程严格大于统计基线的加油实付（与首页展开一致）">
-                加油花费
+              <span className="label" title={t('detail.fuelSpendTitle')}>
+                {t('detail.fuelSpend')}
               </span>
               <strong>{formatMoney(energyCosts.fuelSpend, settings.currency.symbol)}</strong>
             </div>
           )}
           {energyCosts.showChargeSpend && (
             <div>
-              <span className="label" title="里程严格大于统计基线的充电实付（与首页展开一致）">
-                充电花费
+              <span className="label" title={t('detail.chargeSpendTitle')}>
+                {t('detail.chargeSpend')}
               </span>
               <strong>{formatMoney(energyCosts.chargeSpend, settings.currency.symbol)}</strong>
             </div>
           )}
           <div>
             <span className="label label-with-help">
-              每公里成本
-              <HelpTip text={energyCosts.costPerKmHint} />
+              {t('detail.costPerKm')}
+              <HelpTip
+                text={
+                  energyCosts.costPerKmHintKey === 'fuel'
+                    ? t('hint.costPerKm.fuel')
+                    : energyCosts.costPerKmHintKey === 'charge'
+                      ? t('hint.costPerKm.charge')
+                      : t('hint.costPerKm.combined')
+                }
+              />
             </span>
             <strong>
-              {perKm == null ? '—' : formatMoney(perKm, settings.currency.symbol)}
+              {perKm == null ? t('common.dash') : formatMoney(perKm, settings.currency.symbol)}
             </strong>
           </div>
           {canFuel && (
             <div>
-              <span className="label">油耗</span>
+              <span className="label">{t('card.fuelEco')}</span>
               <strong>
                 {fuelAvg == null
-                  ? '—'
+                  ? t('common.dash')
                   : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
               </strong>
             </div>
           )}
           {canCharge && (
             <div>
-              <span className="label">电耗</span>
+              <span className="label">{t('card.elecEco')}</span>
               <strong>
                 {elecAvg == null
-                  ? '—'
+                  ? t('common.dash')
                   : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
               </strong>
             </div>
           )}
           {canFuel && (
             <div>
-              <span className="label">总加油量</span>
+              <span className="label">{t('detail.totalFuel')}</span>
               <strong>
-                {fuelLiters > 0 ? `${fuelLiters.toFixed(2)} ${settings.volumeUnit}` : '—'}
+                {fuelLiters > 0 ? `${fuelLiters.toFixed(2)} ${settings.volumeUnit}` : t('common.dash')}
               </strong>
             </div>
           )}
           {canCharge && (
             <div>
-              <span className="label">总充电量</span>
+              <span className="label">{t('detail.totalCharge')}</span>
               <strong>
-                {chargeKWh > 0 ? `${chargeKWh.toFixed(2)} ${settings.energyUnit}` : '—'}
+                {chargeKWh > 0 ? `${chargeKWh.toFixed(2)} ${settings.energyUnit}` : t('common.dash')}
               </strong>
             </div>
           )}
           {(vehicle.energyType === 'PHEV' || vehicle.energyType === 'REEV') && (
             <div>
-              <span className="label">综合</span>
+              <span className="label">{t('detail.combined')}</span>
               <strong>
-                {combined == null ? '—' : `${formatEconomy(combined.economyPer100, 'L/100km')} L/100km`}
+                {combined == null ? t('common.dash') : `${formatEconomy(combined.economyPer100, 'L/100km')} L/100km`}
               </strong>
             </div>
           )}
@@ -342,14 +359,14 @@ export function VehicleDetailPage() {
 
       <div className="toolbar list-toolbar">
         <label className="filter-select-wrap">
-          <span className="sr-only">筛选类型</span>
+          <span className="sr-only">{t('detail.filterType')}</span>
           <select
             className="filter-select"
             value={filter}
             onChange={(e) => setFilter(e.target.value as 'all' | RecordType)}
-            aria-label="筛选类型"
+            aria-label={t('detail.filterType')}
           >
-            {filterLabels(settings.language)
+            {filterLabels(language)
               .filter((f) => {
                 if (f.key === 'fuel' && !canFuel) return false;
                 if (f.key === 'charge' && !canCharge) return false;
@@ -364,8 +381,8 @@ export function VehicleDetailPage() {
         </label>
         <div
           className="toolbar-filter-sum"
-          title={filter === 'all' ? '当前车辆全部记录实付合计' : '当前筛选类型实付合计'}
-          aria-label={filter === 'all' ? '全部实付合计' : '筛选实付合计'}
+          title={filter === 'all' ? t('detail.filterSumAll') : t('detail.filterSumFiltered')}
+          aria-label={filter === 'all' ? t('detail.filterSumAllAria') : t('detail.filterSumFilteredAria')}
         >
           {formatMoney(filterAmountSum, settings.currency.symbol)}
         </div>
@@ -374,7 +391,7 @@ export function VehicleDetailPage() {
             type="button"
             className="btn primary icon-btn"
             onClick={() => setShowAdd((s) => !s)}
-            aria-label="新增记录"
+            aria-label={t('detail.addRecord')}
             aria-expanded={showAdd}
           >
             <span aria-hidden="true">+</span>
@@ -382,8 +399,8 @@ export function VehicleDetailPage() {
           <Link
             to={`/stats?vehicle=${vehicle.id}`}
             className="btn ghost icon-btn"
-            aria-label="统计"
-            title="统计"
+            aria-label={t('nav.stats')}
+            title={t('nav.stats')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -402,43 +419,43 @@ export function VehicleDetailPage() {
         <div className="add-menu">
           {canFuel && (
             <Link to={`/vehicles/${vehicle.id}/records/new/fuel`} className="btn block">
-              ⛽ {recordTypeLabel('fuel', settings.language)}
+              ⛽ {recordTypeLabel('fuel', language)}
             </Link>
           )}
           {canCharge && (
             <Link to={`/vehicles/${vehicle.id}/records/new/charge`} className="btn block">
-              🔌 {recordTypeLabel('charge', settings.language)}
+              🔌 {recordTypeLabel('charge', language)}
             </Link>
           )}
           <Link to={`/vehicles/${vehicle.id}/records/new/maintenance`} className="btn block">
-            🔧 {recordTypeLabel('maintenance', settings.language)}
+            🔧 {recordTypeLabel('maintenance', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/modification`} className="btn block">
-            🛠️ {recordTypeLabel('modification', settings.language)}
+            🛠️ {recordTypeLabel('modification', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/wash`} className="btn block">
-            🧼 {recordTypeLabel('wash', settings.language)}
+            🧼 {recordTypeLabel('wash', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/goods`} className="btn block">
-            📦 {recordTypeLabel('goods', settings.language)}
+            📦 {recordTypeLabel('goods', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/ticket`} className="btn block">
-            📄 {recordTypeLabel('ticket', settings.language)}
+            📄 {recordTypeLabel('ticket', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/parking`} className="btn block">
-            🅿️ {recordTypeLabel('parking', settings.language)}
+            🅿️ {recordTypeLabel('parking', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/toll`} className="btn block">
-            🛣️ {recordTypeLabel('toll', settings.language)}
+            🛣️ {recordTypeLabel('toll', language)}
           </Link>
           <Link to={`/vehicles/${vehicle.id}/records/new/insurance`} className="btn block">
-            🛡️ {recordTypeLabel('insurance', settings.language)}
+            🛡️ {recordTypeLabel('insurance', language)}
           </Link>
         </div>
       )}
 
       <div className="timeline">
-        {filtered.length === 0 && <p className="muted">暂无记录</p>}
+        {filtered.length === 0 && <p className="muted">{t('detail.noRecords')}</p>}
         {filtered.map((r) => {
           const eco = intervalLine(
             r,
@@ -446,21 +463,22 @@ export function VehicleDetailPage() {
             elecByEnd,
             settings.fuelEconomyUnit,
             settings.electricEconomyUnit,
+            t,
           );
           return (
             <div key={r.id} className={`timeline-item ${r.type === 'ticket' && !r.paid ? 'unpaid' : ''}`}>
               <Link to={`/vehicles/${vehicle.id}/records/${r.id}`} className="ti-main">
                 <span className="ti-icon">{RECORD_TYPE_ICONS[r.type]}</span>
                 <div>
-                  <div className="ti-title">{recordTitle(r, settings.language)}</div>
+                  <div className="ti-title">{recordTitle(r, language)}</div>
                   <div className="muted small">
-                    {recordTypeLabel(r.type, settings.language)} · {formatDate(r.date, settings.dateFormat)}
+                    {recordTypeLabel(r.type, language)} · {formatDate(r.date, settings.dateFormat)}
                     {typeof r.odometer === 'number' ? ` · ${r.odometer} km` : ''}
                     {r.type === 'fuel' && r.unitPrice != null
-                      ? ` · ${(settings.language ?? '').toLowerCase().startsWith('en') ? 'Price' : '油价'} ${formatMoney(r.unitPrice, settings.currency.symbol)}/L`
+                      ? ` · ${t('detail.unitPrice')} ${formatMoney(r.unitPrice, settings.currency.symbol)}/L`
                       : ''}
-                    {r.flags?.odometerAnomaly ? ' · 里程异常' : ''}
-                    {r.type === 'fuel' && !r.filledUp ? ' · 未加满' : ''}
+                    {r.flags?.odometerAnomaly ? ` · ${t('detail.odometerAnomaly')}` : ''}
+                    {r.type === 'fuel' && !r.filledUp ? ` · ${t('detail.notFilledUp')}` : ''}
                   </div>
                   {eco && <div className="ti-eco">{eco}</div>}
                 </div>
@@ -470,8 +488,8 @@ export function VehicleDetailPage() {
                 type="button"
                 className="btn ghost danger-text icon-btn"
                 onClick={() => onDelete(r.id)}
-                aria-label="删除"
-                title="删除"
+                aria-label={t('common.delete')}
+                title={t('common.delete')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ensureDefaultSettings, getOpenError, tryPersistStorage } from '../db';
 import { listVehicles } from '../repositories/vehicles';
 import { listAllRecords, listRecordsByVehicle } from '../repositories/records';
-import { loadAppSettings, type AppSettings } from '../repositories/settings';
 import type { CareRecord, Vehicle } from '../types';
+import { useAppData } from '../i18n';
 
 export function useAppBootstrap() {
   const [ready, setReady] = useState(false);
@@ -14,9 +14,10 @@ export function useAppBootstrap() {
     (async () => {
       try {
         await ensureDefaultSettings();
-        const p = await tryPersistStorage();
-        setPersisted(p);
+        // Persist can hang in some browsers (permission prompt never resolves).
+        // Never block first paint on it.
         setReady(true);
+        void tryPersistStorage().then(setPersisted);
       } catch (e) {
         const oe = getOpenError();
         setError(
@@ -67,13 +68,8 @@ export function useRecords(vehicleId?: string) {
   return { records, refresh };
 }
 
+/** Shared settings from AppDataProvider — language changes re-render all consumers. */
 export function useSettings() {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const refresh = useCallback(async () => {
-    setSettings(await loadAppSettings());
-  }, []);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-  return { settings, refresh };
+  const { settings, refresh, saveSetting, language, t } = useAppData();
+  return { settings, refresh, saveSetting, language, t };
 }

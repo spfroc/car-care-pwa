@@ -33,7 +33,7 @@ export function RecordFormPage() {
   const qeNav = routeLocation.state as QuickEntryNavState | null;
   const quickPrefill = qeNav?.prefill;
   const learnSnapshot = qeNav?.learnSnapshot;
-  const { settings } = useSettings();
+  const { settings, t, language } = useSettings();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [type, setType] = useState<RecordType>((typeParam as RecordType) || 'fuel');
   const [date, setDate] = useState(formatDateTimeLocal(new Date().toISOString()));
@@ -235,7 +235,7 @@ export function RecordFormPage() {
       }
       setMediaIds(ids);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '图片保存失败');
+      setErr(e instanceof Error ? e.message : t('rform.errMedia'));
     }
   }
 
@@ -243,19 +243,19 @@ export function RecordFormPage() {
     e.preventDefault();
     if (!vehicleId || !vehicle) return;
     setErr('');
-    const t = nowISO();
+    const ts = nowISO();
     const existing = !isNew && recordId ? await getRecord(recordId) : undefined;
     const odoNum = odometer === '' ? undefined : Number(odometer);
     let odometerAnomaly = false;
 
     if (type === 'fuel' || type === 'charge') {
       if (odoNum == null || Number.isNaN(odoNum)) {
-        setErr('补能记录必须填写里程');
+        setErr(t('rform.errOdoRequired'));
         return;
       }
       const last = await latestOdometer(vehicleId);
       if (last != null && odoNum < last && (!existing || existing.odometer !== odoNum)) {
-        if (!confirm(`里程 ${odoNum} 小于已有最大里程 ${last}，仍要保存并标记「里程异常」？`)) return;
+        if (!confirm(t('rform.errOdoConfirm', { odo: odoNum, last }))) return;
         odometerAnomaly = true;
       }
     }
@@ -277,14 +277,14 @@ export function RecordFormPage() {
         odometerAnomaly: odometerAnomaly || anomaly,
         lowConfidenceEconomy: type === 'fuel' ? !filledUp : undefined,
       },
-      createdAt: existing?.createdAt ?? t,
-      updatedAt: t,
+      createdAt: existing?.createdAt ?? ts,
+      updatedAt: ts,
     };
 
     let rec: CareRecord;
     try {
       if (type === 'fuel') {
-        if (!liters) throw new Error('请填写加油量');
+        if (!liters) throw new Error(t('rform.errLiters'));
         const L = Number(liters);
         let up = unitPrice === '' ? undefined : Number(unitPrice);
         if (up == null && L > 0 && paidNum > 0) up = paidNum / L;
@@ -300,10 +300,10 @@ export function RecordFormPage() {
           odometer: odoNum!,
         };
       } else if (type === 'charge') {
-        if (!stationName.trim()) throw new Error('请填写充电站/地点');
-        if (!kWh) throw new Error('请填写充电量');
-        const socB = parseSocPercent(socBefore, '充电前电量');
-        const socA = parseSocPercent(socAfter, '充电后电量');
+        if (!stationName.trim()) throw new Error(t('rform.errStation'));
+        if (!kWh) throw new Error(t('rform.errKWh'));
+        const socB = parseSocPercent(socBefore, t('rform.socBeforeLabel'));
+        const socA = parseSocPercent(socAfter, t('rform.socAfterLabel'));
         assertSocOrder(socB, socA);
         rec = {
           ...common,
@@ -318,7 +318,7 @@ export function RecordFormPage() {
           odometer: odoNum!,
         };
       } else if (type === 'maintenance') {
-        if (!title.trim()) throw new Error('请填写项目名称');
+        if (!title.trim()) throw new Error(t('rform.errTitle'));
         rec = {
           ...common,
           type: 'maintenance',
@@ -329,7 +329,7 @@ export function RecordFormPage() {
           nextServiceDate: nextDate ? new Date(nextDate).toISOString() : undefined,
         };
       } else if (type === 'modification') {
-        if (!title.trim()) throw new Error('请填写项目名称');
+        if (!title.trim()) throw new Error(t('rform.errTitle'));
         rec = {
           ...common,
           type: 'modification',
@@ -345,7 +345,7 @@ export function RecordFormPage() {
           place: place || undefined,
         };
       } else if (type === 'goods') {
-        if (!goodsName.trim()) throw new Error('请填写名称');
+        if (!goodsName.trim()) throw new Error(t('rform.errGoodsName'));
         rec = {
           ...common,
           type: 'goods',
@@ -363,14 +363,14 @@ export function RecordFormPage() {
           location: location || undefined,
           points: points === '' ? undefined : Number(points),
           paid,
-          paidAt: paid && paidAt ? new Date(paidAt).toISOString() : paid ? t : undefined,
+          paidAt: paid && paidAt ? new Date(paidAt).toISOString() : paid ? ts : undefined,
         };
       } else if (type === 'parking') {
         if (parkingKind === 'fixed' && periodStart && periodEnd) {
           const ps = new Date(periodStart).getTime();
           const pe = new Date(periodEnd).getTime();
           if (!Number.isNaN(ps) && !Number.isNaN(pe) && pe < ps) {
-            throw new Error('计费周期结束不能早于开始');
+            throw new Error(t('rform.errPeriod'));
           }
         }
         rec = {
@@ -402,7 +402,7 @@ export function RecordFormPage() {
           const ps = new Date(periodStart).getTime();
           const pe = new Date(periodEnd).getTime();
           if (!Number.isNaN(ps) && !Number.isNaN(pe) && pe < ps) {
-            throw new Error('保障/计费周期结束不能早于开始');
+            throw new Error(t('rform.errCoverage'));
           }
         }
         rec = {
@@ -415,13 +415,13 @@ export function RecordFormPage() {
         };
       }
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : '校验失败');
+      setErr(ex instanceof Error ? ex.message : t('rform.errValidate'));
       return;
     }
 
     try {
       await putRecord(rec);
-      await putVehicle({ ...vehicle, updatedAt: t });
+      await putVehicle({ ...vehicle, updatedAt: ts });
       // Silent local learn from quick-entry corrections (never upload; only after user save).
       if (isNew && learnSnapshot) {
         try {
@@ -438,27 +438,27 @@ export function RecordFormPage() {
       }
       nav(`/vehicles/${vehicleId}`);
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : '保存失败');
+      setErr(ex instanceof Error ? ex.message : t('rform.errSave'));
     }
   }
 
-  if (!vehicle) return <div className="page"><p className="muted">加载中…</p></div>;
+  if (!vehicle) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   return (
     <div className="page">
       <header className="page-header">
         <Link to={`/vehicles/${vehicleId}`} className="btn ghost">
-          ← 返回
+          {t('common.back')}
         </Link>
         <h1>
-          {isNew ? '新增' : '编辑'}
-          {recordTypeLabel(type, settings?.language)}
+          {isNew ? t('rform.new') : t('rform.edit')}
+          {recordTypeLabel(type, language)}
         </h1>
       </header>
 
       <form className="form" onSubmit={onSubmit}>
         <label>
-          日期时间 *
+          {t('rform.datetime')}
           <DateTimeField
             mode="datetime"
             value={date}
@@ -466,16 +466,16 @@ export function RecordFormPage() {
             required
             dateFormat={settings?.dateFormat}
             timeFormat={settings?.timeFormat}
-            language={settings?.language}
+            language={language}
           />
         </label>
 
         {(type === 'fuel' || type === 'charge' || type === 'maintenance' || type === 'modification' || type === 'wash') && (
           <label>
-            当前里程 / 行驶里程 (km){type === 'fuel' || type === 'charge' ? ' *' : ''}
+            {t('rform.odometer')}{type === 'fuel' || type === 'charge' ? ' *' : ''}
             <input type="number" value={odometer} onChange={(e) => setOdometer(e.target.value)} required={type === 'fuel' || type === 'charge'} />
             {(type === 'fuel' || type === 'charge') && (
-              <span className="field-hint">保存后详情卡「行驶里程」取各记录中的最大里程。</span>
+              <span className="field-hint">{t('rform.odometerHint')}</span>
             )}
           </label>
         )}
@@ -483,7 +483,7 @@ export function RecordFormPage() {
         {type === 'fuel' && (
           <>
             <label>
-              收藏加油站
+              {t('rform.favGas')}
               <select
                 value={stationId}
                 onChange={(e) => {
@@ -496,7 +496,7 @@ export function RecordFormPage() {
                   }
                 }}
               >
-                <option value="">手动输入</option>
+                <option value="">{t('common.manualInput')}</option>
                 {gasStations.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -505,11 +505,11 @@ export function RecordFormPage() {
               </select>
             </label>
             <label>
-              加油站
+              {t('rform.station')}
               <input value={stationName} onChange={(e) => setStationName(e.target.value)} />
             </label>
             <label>
-              燃油标号 *
+              {t('rform.fuelGrade')}
               <select value={fuelGrade} onChange={(e) => setFuelGrade(e.target.value)}>
                 {grades.map((g) => (
                   <option key={g} value={g}>
@@ -519,16 +519,16 @@ export function RecordFormPage() {
               </select>
             </label>
             <label>
-              加油量 (L) *
+              {t('rform.liters')}
               <input type="number" step="0.01" value={liters} onChange={(e) => setLiters(e.target.value)} required />
             </label>
             <label>
-              单价 (元/L)
+              {t('rform.unitPrice')}
               <input type="number" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
             </label>
             <label className="row-check">
               <input type="checkbox" checked={filledUp} onChange={(e) => setFilledUp(e.target.checked)} />
-              是否加满
+              {t('rform.filledUp')}
             </label>
           </>
         )}
@@ -536,7 +536,7 @@ export function RecordFormPage() {
         {type === 'charge' && (
           <>
             <label>
-              收藏充电站
+              {t('rform.favCharge')}
               <select
                 value={stationId}
                 onChange={(e) => {
@@ -549,34 +549,34 @@ export function RecordFormPage() {
                   }
                 }}
               >
-                <option value="">手动输入</option>
+                <option value="">{t('common.manualInput')}</option>
                 {chargeStations.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
-                    {s.isHome ? '（家充）' : ''}
+                    {s.isHome ? t('rform.homeChargeParen') : ''}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              充电站/地点 *
+              {t('rform.chargeStation')}
               <input value={stationName} onChange={(e) => setStationName(e.target.value)} required />
             </label>
             <label>
-              站类型 *
+              {t('rform.stationKind')}
               <select value={stationKind} onChange={(e) => setStationKind(e.target.value as ChargeStationKind)}>
-                <option value="public">公共站</option>
-                <option value="home">家充</option>
-                <option value="destination">目的地桩</option>
-                <option value="other">其他</option>
+                <option value="public">{t('rform.kindPublic')}</option>
+                <option value="home">{t('rform.kindHome')}</option>
+                <option value="destination">{t('rform.kindDest')}</option>
+                <option value="other">{t('rform.kindOther')}</option>
               </select>
             </label>
             <label>
-              充电量 (kWh) *
+              {t('rform.kWh')}
               <input type="number" step="0.01" value={kWh} onChange={(e) => setKWh(e.target.value)} required />
             </label>
             <label>
-              充电前电量 (%)
+              {t('rform.socBefore')}
               <input
                 type="number"
                 min={0}
@@ -588,7 +588,7 @@ export function RecordFormPage() {
               />
             </label>
             <label>
-              充电后电量 (%)
+              {t('rform.socAfter')}
               <input
                 type="number"
                 min={0}
@@ -600,7 +600,7 @@ export function RecordFormPage() {
               />
             </label>
             <label>
-              充电时长 (分钟)
+              {t('rform.chargeDuration')}
               <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
             </label>
           </>
@@ -609,61 +609,61 @@ export function RecordFormPage() {
         {type === 'maintenance' && (
           <>
             <label>
-              类别
+              {t('rform.category')}
               <select value={category} onChange={(e) => setCategory(e.target.value as MaintenanceCategory)}>
-                <option value="service">保养</option>
-                <option value="repair">维修</option>
-                <option value="beauty">美容</option>
-                <option value="tire">轮胎</option>
-                <option value="other">其他</option>
+                <option value="service">{t('rform.maintService')}</option>
+                <option value="repair">{t('rform.maintRepair')}</option>
+                <option value="beauty">{t('rform.maintBeauty')}</option>
+                <option value="tire">{t('rform.maintTire')}</option>
+                <option value="other">{t('common.other')}</option>
               </select>
             </label>
             <label>
-              项目名称 *
+              {t('rform.title')}
               <input value={title} onChange={(e) => setTitle(e.target.value)} required />
             </label>
             <label>
-              服务商
+              {t('rform.vendor')}
               <input value={vendor} onChange={(e) => setVendor(e.target.value)} />
             </label>
             <label>
-              下次保养里程
+              {t('rform.nextOdo')}
               <input type="number" value={nextOdo} onChange={(e) => setNextOdo(e.target.value)} />
             </label>
             <label>
-              下次保养日期
+              {t('rform.nextDate')}
               <DateTimeField
                 mode="date"
                 value={nextDate}
                 onChange={setNextDate}
                 dateFormat={settings?.dateFormat}
                 timeFormat={settings?.timeFormat}
-                language={settings?.language}
+                language={language}
               />
             </label>
-            <p className="muted small">下次保养仅存储，不产生提醒</p>
+            <p className="muted small">{t('rform.nextHint')}</p>
           </>
         )}
 
         {type === 'modification' && (
           <>
             <label>
-              部位
+              {t('rform.modArea')}
               <select value={area} onChange={(e) => setArea(e.target.value as ModArea)}>
-                <option value="exterior">外观</option>
-                <option value="interior">内饰</option>
-                <option value="power">动力</option>
-                <option value="chassis">底盘</option>
-                <option value="electronics">电子</option>
-                <option value="other">其他</option>
+                <option value="exterior">{t('rform.areaExterior')}</option>
+                <option value="interior">{t('rform.areaInterior')}</option>
+                <option value="power">{t('rform.areaPower')}</option>
+                <option value="chassis">{t('rform.areaChassis')}</option>
+                <option value="electronics">{t('rform.areaElectronics')}</option>
+                <option value="other">{t('common.other')}</option>
               </select>
             </label>
             <label>
-              项目名称 *
+              {t('rform.title')}
               <input value={title} onChange={(e) => setTitle(e.target.value)} required />
             </label>
             <label>
-              品牌/规格
+              {t('rform.brandSpec')}
               <input value={brandSpec} onChange={(e) => setBrandSpec(e.target.value)} />
             </label>
           </>
@@ -672,17 +672,17 @@ export function RecordFormPage() {
         {type === 'wash' && (
           <>
             <label>
-              类型
+              {t('rform.washKind')}
               <select value={washKind} onChange={(e) => setWashKind(e.target.value as WashKind)}>
-                <option value="basic">普洗</option>
-                <option value="detail">精洗</option>
-                <option value="coating">镀膜</option>
-                <option value="interior">内饰清洁</option>
-                <option value="other">其他</option>
+                <option value="basic">{t('rform.washBasic')}</option>
+                <option value="detail">{t('rform.washDetail')}</option>
+                <option value="coating">{t('rform.washCoating')}</option>
+                <option value="interior">{t('rform.washInterior')}</option>
+                <option value="other">{t('common.other')}</option>
               </select>
             </label>
             <label>
-              地点
+              {t('rform.place')}
               <input value={place} onChange={(e) => setPlace(e.target.value)} />
             </label>
           </>
@@ -691,29 +691,29 @@ export function RecordFormPage() {
         {type === 'goods' && (
           <>
             <label>
-              名称 *
+              {t('rform.goodsName')}
               <input value={goodsName} onChange={(e) => setGoodsName(e.target.value)} required />
             </label>
             <label>
-              类别
+              {t('rform.category')}
               <select value={goodsCat} onChange={(e) => setGoodsCat(e.target.value as GoodsCategory)}>
-                <option value="oil">机油</option>
-                <option value="filter">滤芯</option>
-                <option value="tire">轮胎</option>
-                <option value="electronics">电子</option>
-                <option value="other">其他</option>
+                <option value="oil">{t('rform.goodsOil')}</option>
+                <option value="filter">{t('rform.goodsFilter')}</option>
+                <option value="tire">{t('rform.goodsTire')}</option>
+                <option value="electronics">{t('rform.goodsElectronics')}</option>
+                <option value="other">{t('common.other')}</option>
               </select>
             </label>
             <label>
-              数量
+              {t('rform.qty')}
               <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
             </label>
             <label>
-              单价
+              {t('rform.goodsUnitPrice')}
               <input type="number" step="0.01" value={goodsUnit} onChange={(e) => setGoodsUnit(e.target.value)} />
             </label>
             <label>
-              购买渠道
+              {t('rform.channel')}
               <input value={channel} onChange={(e) => setChannel(e.target.value)} />
             </label>
           </>
@@ -722,85 +722,81 @@ export function RecordFormPage() {
         {type === 'ticket' && (
           <>
             <label>
-              违章类型
+              {t('rform.violation')}
               <input value={violation} onChange={(e) => setViolation(e.target.value)} />
             </label>
             <label>
-              地点
+              {t('rform.place')}
               <input value={location} onChange={(e) => setLocation(e.target.value)} />
             </label>
             <label>
-              扣分
+              {t('rform.points')}
               <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} />
             </label>
             <label className="row-check">
               <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} />
-              已缴费
+              {t('rform.paid')}
             </label>
             {paid && (
               <label>
-                缴费日期
+                {t('rform.paidAt')}
                 <DateTimeField
                   mode="date"
                   value={paidAt}
                   onChange={setPaidAt}
                   dateFormat={settings?.dateFormat}
                   timeFormat={settings?.timeFormat}
-                  language={settings?.language}
+                  language={language}
                 />
               </label>
             )}
-            <p className="muted small">仅记录单笔金额与扣分，不做驾驶证周期统计</p>
+            <p className="muted small">{t('rform.ticketHint')}</p>
           </>
         )}
 
         {type === 'parking' && (
           <>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Parking type' : '停车类型'} *
+              {t('rform.parkingKind')}
               <select value={parkingKind} onChange={(e) => setParkingKind(e.target.value as ParkingKind)}>
-                <option value="fixed">{parkingKindLabel('fixed', settings?.language)}</option>
-                <option value="temporary">{parkingKindLabel('temporary', settings?.language)}</option>
+                <option value="fixed">{parkingKindLabel('fixed', language)}</option>
+                <option value="temporary">{parkingKindLabel('temporary', language)}</option>
               </select>
             </label>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Place / lot' : '停车场/地点'}
-              <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. community lot' : '如：小区车库 / 商场'} />
+              {t('rform.parkingPlace')}
+              <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder={t('rform.parkingPlacePh')} />
             </label>
             {parkingKind === 'fixed' && (
               <>
                 <label>
-                  {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Period start' : '计费周期开始'}
+                  {t('rform.periodStart')}
                   <DateTimeField
                     mode="date"
                     value={periodStart}
                     onChange={setPeriodStart}
                     dateFormat={settings?.dateFormat}
                     timeFormat={settings?.timeFormat}
-                    language={settings?.language}
+                    language={language}
                   />
                 </label>
                 <label>
-                  {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Period end' : '计费周期结束'}
+                  {t('rform.periodEnd')}
                   <DateTimeField
                     mode="date"
                     value={periodEnd}
                     onChange={setPeriodEnd}
                     dateFormat={settings?.dateFormat}
                     timeFormat={settings?.timeFormat}
-                    language={settings?.language}
+                    language={language}
                   />
                 </label>
-                <p className="muted small">
-                  {(settings?.language ?? '').toLowerCase().startsWith('en')
-                    ? 'Date above is the payment date; period is the billing window (e.g. month).'
-                    : '上方日期为缴费日期；周期为月租等计费区间。'}
-                </p>
+                <p className="muted small">{t('rform.parkingFixedHint')}</p>
               </>
             )}
             {parkingKind === 'temporary' && (
               <label>
-                {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Duration (minutes)' : '停车时长 (分钟)'}
+                {t('rform.durationMin')}
                 <input type="number" value={parkDuration} onChange={(e) => setParkDuration(e.target.value)} />
               </label>
             )}
@@ -809,55 +805,51 @@ export function RecordFormPage() {
 
         {type === 'toll' && (
           <label>
-            {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Route / entry→exit' : '路线 / 入口→出口'}
-            <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. Shanghai → Hangzhou' : '如：上海→杭州 / G92'} />
+            {t('rform.route')}
+            <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder={t('rform.routePh')} />
           </label>
         )}
 
         {type === 'insurance' && (
           <>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Insurer' : '保险公司'}
-              <input value={insurer} onChange={(e) => setInsurer(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. PICC' : '如：人保 / 平安'} />
+              {t('rform.insurer')}
+              <input value={insurer} onChange={(e) => setInsurer(e.target.value)} placeholder={t('rform.insurerPh')} />
             </label>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Policy / product' : '险种/保单'}
-              <input value={policyName} onChange={(e) => setPolicyName(e.target.value)} placeholder={(settings?.language ?? '').toLowerCase().startsWith('en') ? 'e.g. compulsory + commercial' : '如：交强险+商业险'} />
+              {t('rform.policy')}
+              <input value={policyName} onChange={(e) => setPolicyName(e.target.value)} placeholder={t('rform.policyPh')} />
             </label>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Coverage start' : '保障/计费开始'}
+              {t('rform.coverageStart')}
               <DateTimeField
                 mode="date"
                 value={periodStart}
                 onChange={setPeriodStart}
                 dateFormat={settings?.dateFormat}
                 timeFormat={settings?.timeFormat}
-                language={settings?.language}
+                language={language}
               />
             </label>
             <label>
-              {(settings?.language ?? '').toLowerCase().startsWith('en') ? 'Coverage end' : '保障/计费结束'}
+              {t('rform.coverageEnd')}
               <DateTimeField
                 mode="date"
                 value={periodEnd}
                 onChange={setPeriodEnd}
                 dateFormat={settings?.dateFormat}
                 timeFormat={settings?.timeFormat}
-                language={settings?.language}
+                language={language}
               />
             </label>
-            <p className="muted small">
-              {(settings?.language ?? '').toLowerCase().startsWith('en')
-                ? 'Date above is the payment date; period is the coverage window.'
-                : '上方日期为缴费日期；周期为保单保障区间。'}
-            </p>
+            <p className="muted small">{t('rform.insuranceHint')}</p>
           </>
         )}
 
         {type !== 'ticket' && (
           <>
             <label>
-              应付金额
+              {t('rform.amountDue')}
               <input
                 type="number"
                 step="0.01"
@@ -869,7 +861,7 @@ export function RecordFormPage() {
               />
             </label>
             <label>
-              实付金额 *
+              {t('rform.amountPaid')}
               <input
                 type="number"
                 step="0.01"
@@ -882,7 +874,7 @@ export function RecordFormPage() {
               />
             </label>
             <label>
-              优惠金额
+              {t('rform.discount')}
               <input type="number" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} />
             </label>
           </>
@@ -890,25 +882,25 @@ export function RecordFormPage() {
 
         {type === 'ticket' && (
           <label>
-            罚款金额 *
+            {t('rform.fine')}
             <input type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} required />
           </label>
         )}
 
         <label>
-          备注
+          {t('rform.note')}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
         </label>
 
         <label>
-          图片附件
+          {t('rform.media')}
           <input type="file" accept="image/*" multiple onChange={(e) => onPickImages(e.target.files)} />
         </label>
-        {mediaIds.length > 0 && <p className="muted small">已附 {mediaIds.length} 张图（已压缩 JPEG）</p>}
+        {mediaIds.length > 0 && <p className="muted small">{t('rform.mediaCount', { n: mediaIds.length })}</p>}
 
         {err && <p className="error">{err}</p>}
         <button type="submit" className="btn primary block">
-          保存
+          {t('common.save')}
         </button>
       </form>
     </div>
