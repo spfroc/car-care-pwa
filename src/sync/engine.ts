@@ -28,7 +28,13 @@ import {
   removeOutboxItems,
   removeStaleConflictOps,
 } from './outbox';
-import { hasActiveForeignLease, withSyncLock } from './tabLock';
+import {
+  hasActiveLease,
+  hasFreshHeartbeat,
+  isWebSyncLockHeld,
+  SyncLeaseLostError,
+  withSyncLock,
+} from './tabLock';
 import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
@@ -70,12 +76,16 @@ export type SyncActionResult = {
 
 /**
  * M3-B: if a previous tab crashed mid-sync, status may stick on `syncing`.
- * Clear when no foreign lease is active (this tab is not syncing either).
+ * Must NOT infer idle from IDB lease alone — also check Web Locks + heartbeat
+ * so Tab B opening settings while Tab A syncs (Web Locks) does not clear status.
  */
 export async function recoverStaleSyncingStatus(): Promise<boolean> {
   const meta = await getSyncMeta();
   if (meta.status !== 'syncing') return false;
-  if (await hasActiveForeignLease()) return false;
+  // Live signals that another (or this) tab is still syncing:
+  if (await isWebSyncLockHeld()) return false;
+  if (await hasActiveLease()) return false;
+  if (await hasFreshHeartbeat()) return false;
   await patchSyncMeta({
     status: 'idle',
     lastError: '检测到上次同步异常中断（可能关页/崩溃）；队列仍保留，可重新同步。',
@@ -88,16 +98,24 @@ async function runExclusiveSync(
   fn: () => Promise<SyncActionResult>,
 ): Promise<SyncActionResult> {
   await recoverStaleSyncingStatus();
-  const locked = await withSyncLock(fn);
-  if (!locked.ok) {
-    return { ok: false, message: locked.message, lockBusy: true };
+  try {
+    const locked = await withSyncLock(fn);
+    if (!locked.ok) {
+      return { ok: false, message: locked.message, lockBusy: true };
+    }
+    const result = locked.value;
+    // Progressive BG Sync hint only — does not guarantee delivery when page closed
+    if (!result.ok || result.message.includes('离线')) {
+      void registerBackgroundOutboxSync();
+    }
+    return result;
+  } catch (e) {
+    if (e instanceof SyncLeaseLostError) {
+      await patchSyncMeta({ status: 'error', lastError: e.message });
+      return { ok: false, message: e.message };
+    }
+    throw e;
   }
-  const result = locked.value;
-  // Progressive BG Sync: if we finished offline-ish or failed push, ask SW to retry later
-  if (!result.ok || result.message.includes('离线')) {
-    void registerBackgroundOutboxSync();
-  }
-  return result;
 }
 
 let providerOverride: CloudProvider | null = null;

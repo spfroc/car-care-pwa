@@ -23,6 +23,8 @@
 4. 回网 + BG Sync 触发 → client 收消息 → 带锁同步。  
 5. 若无 client：下次打开 App / `online` 事件再同步。
 
+**关页后不保证自动上行**：若没有任何受控 window client，BG Sync 触发也只会空转；数据仍在 IndexedDB outbox，用户下次打开 App 手动同步或启动康复即可。
+
 ## 安全
 
 - SW 不持有 service_role；不新增云凭证通道。  

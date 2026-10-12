@@ -2,7 +2,8 @@
 
 > **用户选择**：C（本项）  
 > **状态**：设计 + 实现（feature 分支，**不合并 / 不部署**）  
-> **硬约束**：IndexedDB local-first；不改正式 Supabase；不动 Notion；不破坏 M2/M3-A 数据与 schema。
+> **硬约束**：IndexedDB local-first；不改正式 Supabase；不动 Notion；不破坏 M2/M3-A 数据与 schema。  
+> **Round-1 整改**：见 `docs/m3b-remediation-round1.md`（原子 IDB lease、生命周期 BG Sync、Web Locks 兼容的 stale 康复）。
 
 ## 1. 目标
 
@@ -50,7 +51,7 @@ withSyncLock(fn):
 | 支持检测 | `'serviceWorker' in navigator` && `'sync' in ServiceWorkerRegistration.prototype` |
 | 注册时机 | 离线检测到 / push 整批失败 / 用户关页前有 pending outbox |
 | SW | `public/bg-sync-sw-addon.js` + vite `workbox.importScripts`；`sync` 事件只 **postMessage 给已打开的 clients** |
-| 客户端 | 收消息 → `withSyncLock(bidirectionalSync)` |
+| 客户端 | App 生命周期 `installSyncLifecycle` → 消息调用 **已加锁** `bidirectionalSync`（不双锁） |
 | 无支持 / 无打开页 | **无操作**；outbox 仍在 IDB，下次打开手动或 online 事件触发 |
 
 详见 `docs/m3b-background-sync-feasibility.md`。
@@ -60,7 +61,7 @@ withSyncLock(fn):
 | 场景 | 行为 |
 |------|------|
 | 断网 | 已有：`navigator.onLine` → `offline`，队列保留 |
-| 关页 / 崩溃 | IDB outbox 保留；启动时 `recoverStaleSyncingStatus()`：若 `syncing` 且无本页锁 → 置 `idle`/`error`+说明 |
+| 关页 / 崩溃 | IDB outbox 保留；`recoverStaleSyncingStatus()`：仅当 **无 Web Lock、无未过期 lease、无新鲜 heartbeat** 时才置 idle |
 | 重启后再开 | online 或设置页同步；可选 BG Sync 唤醒 |
 | 并发双标签 | Web Lock / lease：第二者 `busy` |
 | 部分失败 | 已有：applied 删、剩余 `markOutboxFailure`；不改 |
@@ -83,6 +84,11 @@ withSyncLock(fn):
 | T8 | BG Sync API 缺失 | register 返回 unsupported，不抛 | unit |
 | T9 | BG Sync message | 触发带锁 sync（mock） | unit |
 | T10 | 离线 bidirectionalSync | offline 文案，outbox 保留 | 已有 |
+| T11 | 双 SyncLockSession 并发 acquire | 仅一胜 | unit |
+| T12 | TTL 接管后旧 release | skipped，新 lease 仍在 | unit |
+| T13 | Tab A heartbeat + Tab B recover | 不清 syncing | unit |
+| T14 | Web Locks held + Tab B recover | 不清 syncing | unit |
+| T15 | BG message → bidirectionalSync | 调用 1 次 | lifecycle test |
 
 ## 5. 风险
 
