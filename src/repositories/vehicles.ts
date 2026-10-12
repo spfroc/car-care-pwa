@@ -1,5 +1,6 @@
 import { getDB } from '../db';
 import type { Vehicle } from '../types';
+import { enqueueSyncOp } from '../sync/outbox';
 
 export async function listVehicles(): Promise<Vehicle[]> {
   const db = await getDB();
@@ -13,6 +14,13 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 
 export async function putVehicle(v: Vehicle): Promise<void> {
   await (await getDB()).put('vehicles', v);
+  await enqueueSyncOp({
+    entity: 'vehicles',
+    entityId: v.id,
+    op: 'upsert',
+    payload: v,
+    mutatedAt: v.updatedAt,
+  });
 }
 
 /**
@@ -55,4 +63,12 @@ export async function deleteVehicle(id: string): Promise<void> {
   }
   await tx.objectStore('vehicles').delete(id);
   await tx.done;
+  const mutatedAt = new Date().toISOString();
+  await enqueueSyncOp({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt });
+  for (const r of rows) {
+    await enqueueSyncOp({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt });
+  }
+  for (const mid of mediaToDelete) {
+    await enqueueSyncOp({ entity: 'media', entityId: mid, op: 'delete', mutatedAt });
+  }
 }

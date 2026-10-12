@@ -1,5 +1,6 @@
 import { getDB } from '../db';
 import type { Station, StationType } from '../types';
+import { enqueueSyncOp } from '../sync/outbox';
 
 export async function listStations(type?: StationType): Promise<Station[]> {
   const db = await getDB();
@@ -11,6 +12,13 @@ export async function listStations(type?: StationType): Promise<Station[]> {
 
 export async function putStation(s: Station): Promise<void> {
   await (await getDB()).put('stations', s);
+  await enqueueSyncOp({
+    entity: 'stations',
+    entityId: s.id,
+    op: 'upsert',
+    payload: s,
+    mutatedAt: s.updatedAt,
+  });
 }
 
 export async function deleteStation(id: string): Promise<void> {
@@ -25,6 +33,12 @@ export async function deleteStation(id: string): Promise<void> {
   }
   await tx.objectStore('stations').delete(id);
   await tx.done;
+  await enqueueSyncOp({
+    entity: 'stations',
+    entityId: id,
+    op: 'delete',
+    mutatedAt: new Date().toISOString(),
+  });
 }
 
 export async function getStation(id: string): Promise<Station | undefined> {

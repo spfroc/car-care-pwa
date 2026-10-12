@@ -1,5 +1,6 @@
 import { getDB } from '../db';
 import type { CareRecord, RecordType } from '../types';
+import { enqueueSyncOp } from '../sync/outbox';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -26,6 +27,13 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 
 export async function putRecord(r: CareRecord): Promise<void> {
   await (await getDB()).put('records', r);
+  await enqueueSyncOp({
+    entity: 'records',
+    entityId: r.id,
+    op: 'upsert',
+    payload: r,
+    mutatedAt: r.updatedAt,
+  });
 }
 
 /**
@@ -77,6 +85,13 @@ export async function deleteRecord(id: string): Promise<void> {
   }
   await tx.objectStore('records').delete(id);
   await tx.done;
+  const mutatedAt = new Date().toISOString();
+  await enqueueSyncOp({ entity: 'records', entityId: id, op: 'delete', mutatedAt });
+  for (const mid of mediaIds) {
+    if (!stillReferenced.has(mid)) {
+      await enqueueSyncOp({ entity: 'media', entityId: mid, op: 'delete', mutatedAt });
+    }
+  }
 }
 
 /**

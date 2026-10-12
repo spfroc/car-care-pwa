@@ -1,6 +1,6 @@
 # 自有云同步架构（设计稿）
 
-> **状态**：设计文档 only。当前代码库 **无** Notion / Supabase / 其它云同步实现（2026-10 审计确认）。  
+> **状态**：设计协议仍有效。**实施计划与本里程碑进度**见 `docs/m2-user-owned-data-storage-plan.md`（Supabase BYO + 设置 UI；Notion 仍为可行性 stub）。  
 > **约束**：local-first；本文不接通生产、不迁移真实用户数据、不部署。
 
 ## 1. 审计结论

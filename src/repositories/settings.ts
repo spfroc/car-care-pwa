@@ -1,6 +1,7 @@
 import { getDB } from '../db';
 import { OCR_DEFAULTS, nowISO } from '../lib/constants';
 import type { SettingRow } from '../types';
+import { enqueueSyncOp } from '../sync/outbox';
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
   const row = await (await getDB()).get('settings', key);
@@ -10,6 +11,16 @@ export async function getSetting<T = unknown>(key: string): Promise<T | undefine
 export async function setSetting(key: string, value: unknown): Promise<void> {
   const row: SettingRow = { key, value, updatedAt: nowISO() };
   await (await getDB()).put('settings', row);
+  // Never sync cloud credentials into the cloud echo loop
+  if (key !== 'cloudStorage') {
+    await enqueueSyncOp({
+      entity: 'settings',
+      entityId: key,
+      op: 'upsert',
+      payload: row,
+      mutatedAt: row.updatedAt,
+    });
+  }
 }
 
 export async function getAllSettings(): Promise<SettingRow[]> {

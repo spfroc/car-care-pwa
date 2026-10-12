@@ -2,6 +2,7 @@ import { getDB, isQuotaError } from '../db';
 import type { Media } from '../types';
 import { compressImage } from '../lib/image';
 import { nowISO, uid } from '../lib/constants';
+import { enqueueSyncOp } from '../sync/outbox';
 
 export async function putMediaFromFile(file: File): Promise<Media> {
   try {
@@ -16,6 +17,13 @@ export async function putMediaFromFile(file: File): Promise<Media> {
       createdAt: nowISO(),
     };
     await (await getDB()).put('media', media);
+    // Payload enriched at flush time (blob → base64)
+    await enqueueSyncOp({
+      entity: 'media',
+      entityId: media.id,
+      op: 'upsert',
+      mutatedAt: media.createdAt,
+    });
     return media;
   } catch (e) {
     if (isQuotaError(e)) throw new Error('存储空间不足，无法保存图片。请导出备份或删除旧图片后重试。');
@@ -29,6 +37,12 @@ export async function getMedia(id: string): Promise<Media | undefined> {
 
 export async function deleteMedia(id: string): Promise<void> {
   await (await getDB()).delete('media', id);
+  await enqueueSyncOp({
+    entity: 'media',
+    entityId: id,
+    op: 'delete',
+    mutatedAt: nowISO(),
+  });
 }
 
 export async function listAllMedia(): Promise<Media[]> {

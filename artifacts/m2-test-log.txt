@@ -1,0 +1,13 @@
+
+> car-care-pwa@0.0.0 test
+> vitest run
+
+
+ RUN  v5.0.3 /workspace/car-care-pwa/app
+
+
+ Test Files  17 passed (17)
+      Tests  169 passed (169)
+   Start at  09:40:08
+   Duration  799ms (transform 59%, import 24%, tests 13%, worker 4%)
+
