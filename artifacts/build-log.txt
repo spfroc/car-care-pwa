@@ -8,16 +8,16 @@ transforming...
 rendering chunks...
 computing gzip size...
 dist/manifest.webmanifest                          0.47 kB
-dist/index.html                                    0.92 kB │ gzip:   0.48 kB
+dist/index.html                                    0.92 kB │ gzip:   0.47 kB
 dist/assets/index-DUfOadJ-.css                    16.08 kB │ gzip:   3.90 kB
 dist/assets/workbox-window.prod.es5-Bd17z0YL.js    5.65 kB │ gzip:   2.20 kB
-dist/assets/index-BLZy7T_X.js                    422.39 kB │ gzip: 129.84 kB
+dist/assets/index-D8jUXj0h.js                    424.63 kB │ gzip: 130.62 kB
 
-✓ built in 466ms
+✓ built in 414ms
 
 PWA v2.0.0
 mode      generateSW
-precache  16 entries (451.12 KiB)
+precache  16 entries (453.31 KiB)
 files generated
   dist/sw.js
   dist/workbox-9c191d2f.js

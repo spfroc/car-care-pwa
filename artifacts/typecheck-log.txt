@@ -1,1 +1,1 @@
-typecheck: ok (tsc -b exit 0, no diagnostics)
+typecheck: ok (tsc -b exit 0)

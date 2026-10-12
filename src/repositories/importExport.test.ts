@@ -1,17 +1,18 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { closeDBForTests, getDB } from '../db';
-import { importData } from './importExport';
+import { importData, setImportWriteHookForTests } from './importExport';
 import { nowISO } from '../lib/constants';
 
-function vehicle(id = 'v-exist') {
+function vehicle(id = 'v-exist', overrides: Record<string, unknown> = {}) {
   return {
     id,
     name: 'Existing',
     energyType: 'ICE' as const,
     bodyType: 'SEDAN' as const,
-    createdAt: nowISO(),
-    updatedAt: nowISO(),
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    ...overrides,
   };
 }
 
@@ -48,15 +49,30 @@ function exportPayload(overrides: Record<string, unknown> = {}) {
 
 async function seedExisting() {
   const db = await getDB();
-  await db.put('vehicles', vehicle('v-exist'));
+  const v = vehicle('v-exist', {
+    name: 'Local Name',
+    plate: '沪A·LOCAL',
+    note: 'local-only-attr',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+  });
+  await db.put('vehicles', v);
   await db.put('records', fuel('r-exist', 'v-exist', 1000));
   await db.put('settings', { key: 'language', value: 'zh-CN', updatedAt: nowISO() });
+  await db.put('settings', { key: 'currency', value: { code: 'CNY', symbol: '¥' }, updatedAt: nowISO() });
+  const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' });
+  await db.put('media', {
+    id: 'm-exist',
+    mimeType: 'image/jpeg',
+    byteSize: 3,
+    blob,
+    createdAt: nowISO(),
+  });
 }
 
 describe('importData atomicity & validation', () => {
   beforeEach(async () => {
+    setImportWriteHookForTests(null);
     await closeDBForTests();
-    // Wipe fake IDB between tests
     await new Promise<void>((resolve, reject) => {
       const req = indexedDB.deleteDatabase('car-care-db');
       req.onsuccess = () => resolve();
@@ -66,6 +82,7 @@ describe('importData atomicity & validation', () => {
   });
 
   afterEach(async () => {
+    setImportWriteHookForTests(null);
     await closeDBForTests();
   });
 
@@ -81,7 +98,7 @@ describe('importData atomicity & validation', () => {
   it('rejects invalid structure without clearing on replace', async () => {
     await seedExisting();
     const bad = exportPayload({
-      vehicles: [{ id: 'x', name: 'no-energy' }], // missing energyType/bodyType/dates
+      vehicles: [{ id: 'x', name: 'no-energy' }],
     });
     const r = await importData(JSON.stringify(bad), 'replace');
     expect(r.ok).toBe(false);
@@ -112,6 +129,31 @@ describe('importData atomicity & validation', () => {
     expect(await db.get('records', 'r-import')).toBeTruthy();
   });
 
+  it('merge same-id vehicle skips put (keeps local attrs)', async () => {
+    await seedExisting();
+    const incoming = exportPayload({
+      vehicles: [
+        vehicle('v-exist', {
+          name: 'Imported Overwrite Attempt',
+          plate: '京B·IMPORT',
+          note: 'should-not-apply',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        }),
+        vehicle('v-new', { name: 'Brand New' }),
+      ],
+      records: [fuel('r-new', 'v-new', 500)],
+    });
+    const r = await importData(JSON.stringify(incoming), 'merge');
+    expect(r.ok).toBe(true);
+    const db = await getDB();
+    const local = await db.get('vehicles', 'v-exist');
+    expect(local?.name).toBe('Local Name');
+    expect(local?.plate).toBe('沪A·LOCAL');
+    expect(local?.note).toBe('local-only-attr');
+    expect(local?.updatedAt).toBe('2026-09-01T00:00:00.000Z');
+    expect(await db.get('vehicles', 'v-new')).toBeTruthy();
+  });
+
   it('accepts legacy schema 1 payload (no learning)', async () => {
     await seedExisting();
     const payload = exportPayload({ appSchemaVersion: 1 });
@@ -120,14 +162,8 @@ describe('importData atomicity & validation', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('cover-import failure mid-transaction does not leave empty DB', async () => {
+  it('rejects corrupt media by default (no DB mutation on cover-import)', async () => {
     await seedExisting();
-    // Valid structure but put a vehicle with a non-cloneable value that IDB rejects:
-    // use a function in a setting value after validation... validation allows unknown values.
-    // Instead: spy by importing valid data then simulate — we verify that validation
-    // failure path never clears. For true mid-tx abort, use an invalid keyPath object
-    // that somehow passed validation — not easy. Soft check: bad media base64 is skipped
-    // pre-tx and replace still succeeds without corrupting.
     const payload = exportPayload({
       media: [
         {
@@ -140,10 +176,63 @@ describe('importData atomicity & validation', () => {
       ],
     });
     const r = await importData(JSON.stringify(payload), 'replace');
-    expect(r.ok).toBe(true);
-    expect(r.message).toMatch(/坏图|跳过/);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/图片损坏|拒绝导入/);
     const db = await getDB();
-    expect(await db.get('vehicles', 'v-import')).toBeTruthy();
+    // Original data intact
+    expect(await db.get('vehicles', 'v-exist')).toBeTruthy();
+    expect(await db.get('records', 'r-exist')).toBeTruthy();
+    expect(await db.get('media', 'm-exist')).toBeTruthy();
+    expect(await db.get('vehicles', 'v-import')).toBeUndefined();
+  });
+
+  it('allows skipping corrupt media when skipCorruptMedia is true', async () => {
+    await seedExisting();
+    const payload = exportPayload({
+      media: [
+        {
+          id: 'm-bad',
+          mimeType: 'image/jpeg',
+          byteSize: 10,
+          base64: '!!!not-base64!!!',
+          createdAt: nowISO(),
+        },
+      ],
+    });
+    const r = await importData(JSON.stringify(payload), 'replace', { skipCorruptMedia: true });
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/跳过/);
+    const db = await getDB();
     expect(await db.get('vehicles', 'v-exist')).toBeUndefined();
+    expect(await db.get('vehicles', 'v-import')).toBeTruthy();
+    expect(await db.get('media', 'm-bad')).toBeUndefined();
+  });
+
+  it('cover-import mid-transaction write failure rolls back all clears/puts', async () => {
+    await seedExisting();
+    // BUSINESS_STORES has 6 clears on replace; fail on first put after clears
+    // writeCount 1..6 = clears; 7 = first vehicle put → throw
+    setImportWriteHookForTests(({ writeCount, op }) => {
+      if (writeCount === 7 && op === 'put') {
+        throw new Error('injected write failure');
+      }
+    });
+
+    const r = await importData(JSON.stringify(exportPayload()), 'replace');
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/回滚|未损坏|injected write failure/);
+
+    const db = await getDB();
+    // Entire replace tx aborted — original rows remain
+    const v = await db.get('vehicles', 'v-exist');
+    expect(v).toBeTruthy();
+    expect(v?.name).toBe('Local Name');
+    expect(await db.get('records', 'r-exist')).toBeTruthy();
+    expect(await db.get('settings', 'currency')).toBeTruthy();
+    expect(await db.get('media', 'm-exist')).toBeTruthy();
+    // Import payload must not have landed
+    expect(await db.get('vehicles', 'v-import')).toBeUndefined();
+    expect(await db.get('records', 'r-import')).toBeUndefined();
+    expect(await db.count('vehicles')).toBe(1);
   });
 });

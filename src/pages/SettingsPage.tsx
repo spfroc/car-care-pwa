@@ -29,6 +29,7 @@ export function SettingsPage() {
   const [newGrade, setNewGrade] = useState('');
   const [exportSize, setExportSize] = useState<number | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [skipCorruptMedia, setSkipCorruptMedia] = useState(false);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
 
   async function refreshLocal() {
@@ -73,7 +74,7 @@ export function SettingsPage() {
     const text = await file.text();
     const mode = importMode;
     if (mode === 'replace' && !confirm(t('settings.importReplaceConfirm'))) return;
-    const r = await importData(text, mode);
+    const r = await importData(text, mode, { skipCorruptMedia });
     setMsg(r.message);
     await refreshLocal();
   }
@@ -356,6 +357,15 @@ export function SettingsPage() {
             <option value="replace">{t('settings.importReplace')}</option>
           </select>
         </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={skipCorruptMedia}
+            onChange={(e) => setSkipCorruptMedia(e.target.checked)}
+          />
+          {t('settings.skipCorruptMedia')}
+        </label>
+        <p className="muted small">{t('settings.skipCorruptMediaHint')}</p>
         <label className="btn block file-btn">
           {t('settings.import')}
           <input

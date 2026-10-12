@@ -99,3 +99,22 @@ New / extended cases:
 - `docs/own-cloud-sync-architecture.md`  
 - `artifacts/*`  
 - `package.json` / lock (`fake-indexeddb`)  
+
+---
+
+## Follow-up (PR review) — 2026-10-12
+
+### Changes
+1. **P0 mid-tx rollback**: `setImportWriteHookForTests` injects failure; replace uses `tx.abort()` + in-memory snapshot restore (IDB auto-commit insurance).
+2. **P1 merge vehicles**: same-id vehicles **skip** (keep local attrs), aligned with records/stations/media/learning.
+3. **P1 deleteRecord**: also protects `vehicle.coverMediaId` before deleting media.
+4. **P1 corrupt media**: default **reject entire import**; `skipCorruptMedia: true` opt-in (Settings checkbox).
+
+### New / updated tests
+- cover-import mid-transaction write failure → original vehicles/records/settings/media intact
+- merge same-id vehicle keeps local name/plate/note/updatedAt
+- corrupt media rejected by default; skip path when opted in
+- deleteRecord keeps coverMediaId media (same & other vehicle)
+
+### Commands
+`npm test` → 150 PASS · `tsc -b` · `npm run build` PASS

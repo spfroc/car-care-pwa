@@ -6,8 +6,8 @@
  RUN  v5.0.3 /workspace/car-care-pwa/app
 
 
- Test Files  13 passed (13)
-      Tests  143 passed (143)
-   Start at  08:47:59
-   Duration  691ms (transform 66%, import 19%, tests 11%, worker 5%)
+ Test Files  14 passed (14)
+      Tests  150 passed (150)
+   Start at  09:01:19
+   Duration  628ms (transform 62%, import 21%, tests 13%, worker 4%)
 

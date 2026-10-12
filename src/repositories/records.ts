@@ -29,7 +29,36 @@ export async function putRecord(r: CareRecord): Promise<void> {
 }
 
 /**
- * Delete one record and its media that are not referenced by any other record.
+ * Collect media ids that are still referenced by other records or any vehicle cover.
+ */
+async function mediaStillReferenced(
+  mediaIds: string[],
+  excludeRecordId?: string,
+  excludeVehicleId?: string,
+): Promise<Set<string>> {
+  const still = new Set<string>();
+  if (!mediaIds.length) return still;
+  const db = await getDB();
+  const allRecords = await db.getAll('records');
+  for (const other of allRecords) {
+    if (excludeRecordId && other.id === excludeRecordId) continue;
+    for (const mid of other.mediaIds ?? []) {
+      if (mediaIds.includes(mid)) still.add(mid);
+    }
+  }
+  const vehicles = await db.getAll('vehicles');
+  for (const v of vehicles) {
+    if (excludeVehicleId && v.id === excludeVehicleId) continue;
+    if (v.coverMediaId && mediaIds.includes(v.coverMediaId)) {
+      still.add(v.coverMediaId);
+    }
+  }
+  return still;
+}
+
+/**
+ * Delete one record and its media that are not referenced by any other record
+ * or by any vehicle's coverMediaId.
  * Single transaction: media + records stay consistent on abort.
  */
 export async function deleteRecord(id: string): Promise<void> {
@@ -38,17 +67,7 @@ export async function deleteRecord(id: string): Promise<void> {
   if (!rec) return;
 
   const mediaIds = [...(rec.mediaIds ?? [])];
-  const allRecords = mediaIds.length ? await db.getAll('records') : [];
-
-  const stillReferenced = new Set<string>();
-  if (mediaIds.length) {
-    for (const other of allRecords) {
-      if (other.id === id) continue;
-      for (const mid of other.mediaIds ?? []) {
-        if (mediaIds.includes(mid)) stillReferenced.add(mid);
-      }
-    }
-  }
+  const stillReferenced = await mediaStillReferenced(mediaIds, id);
 
   const tx = db.transaction(['records', 'media'], 'readwrite');
   for (const mid of mediaIds) {
@@ -62,6 +81,7 @@ export async function deleteRecord(id: string): Promise<void> {
 
 /**
  * Delete all records for a vehicle (+ orphaned media) inside one transaction.
+ * Protects media still used as another vehicle's cover or by other records.
  * Used by deleteVehicle; prefer deleteVehicle for full cascade including the vehicle row.
  */
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {
@@ -72,15 +92,12 @@ export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> 
     for (const mid of r.mediaIds ?? []) mediaToDelete.add(mid);
   }
 
-  // Keep media still referenced by other vehicles' records
   if (mediaToDelete.size) {
-    const all = await db.getAll('records');
-    for (const other of all) {
-      if (other.vehicleId === vehicleId) continue;
-      for (const mid of other.mediaIds ?? []) {
-        mediaToDelete.delete(mid);
-      }
-    }
+    const still = await mediaStillReferenced([...mediaToDelete], undefined, vehicleId);
+    // Also keep this vehicle's own cover while only deleting records (vehicle row stays)
+    const self = await db.get('vehicles', vehicleId);
+    if (self?.coverMediaId) still.add(self.coverMediaId);
+    for (const mid of still) mediaToDelete.delete(mid);
   }
 
   const tx = db.transaction(['records', 'media'], 'readwrite');
