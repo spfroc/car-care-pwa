@@ -17,10 +17,10 @@ import {
 } from '../lib/constants';
 import { allowsCharge, allowsFuel } from '../lib/energy';
 import {
-  averageElectricEconomy,
-  averageFuelEconomy,
   combinedEconomy,
+  electricEconomySummary,
   electricIntervals,
+  fuelEconomySummary,
   formatEconomy,
   fuelIntervals,
 } from '../lib/economy';
@@ -226,8 +226,8 @@ export function VehicleDetailPage() {
   const canCharge = allowsCharge(vehicle.energyType, settings.hevAllowCharge);
   const fuelIvs = fuelIntervals(records);
   const elecIvs = electricIntervals(records);
-  const fuelAvg = averageFuelEconomy(records);
-  const elecAvg = averageElectricEconomy(records);
+  const fuelAvg = fuelEconomySummary(records);
+  const elecAvg = electricEconomySummary(records);
   const combined = combinedEconomy(records, settings.kwhToLiterFactor);
   const fuelByEnd = new Map(fuelIvs.map((iv) => [iv.endRecordId, iv]));
   const elecByEnd = new Map(elecIvs.map((iv) => [iv.endRecordId, iv]));
@@ -314,9 +314,9 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">{t('card.fuelEco')}</span>
               <strong>
-                {fuelAvg == null
+                {fuelAvg.value == null
                   ? t('common.dash')
-                  : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
+                  : `${formatEconomy(fuelAvg.value, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}${fuelAvg.lowConfidence ? t('eco.estimate') : ''}`}
               </strong>
             </div>
           )}
@@ -324,9 +324,9 @@ export function VehicleDetailPage() {
             <div>
               <span className="label">{t('card.elecEco')}</span>
               <strong>
-                {elecAvg == null
+                {elecAvg.value == null
                   ? t('common.dash')
-                  : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
+                  : `${formatEconomy(elecAvg.value, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}${elecAvg.lowConfidence ? t('eco.estimate') : ''}`}
               </strong>
             </div>
           )}

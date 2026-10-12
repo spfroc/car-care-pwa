@@ -4,7 +4,7 @@ import type { CareRecord, Vehicle } from '../types';
 import { ENERGY_COLORS, bodyIcon, energyLabel, formatMoney } from '../lib/constants';
 import { homeCardFlags } from '../lib/energy';
 import { summarizeSpend } from '../lib/spend';
-import { averageElectricEconomy, averageFuelEconomy, formatEconomy } from '../lib/economy';
+import { electricEconomySummary, fuelEconomySummary, formatEconomy } from '../lib/economy';
 import { heroEnergyCosts, summarizeMileage } from '../lib/vehicleStats';
 import { useI18n } from '../i18n';
 
@@ -30,8 +30,8 @@ export function VehicleCard({
   const mine = records.filter((r) => r.vehicleId === vehicle.id);
   const spend = summarizeSpend(vehicle.id, mine);
   const flags = homeCardFlags(vehicle.energyType, hevAllowCharge);
-  const fuelEco = averageFuelEconomy(mine);
-  const elecEco = averageElectricEconomy(mine);
+  const fuelEco = fuelEconomySummary(mine);
+  const elecEco = electricEconomySummary(mine);
   const mileage = summarizeMileage(vehicle, mine);
   const energyCosts = heroEnergyCosts(
     vehicle.energyType,
@@ -66,7 +66,9 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">{t('card.fuelEco')}</div>
                 <div className="value">
-                  {fuelEco == null ? t('common.dash') : `${formatEconomy(fuelEco, fuelUnit)} ${fuelUnit}`}
+                  {fuelEco.value == null
+                    ? t('common.dash')
+                    : `${formatEconomy(fuelEco.value, fuelUnit)} ${fuelUnit}${fuelEco.lowConfidence ? t('eco.estimate') : ''}`}
                 </div>
               </div>
             )}
@@ -74,7 +76,9 @@ export function VehicleCard({
               <div className="vc-metric">
                 <div className="label">{t('card.elecEco')}</div>
                 <div className="value">
-                  {elecEco == null ? t('common.dash') : `${formatEconomy(elecEco, electricUnit)} ${electricUnit}`}
+                  {elecEco.value == null
+                    ? t('common.dash')
+                    : `${formatEconomy(elecEco.value, electricUnit)} ${electricUnit}${elecEco.lowConfidence ? t('eco.estimate') : ''}`}
                 </div>
               </div>
             )}

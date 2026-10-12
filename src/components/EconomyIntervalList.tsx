@@ -25,6 +25,7 @@ export function EconomyIntervalList({
 
   const rows = [...intervals].reverse();
   const tripKey = kind === 'fuel' ? 'interval.tripFuel' : 'interval.tripCharge';
+  const lowKey = kind === 'fuel' ? 'interval.notFull' : 'interval.partialCharge';
 
   return (
     <ul className="interval-list">
@@ -39,11 +40,12 @@ export function EconomyIntervalList({
               <span className="iv-dist">{t(tripKey, { dist: dist.toFixed(0) })}</span>
               <span className="interval-meta">
                 {iv.fromOdometer.toFixed(0)} → {iv.toOdometer.toFixed(0)} km
-                {iv.lowConfidence ? t('interval.notFull') : ''}
+                {iv.lowConfidence ? t(lowKey) : ''}
               </span>
             </div>
             <div className="iv-eco">
               {formatEconomy(iv.economyPer100, unitLabel)} {unitLabel}
+              {iv.lowConfidence ? t('eco.estimate') : ''}
             </div>
           </li>
         );

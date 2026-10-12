@@ -178,6 +178,9 @@ const zhCN = {
   'interval.tripFuel': '本次加油行驶里程 {dist} km',
   'interval.tripCharge': '本次充电行驶里程 {dist} km',
   'interval.notFull': ' · 未加满（参考）',
+  'interval.partialCharge': ' · 未充至满电（参考）',
+  'eco.estimate': '（参考）',
+  'eco.lowConfHint': '含未加满/未满电区间，数值仅供参考',
 
   // Settings
   'settings.title': '设置',
@@ -235,6 +238,8 @@ const zhCN = {
   'settings.importReplace': '完全覆盖',
   'settings.import': '导入 JSON',
   'settings.importReplaceConfirm': '覆盖导入将清空现有业务数据，确定？',
+  'settings.skipCorruptMedia': '跳过损坏图片（默认关闭：坏图则整包拒绝）',
+  'settings.skipCorruptMediaHint': '默认优先数据完整性：任一图片无法解码则整次导入失败、本地数据不动。仅在明确需要时勾选跳过。',
   'settings.loadDemo': '载入演示数据',
   'settings.loadDemoConfirm': '载入演示数据将清空现有业务数据并写入种子包，确定？',
   'settings.loadDemoDone': '演示数据已载入',
@@ -576,6 +581,9 @@ const en: { [K in MessageKey]: string } = {
   'interval.tripFuel': 'This fuel trip {dist} km',
   'interval.tripCharge': 'This charge trip {dist} km',
   'interval.notFull': ' · Not full (estimate)',
+  'interval.partialCharge': ' · Not fully charged (estimate)',
+  'eco.estimate': ' (est.)',
+  'eco.lowConfHint': 'Includes partial fill/charge intervals — estimate only',
 
   'settings.title': 'Settings',
   'settings.general': 'General',
@@ -632,6 +640,8 @@ const en: { [K in MessageKey]: string } = {
   'settings.importReplace': 'Replace all',
   'settings.import': 'Import JSON',
   'settings.importReplaceConfirm': 'Replace import will wipe existing business data. Continue?',
+  'settings.skipCorruptMedia': 'Skip corrupt images (off by default: reject whole import)',
+  'settings.skipCorruptMediaHint': 'Integrity first: if any image fails to decode, the import is rejected and local data is untouched. Opt in only when you intentionally want to skip bad media.',
   'settings.loadDemo': 'Load demo data',
   'settings.loadDemoConfirm': 'Loading demo data wipes existing business data and writes the seed pack. Continue?',
   'settings.loadDemoDone': 'Demo data loaded',

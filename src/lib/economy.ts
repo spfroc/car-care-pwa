@@ -1,5 +1,8 @@
 import type { CareRecord, ChargeRecord, EconomyInterval, FuelRecord, Km } from '../types';
 
+/** SOC after charge ≥ this → treat as "full enough" for high-confidence electric economy. */
+export const CHARGE_FULL_SOC_THRESHOLD = 95;
+
 function sortByOdometerThenDate<T extends { odometer: Km; date: string }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
     if (a.odometer !== b.odometer) return a.odometer - b.odometer;
@@ -19,6 +22,14 @@ function groupByVehicleId(records: CareRecord[]): CareRecord[][] {
     list.push(r);
   }
   return [...map.values()];
+}
+
+/** Charge endpoint is low-confidence when SOC-after is known and below full threshold. */
+export function isChargeLowConfidence(end: ChargeRecord): boolean {
+  if (typeof end.socAfter === 'number' && Number.isFinite(end.socAfter)) {
+    return end.socAfter < CHARGE_FULL_SOC_THRESHOLD;
+  }
+  return false;
 }
 
 function fuelIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
@@ -60,7 +71,7 @@ function electricIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
       toOdometer: b.odometer,
       amount: b.kWh,
       economyPer100: (b.kWh / dKm) * 100,
-      lowConfidence: false,
+      lowConfidence: isChargeLowConfidence(b),
       endRecordId: b.id,
     });
   }
@@ -98,6 +109,25 @@ export function weightedAverage(intervals: EconomyInterval[]): number | null {
   return (sumAmt / sumKm) * 100;
 }
 
+export type EconomySummary = {
+  /** Distance-weighted average (includes low-confidence intervals per PRD). */
+  value: number | null;
+  /** True when any included interval is lowConfidence (UI should show 参考 caveat). */
+  lowConfidence: boolean;
+  intervalCount: number;
+  lowConfidenceCount: number;
+};
+
+function summarizeIntervals(intervals: EconomyInterval[]): EconomySummary {
+  const lowConfidenceCount = intervals.filter((iv) => iv.lowConfidence).length;
+  return {
+    value: weightedAverage(intervals),
+    lowConfidence: lowConfidenceCount > 0,
+    intervalCount: intervals.length,
+    lowConfidenceCount,
+  };
+}
+
 /**
  * Combined economy for PHEV/REEV in L-equivalent/100km over odometer window.
  * Uses all fuel liters + k * kWh in [O1, O2], Δkm = O2-O1.
@@ -108,7 +138,12 @@ export function combinedEconomy(
   kwhToLiterFactor: number,
   window?: { from: Km; to: Km },
 ): { economyPer100: number; deltaKm: number; litersEq: number } | null {
-  const anchors = records.filter(
+  // Per-vehicle only: never cross-stitch multi-vehicle odometers for combined.
+  const groups = groupByVehicleId(records);
+  if (groups.length !== 1) return null;
+
+  const scope = groups[0];
+  const anchors = scope.filter(
     (r) => (r.type === 'fuel' || r.type === 'charge') && typeof r.odometer === 'number',
   ) as Array<(FuelRecord | ChargeRecord)>;
   if (anchors.length < 2) return null;
@@ -121,14 +156,12 @@ export function combinedEconomy(
 
   let liters = 0;
   let kwh = 0;
-  for (const r of records) {
+  for (const r of scope) {
     if (typeof r.odometer !== 'number') continue;
     if (r.odometer < from || r.odometer > to) continue;
     if (r.type === 'fuel') liters += r.liters;
     if (r.type === 'charge') kwh += r.kWh;
   }
-  // Exclude the first anchor's fill if using full-tank semantics for combined window:
-  // PRD: sum L + k*sum kWh in window. Include all in range.
   const litersEq = liters + kwhToLiterFactor * kwh;
   return {
     economyPer100: (litersEq / deltaKm) * 100,
@@ -151,6 +184,28 @@ export function averageFuelEconomy(records: CareRecord[]): number | null {
  */
 export function averageElectricEconomy(records: CareRecord[]): number | null {
   return weightedAverage(electricIntervals(records));
+}
+
+/** Fuel economy with low-confidence caveat metadata for UI. */
+export function fuelEconomySummary(records: CareRecord[]): EconomySummary {
+  return summarizeIntervals(fuelIntervals(records));
+}
+
+/** Electric economy with low-confidence caveat metadata for UI. */
+export function electricEconomySummary(records: CareRecord[]): EconomySummary {
+  return summarizeIntervals(electricIntervals(records));
+}
+
+/**
+ * High-confidence-only average (excludes partial fills / low-SOC charges).
+ * Returns null when no confident intervals exist (caller may fall back + caveat).
+ */
+export function confidentFuelEconomy(records: CareRecord[]): number | null {
+  return weightedAverage(fuelIntervals(records).filter((iv) => !iv.lowConfidence));
+}
+
+export function confidentElectricEconomy(records: CareRecord[]): number | null {
+  return weightedAverage(electricIntervals(records).filter((iv) => !iv.lowConfidence));
 }
 
 /** Most recent single fuel interval economy (not used for hero cards). */
