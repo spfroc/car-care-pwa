@@ -1,0 +1,76 @@
+{
+  "base": "https://car-test.adobesun.com",
+  "results": [
+    {
+      "name": "https.home",
+      "ok": true,
+      "detail": "status=200 url=https://car-test.adobesun.com/"
+    },
+    {
+      "name": "ui.root.notEmpty",
+      "ok": true,
+      "detail": "存储未持久化，建议安装到主屏幕并定期导出备份\n怎么装\n×\n车护助手\n\n离线车辆养护账本\n\n+ 车辆\n\n还没有车辆\n\n添加第一辆车\n\n或到设置中载入演示数据\n\n🏠\n首页\n📊\n统计\n⚙️\n设置"
+    },
+    {
+      "name": "sw.registered",
+      "ok": true,
+      "detail": "{\"supported\":true,\"controlling\":true,\"scope\":\"https://car-test.adobesun.com/\",\"scriptURL\":\"https://car-test.adobesun.com/sw.js\"}"
+    },
+    {
+      "name": "sw.caches",
+      "ok": true,
+      "detail": "[{\"name\":\"workbox-precache-v2-https://car-test.adobesun.com/\",\"entries\":13}]"
+    },
+    {
+      "name": "route/",
+      "ok": true,
+      "detail": "status=200 final=https://car-test.adobesun.com/"
+    },
+    {
+      "name": "route/stats",
+      "ok": true,
+      "detail": "status=200 final=https://car-test.adobesun.com/stats"
+    },
+    {
+      "name": "route/settings",
+      "ok": true,
+      "detail": "status=200 final=https://car-test.adobesun.com/settings"
+    },
+    {
+      "name": "route/vehicles/new",
+      "ok": true,
+      "detail": "status=200 final=https://car-test.adobesun.com/vehicles/new"
+    },
+    {
+      "name": "settings.hasDataStorage",
+      "ok": true,
+      "detail": "storage section"
+    },
+    {
+      "name": "settings.hasImportExport",
+      "ok": true,
+      "detail": "import/export"
+    },
+    {
+      "name": "pwa.manifest",
+      "ok": true,
+      "detail": "{\"status\":200,\"type\":\"application/manifest+json\",\"name\":\"车护助手\"}"
+    },
+    {
+      "name": "spa.refresh.stats",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/stats"
+    },
+    {
+      "name": "idb.open",
+      "ok": true,
+      "detail": "{\"ok\":true,\"stores\":[\"learning\",\"media\",\"meta\",\"records\",\"settings\",\"stations\",\"sync_meta\",\"sync_outbox\",\"vehicles\"]}"
+    },
+    {
+      "name": "console.noFatal",
+      "ok": true,
+      "detail": "clean"
+    }
+  ],
+  "at": "2026-10-12T03:19:12.996Z"
+}

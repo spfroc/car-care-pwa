@@ -132,3 +132,7 @@ export const SYNC_ENTITIES: SyncEntity[] = [
 ];
 
 export const MAX_OUTBOX_ATTEMPTS = 8;
+
+/** Soft cap for media base64 in JSONB payloads (~1.5 MiB binary ≈ 2e6 chars). */
+export const MAX_MEDIA_BASE64_CHARS = 2_000_000;
+export const MAX_MEDIA_BYTE_SIZE = 1_500_000;

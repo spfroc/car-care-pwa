@@ -1,4 +1,5 @@
 import type { CloudMediaPayload, CloudRow, SyncEntity } from './types';
+import { MAX_MEDIA_BASE64_CHARS, MAX_MEDIA_BYTE_SIZE } from './types';
 
 const ENTITIES: SyncEntity[] = ['vehicles', 'records', 'stations', 'settings', 'media'];
 
@@ -73,6 +74,10 @@ export function validateEntityPayload(
       }
       if (typeof p.byteSize !== 'number' || p.byteSize < 0) return 'media.byteSize';
       if (typeof p.base64 !== 'string' || p.base64.length < 8) return 'media.base64';
+      if (p.base64.length > MAX_MEDIA_BASE64_CHARS) return 'media.base64 too large';
+      if (typeof p.byteSize === 'number' && p.byteSize > MAX_MEDIA_BYTE_SIZE) {
+        return 'media.byteSize too large';
+      }
       if (!isISO(p.createdAt)) return 'media.createdAt';
       return null;
     }

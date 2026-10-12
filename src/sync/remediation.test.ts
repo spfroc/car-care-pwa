@@ -373,23 +373,28 @@ describe('fault injection / dual-device / offline / repeat / delete-conflict', (
     expect(await (await getDB()).get('vehicles', 'v1')).toBeTruthy();
   });
 
-  it('user switch parks outbox (does not clear)', async () => {
+  it('user switch with local data is blocked (shared IDB safety)', async () => {
     await patchSyncMeta({ cloudUserId: 'old-user', deviceId: 'dev', status: 'idle', provider: 'supabase' });
     await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
     expect(await countOutboxForOwner('old-user')).toBeGreaterThan(0);
     mem.userId = 'new-user';
     const r = await verifyConnection();
-    expect(r.ok).toBe(true);
-    expect(r.message).toMatch(/隔离|切换/);
-    // Pending ops for old user remain
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/阻止账号切换|IndexedDB/);
+    // Binding must NOT flip to new user
+    expect((await getSyncMeta()).cloudUserId).toBe('old-user');
+    // Pending ops for old user remain parked
     expect(await countOutboxForOwner('old-user')).toBeGreaterThan(0);
-    expect(await listOutbox()).not.toHaveLength(0);
+  });
+
+  it('user switch allowed when local empty and no parked outbox', async () => {
+    await patchSyncMeta({ cloudUserId: 'old-user', deviceId: 'dev', status: 'idle', provider: 'supabase' });
+    // no vehicles / outbox
+    mem.userId = 'new-user';
+    const r = await verifyConnection();
+    expect(r.ok).toBe(true);
     expect((await getSyncMeta()).cloudUserId).toBe('new-user');
-    // New user ready queue does not include old owner's ops
-    const { listReadyOutbox } = await import('./outbox');
-    const ready = await listReadyOutbox();
-    expect(ready.every((o) => (o.ownerUserId ?? 'unbound') !== 'old-user' || o.ownerUserId === 'new-user')).toBe(true);
-    expect(ready.filter((o) => o.ownerUserId === 'old-user')).toHaveLength(0);
+    expect(r.message).toMatch(/切换|成功/);
   });
 
   it('pushOps atomic LWW skips older client without TOCTOU pair', async () => {
