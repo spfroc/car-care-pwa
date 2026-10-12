@@ -9,7 +9,7 @@
 | **M2** | 用户自有云（行同步 + outbox） | ✅ 已上线 | Supabase 行表、LWW、设置 UI、账号切换安全 |
 | **M3-A** | 媒体私有 Storage | ✅ 已上线（生产静态） | base64→Storage、RLS bucket、迁移/孤儿 GC 策略 |
 | **M3-B** | 多标签锁 · BG Sync 增强 · Outbox  Harden | ✅ 已上线（生产 d7dd681 / car.adobesun.com；car-test 同版本） | Web Locks / lease、BG Sync 可选、关页/并发不丢队列 |
-| **M3-C** | 冲突合并 UI + 双端体验 | 🚧 规格已冻结 / 待 feature 分支 | 仅 vehicles+records 手动解决；二选一；删改二次确认；30 天回收站 → follow-up。规格：[`m3c-mvp-frozen-spec.md`](./m3c-mvp-frozen-spec.md) · 架构：[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md) |
+| **M3-C** | 冲突合并 UI + 双端体验 | 🚧 feature 实现中（未部署） | 仅 vehicles+records 手动解决；二选一；删改二次确认；30 天回收站 → follow-up。规格：[`m3c-mvp-frozen-spec.md`](./m3c-mvp-frozen-spec.md) · 架构：[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md) · 验收：[`m3c-dual-device-acceptance.md`](./m3c-dual-device-acceptance.md) |
 | **M3-D** | Notion（或其它 adapter） | 📋 仅可行性通过后 | 见 `notion-sync-feasibility.md`；安全认证前不接真 API |
 
 ## 明确不在 M3-B
@@ -40,6 +40,6 @@ M2 ──► M3-A ──► M3-B ──► M3-C
 ## M3-C 冻结备注（2026-10-12）
 
 - 产品规格已冻结，见 `docs/m3c-mvp-frozen-spec.md`（用户批准）。  
-- **下一步**：另开 feature 分支实现；本冻结提交不含业务代码、不部署、不改正式 Supabase。  
+- **实现**：`feature/m3c-conflict-ui`（本阶段）；**禁止 merge 后自动部署**；不改正式 Supabase。  
 - **30 天最近删除恢复**：不在本 MVP；标为 M3-C follow-up（M3-C.1）。
 

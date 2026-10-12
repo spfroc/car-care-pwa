@@ -3,8 +3,8 @@ import type { CareRecord, LearningRow, Media, MetaRow, SettingRow, Station, Vehi
 import { APP_SCHEMA_VERSION, DEFAULT_FUEL_GRADES, OCR_DEFAULTS, nowISO } from '../lib/constants';
 
 export const DB_NAME = 'car-care-db';
-/** IndexedDB open version. 2 = learning; 3 = sync_outbox + sync_meta. */
-export const DB_VERSION = 3;
+/** IndexedDB open version. 2 = learning; 3 = sync_outbox + sync_meta; 4 = sync_conflicts (M3-C). */
+export const DB_VERSION = 4;
 
 export interface CarCareDB extends DBSchema {
   vehicles: { key: string; value: Vehicle; indexes: { byEnergy: string; byUpdated: string } };
@@ -38,11 +38,37 @@ export interface CarCareDB extends DBSchema {
       attempts: number;
       nextRetryAt: string;
       lastError?: string;
+      ownerUserId?: string;
+      blockedByConflictId?: string;
     };
     indexes: { byNextRetry: string; byEntityId: [string, string] };
   };
   /** Sync status / device id / conflict buffer (key-value). */
   sync_meta: { key: string; value: { key: string; value: unknown } };
+  /** M3-C open / resolved conflict records (manual resolve for vehicles+records). */
+  sync_conflicts: {
+    key: string;
+    value: {
+      id: string;
+      entity: string;
+      entityId: string;
+      kind: string;
+      status: string;
+      localUpdatedAt?: string;
+      cloudUpdatedAt?: string;
+      localSnapshot?: unknown;
+      cloudSnapshot?: unknown;
+      blockedOpIds?: string[];
+      createdAt: string;
+      resolvedAt?: string;
+      resolution?: string;
+      notedAt: string;
+    };
+    indexes: {
+      byStatus: string;
+      byEntityId: [string, string];
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<CarCareDB>> | null = null;
@@ -85,6 +111,11 @@ export async function getDB(): Promise<IDBPDatabase<CarCareDB>> {
           outbox.createIndex('byNextRetry', 'nextRetryAt');
           outbox.createIndex('byEntityId', ['entity', 'entityId']);
           db.createObjectStore('sync_meta', { keyPath: 'key' });
+        }
+        if (oldVersion < 4) {
+          const conflicts = db.createObjectStore('sync_conflicts', { keyPath: 'id' });
+          conflicts.createIndex('byStatus', 'status');
+          conflicts.createIndex('byEntityId', ['entity', 'entityId']);
         }
       },
     }).catch((e) => {

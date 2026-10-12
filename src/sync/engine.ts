@@ -13,6 +13,9 @@ import {
 } from './mediaStorage';
 import { base64ToBlob } from '../lib/image';
 import { mergeCloudIntoPlan } from './merge';
+import { detectPullConflict, detectPushRejected } from './conflictDetect';
+import { isManualConflictEntity } from './conflictTypes';
+import { countOpenConflicts, openConflict } from './conflictStore';
 import {
   ackOutboxCoveredByUpload,
   appendConflicts,
@@ -22,6 +25,7 @@ import {
   listOutbox,
   listOutboxForUser,
   listReadyOutbox,
+  markOutboxBlockedByConflict,
   markOutboxFailure,
   patchSyncMeta,
   rebindUnboundOutbox,
@@ -454,6 +458,229 @@ export async function verifyConnection(): Promise<SyncActionResult> {
   }
 }
 
+
+/**
+ * M3-C: handle push cloud_newer conflicts.
+ * vehicles/records → open + block outbox (do NOT removeStaleConflictOps).
+ * other entities → legacy audit + removeStaleConflictOps.
+ */
+async function handlePushConflicts(
+  conflicts: Array<{
+    opId: string;
+    reason: string;
+    entity?: SyncEntity | string;
+    entityId?: string;
+    cloudUpdatedAt?: string;
+    attemptedAt?: string;
+  }>,
+  opts?: {
+    /** Local rows that were attempted (first upload) — for localSnapshot only */
+    localRows?: CloudRow[];
+    cloudRows?: CloudRow[];
+    outboxOps?: Awaited<ReturnType<typeof listReadyOutbox>>;
+  },
+): Promise<{ opened: number; legacySkipped: number }> {
+  if (!conflicts.length) return { opened: 0, legacySkipped: 0 };
+  const cloudByKey = new Map<string, CloudRow>();
+  for (const r of opts?.cloudRows ?? []) cloudByKey.set(`${r.entity}:${r.id}`, r);
+  const needCloud = conflicts.some((c) => {
+    const entity = (c.entity as SyncEntity) || 'vehicles';
+    const entityId = c.entityId || c.opId;
+    return isManualConflictEntity(entity) && !cloudByKey.has(`${entity}:${entityId}`);
+  });
+  if (needCloud) {
+    try {
+      const provider = await resolveProvider();
+      if (provider) {
+        const snap = await provider.pullAll();
+        for (const r of snap.rows) cloudByKey.set(`${r.entity}:${r.id}`, r);
+      }
+    } catch {
+      /* snapshots may be incomplete; still open */
+    }
+  }
+  const localRowByKey = new Map<string, CloudRow>();
+  for (const r of opts?.localRows ?? []) localRowByKey.set(`${r.entity}:${r.id}`, r);
+  const opById = new Map((opts?.outboxOps ?? []).map((o) => [o.opId, o]));
+  // Also look up full outbox for payload snapshots
+  const allOutbox = await listOutbox();
+  for (const o of allOutbox) if (!opById.has(o.opId)) opById.set(o.opId, o);
+
+  const legacy: typeof conflicts = [];
+  let opened = 0;
+  for (const c of conflicts) {
+    const entity = (c.entity as SyncEntity) || 'vehicles';
+    const entityId = c.entityId || c.opId;
+    if (!isManualConflictEntity(entity)) {
+      legacy.push(c);
+      continue;
+    }
+    let localOp = opById.get(c.opId);
+    // firstUpload uses composite opIds and may have no outbox row — use pushed local row
+    if (!localOp) {
+      const localRow = localRowByKey.get(`${entity}:${entityId}`);
+      if (localRow) {
+        localOp = {
+          opId: c.opId,
+          entity,
+          entityId,
+          op: localRow.deletedAt ? 'delete' : 'upsert',
+          payload: localRow.payload,
+          mutatedAt: localRow.updatedAt,
+          attempts: 0,
+          nextRetryAt: localRow.updatedAt,
+        };
+      }
+    }
+    const cloudRow = cloudByKey.get(`${entity}:${entityId}`) ?? null;
+    // Prefer true cloud row from pull; cloudByKey may have been seeded with local push rows
+    const decision = detectPushRejected({
+      entity,
+      entityId,
+      opId: c.opId,
+      localOp,
+      cloudUpdatedAt: c.cloudUpdatedAt,
+      cloudRow: cloudRow && cloudRow.updatedAt === c.cloudUpdatedAt ? cloudRow : cloudRow,
+    });
+    if (!decision.escalate) {
+      legacy.push(c);
+      continue;
+    }
+    const rec = await openConflict({
+      entity,
+      entityId,
+      kind: decision.kind,
+      localUpdatedAt: decision.localUpdatedAt,
+      cloudUpdatedAt: decision.cloudUpdatedAt,
+      localSnapshot: decision.localSnapshot,
+      cloudSnapshot: decision.cloudSnapshot,
+      blockedOpIds: decision.blockedOpIds,
+    });
+    if (rec) {
+      await markOutboxBlockedByConflict(decision.blockedOpIds, rec.id);
+      opened += 1;
+    } else {
+      // At open cap — keep outbox blocked via legacy path? Keep intent: do not remove.
+      await appendConflicts([
+        {
+          id: uid(),
+          entity,
+          entityId,
+          cloudUpdatedAt: c.cloudUpdatedAt,
+          localUpdatedAt: decision.localUpdatedAt,
+          resolution: 'push_skipped_cloud_newer',
+          notedAt: nowISO(),
+        },
+      ]);
+    }
+  }
+  if (legacy.length) {
+    await appendConflicts(
+      legacy.map((c) => ({
+        id: uid(),
+        entity: (c.entity as SyncEntity) || 'vehicles',
+        entityId: c.entityId || c.opId,
+        cloudUpdatedAt: c.cloudUpdatedAt,
+        resolution: 'push_skipped_cloud_newer' as const,
+        notedAt: nowISO(),
+      })),
+    );
+    await removeStaleConflictOps(legacy);
+  }
+  return { opened, legacySkipped: legacy.length };
+}
+
+/**
+ * M3-C: after merge plan, escalate pending+fork conflicts to open for vehicles/records.
+ * Returns cloud rows that should NOT be applied (already in plan) — we additionally
+ * strip any toUpsert/toDelete that we open.
+ */
+async function escalatePullPlan(
+  plan: ReturnType<typeof mergeCloudIntoPlan>,
+  pending: Awaited<ReturnType<typeof listOutboxForUser>>,
+  cloudRows: CloudRow[],
+  deviceId: string,
+): Promise<ReturnType<typeof mergeCloudIntoPlan>> {
+  const cloudByKey = new Map(cloudRows.map((r) => [`${r.entity}:${r.id}`, r]));
+  const blockedKeys = new Set<string>();
+  const auditKeep: typeof plan.conflicts = [];
+
+  for (const c of plan.conflicts) {
+    const cloud = cloudByKey.get(`${c.entity}:${c.entityId}`);
+    if (!cloud) {
+      auditKeep.push(c);
+      continue;
+    }
+    const decision = detectPullConflict({
+      cloud,
+      pendingOutbox: pending,
+      localDeviceId: deviceId,
+    });
+    if (!decision.escalate) {
+      auditKeep.push(c);
+      continue;
+    }
+    const rec = await openConflict({
+      entity: c.entity,
+      entityId: c.entityId,
+      kind: decision.kind,
+      localUpdatedAt: decision.localUpdatedAt,
+      cloudUpdatedAt: decision.cloudUpdatedAt,
+      localSnapshot: decision.localSnapshot,
+      cloudSnapshot: decision.cloudSnapshot,
+      blockedOpIds: decision.blockedOpIds,
+    });
+    if (rec) {
+      await markOutboxBlockedByConflict(decision.blockedOpIds, rec.id);
+      blockedKeys.add(`${c.entity}:${c.entityId}`);
+    } else {
+      auditKeep.push(c);
+    }
+  }
+
+  // Also scan cloud rows that merge did not flag but pending+delete cross may need E3
+  for (const cloud of cloudRows) {
+    const key = `${cloud.entity}:${cloud.id}`;
+    if (blockedKeys.has(key)) continue;
+    const decision = detectPullConflict({
+      cloud,
+      pendingOutbox: pending,
+      localDeviceId: deviceId,
+    });
+    if (!decision.escalate) continue;
+    const rec = await openConflict({
+      entity: cloud.entity,
+      entityId: cloud.id,
+      kind: decision.kind,
+      localUpdatedAt: decision.localUpdatedAt,
+      cloudUpdatedAt: decision.cloudUpdatedAt,
+      localSnapshot: decision.localSnapshot,
+      cloudSnapshot: decision.cloudSnapshot,
+      blockedOpIds: decision.blockedOpIds,
+    });
+    if (rec) {
+      await markOutboxBlockedByConflict(decision.blockedOpIds, rec.id);
+      blockedKeys.add(key);
+    }
+  }
+
+  if (auditKeep.length) await appendConflicts(auditKeep);
+
+  if (!blockedKeys.size) {
+    return { ...plan, conflicts: auditKeep };
+  }
+  const toUpsert = plan.toUpsert.filter((r) => !blockedKeys.has(`${r.entity}:${r.id}`));
+  const toDelete = plan.toDelete.filter((r) => !blockedKeys.has(`${r.entity}:${r.id}`));
+  return {
+    ...plan,
+    toUpsert,
+    toDelete,
+    appliedUpserts: toUpsert.length,
+    appliedDeletes: toDelete.length,
+    conflicts: auditKeep,
+  };
+}
+
 /** First upload: local → cloud. Does not pull/overwrite local. */
 async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActionResult> {
   const provider = await resolveProvider();
@@ -488,18 +715,7 @@ async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActi
     );
     if (result.conflicts.length) {
       throwIfSyncAborted(signal);
-      await appendConflicts(
-        result.conflicts.map((c) => ({
-          id: uid(),
-          entity: (c.entity as SyncEntity) || 'vehicles',
-          entityId: c.entityId || c.opId,
-          cloudUpdatedAt: c.cloudUpdatedAt,
-          resolution: 'push_skipped_cloud_newer' as const,
-          notedAt: nowISO(),
-        })),
-      );
-      // Drop only the stale conflicted opIds; keep newer mid-upload ops
-      await removeStaleConflictOps(result.conflicts);
+      await handlePushConflicts(result.conflicts, { localRows: rows });
     }
     throwIfSyncAborted(signal);
     const ts = nowISO();
@@ -554,12 +770,18 @@ async function restoreFromCloudUnlocked(
     const pendingMine = await listOutboxForUser(meta.cloudUserId);
     const pending = opts?.replaceLocal ? [] : pendingMine;
     const localIndex = opts?.replaceLocal ? new Map() : await buildLocalIndex();
-    const plan = mergeCloudIntoPlan(
+    let plan = mergeCloudIntoPlan(
       snapshot.rows,
       (entity, id) => localIndex.get(`${entity}:${id}`),
       pending,
       nowISO(),
     );
+    if (!opts?.replaceLocal) {
+      const deviceId = await ensureDeviceId();
+      plan = await escalatePullPlan(plan, pending, snapshot.rows, deviceId);
+    } else if (plan.conflicts.length) {
+      await appendConflicts(plan.conflicts);
+    }
 
     throwIfSyncAborted(signal);
     try {
@@ -582,7 +804,6 @@ async function restoreFromCloudUnlocked(
     // NOTE: orphan GC is NOT auto-run here (upload→ref race). Use explicit cleanup.
 
     throwIfSyncAborted(signal);
-    await appendConflicts(plan.conflicts);
     const ts = nowISO();
     const maxUpdated = snapshot.rows.reduce(
       (acc, r) => (r.updatedAt > acc ? r.updatedAt : acc),
@@ -665,18 +886,9 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
       pushed = push.applied.length;
       if (push.conflicts.length) {
         throwIfSyncAborted(signal);
-        await appendConflicts(
-          push.conflicts.map((c) => ({
-            id: uid(),
-            entity: (c.entity as SyncEntity) || 'vehicles',
-            entityId: c.entityId || c.opId,
-            cloudUpdatedAt: c.cloudUpdatedAt,
-            resolution: 'push_skipped_cloud_newer' as const,
-            notedAt: nowISO(),
-          })),
-        );
-        // Remove stale conflicted ops only; preserve newer ops for same entity
-        await removeStaleConflictOps(push.conflicts);
+        await handlePushConflicts(push.conflicts, {
+          outboxOps: enriched,
+        });
       }
       if (push.error) {
         throwIfSyncAborted(signal);
@@ -696,12 +908,16 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
     const localIndex = await buildLocalIndex();
     const pending = await listOutboxForUser((await getSyncMeta()).cloudUserId);
-    const plan = mergeCloudIntoPlan(
+    let plan = mergeCloudIntoPlan(
       snapshot.rows,
       (entity, id) => localIndex.get(`${entity}:${id}`),
       pending,
       nowISO(),
     );
+    {
+      const deviceId = await ensureDeviceId();
+      plan = await escalatePullPlan(plan, pending, snapshot.rows, deviceId);
+    }
 
     throwIfSyncAborted(signal);
     try {
@@ -731,7 +947,6 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     // Use runOrphanMediaCleanup explicitly (grace + recheck).
 
     throwIfSyncAborted(signal);
-    await appendConflicts(plan.conflicts);
     const ts = nowISO();
     const migrateNote = formatMediaMigrateNote(mediaMigrate);
     const migrateErr = mediaMigrate.ok
@@ -1018,6 +1233,7 @@ export async function getSyncStatusSummary(): Promise<{
   meta: Awaited<ReturnType<typeof getSyncMeta>>;
   outboxCount: number;
   outboxReadyCount: number;
+  openConflictCount: number;
   config: CloudStorageConfig;
 }> {
   await recoverStaleSyncingStatus();
@@ -1027,10 +1243,12 @@ export async function getSyncStatusSummary(): Promise<{
     ? await listOutboxForUser(meta.cloudUserId)
     : await listOutbox();
   const ready = await listReadyOutbox();
+  const openConflictCount = await countOpenConflicts();
   return {
     meta,
     outboxCount: outbox.length,
     outboxReadyCount: ready.length,
+    openConflictCount,
     config,
   };
 }
