@@ -241,6 +241,22 @@ describe.skipIf(!live)('M2 A/B real Supabase E2E (disposable)', () => {
       const metaAfter = await (await import('./outbox')).getSyncMeta();
       expect(metaAfter.cloudUserId).toBe(userA);
 
+      // P0: skip verify — direct upload / restore / sync must also reject
+      const beforeVeh = await (await getDB()).getAll('vehicles');
+      const beforeBox = (await listOutbox()).length;
+      const upBlocked = await firstUploadToCloud();
+      expect(upBlocked.ok).toBe(false);
+      expect(upBlocked.message).toMatch(/阻止账号切换|IndexedDB/);
+      const restBlocked = await restoreFromCloud({ replaceLocal: true });
+      expect(restBlocked.ok).toBe(false);
+      expect(restBlocked.message).toMatch(/阻止账号切换|IndexedDB/);
+      const syncBlocked = await bidirectionalSync();
+      expect(syncBlocked.ok).toBe(false);
+      expect(syncBlocked.message).toMatch(/阻止账号切换|IndexedDB/);
+      expect((await (await import('./outbox')).getSyncMeta()).cloudUserId).toBe(userA);
+      expect(await (await getDB()).getAll('vehicles')).toEqual(beforeVeh);
+      expect((await listOutbox()).length).toBe(beforeBox);
+
       // --- Auth fail recovery ---
       const bad = new SupabaseProvider({ url: URL!, anonKey: ANON!, deviceId: 'device-bad' });
       const badSign = await bad.signIn(EMAIL_A, 'wrong-password-xxx', false);

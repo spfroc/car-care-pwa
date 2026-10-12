@@ -55,7 +55,7 @@
 
 | 检查项 | 结果 | 日志 |
 |---|---|---|
-| `npm test`（含修复后） | **PASS** 194 | `artifacts/m2-acceptance-unit-final.log` |
+| `npm test`（含修复后） | **PASS** 196 | `artifacts/m2-acceptance-unit-final.log` |
 | `npx tsc -b` | **PASS** | `artifacts/m2-acceptance-tsc.log` |
 | `npm run build` | **PASS** | `artifacts/m2-acceptance-build.log`（修复分支产物 `index-DD7_Q8cM.js`，**未部署**） |
 
@@ -103,23 +103,35 @@ Anon/publishable 仅通过环境变量注入；报告与 git **不含密钥**。
 
 | 风险 | 评级 | 处置 |
 |---|---|---|
-| **共享本地 DB 跨云账号**（`car-care-db` 固定名；业务表不按 user 隔离） | **高** | **已修（新 PR）**：有本地业务数据或原账号 outbox 时 **阻止账号切换**，明确文案引导：备份→断开→清空/替换→再连新号 |
+| **共享本地 DB 跨云账号**（`car-care-db` 固定名；业务表不按 user 隔离） | **高** | **已修**：verify + **首次上传/恢复/双向同步** 均阻止不安全切换；文案引导：备份→断开→清空/替换→再连新号 |
 | Outbox 跨账号串推 | 中（此前已 owner 隔离） | 保持；切换被阻后更安全 |
 | `replaceLocal` 误触 | 中 | **已修**：新增「从云端完全替换本地」按钮，**双重 confirm** + 备份警告；默认仍为合并恢复 |
 | base64 → JSONB 体积 | 中 | **已修**：`MAX_MEDIA_BASE64_CHARS=2e6`、`MAX_MEDIA_BYTE_SIZE=1.5e6`，校验失败拒绝 |
 | `service_role` 进客户端 | 高（已有防护） | **PASS**：config/JWT/provider 三维拒绝；文案 `storage.anonOnly`；E2E 仅 anon |
 | disconnect 文案与行为不符（旧文案写「队列清除」） | 低 | **已修**：文案改为队列按同账号保留 |
 | Staging 领先 origin/main（`35210b0` 未 push） | 低 | 另开/补 PR 同步 origin |
+| **P0：仅 verify 调 guard，跳过校验即可上传/恢复/双向同步** | **高（独立评审发现）** | **已修**：`firstUploadToCloud` / `restoreFromCloud` / `bidirectionalSync` 均先 `provider.verify()` + `guardUserSwitch`；失败路径不改本地业务数据、outbox、错误云账号 |
+
+## 4.1 独立评审 P0（2026-10-12）
+
+| 项 | 结果 |
+|---|---|
+| 问题 | `guardUserSwitch()` 原先只在 `verifyConnection()`；用户可不点「校验连接」直接首次上传 / 恢复 / 双向同步，Auth≠本地绑定且本地有旧账号数据时仍会写错云端或污染本地 |
+| 修复 | 抽取 `ensureAuthMatchesBoundAccount()`；三条写路径在任何业务/云变更前强制执行 |
+| 单测 | 新增 4 条：跳过 verify，直接调用 upload/restore/sync；断言拒绝且本地车辆、outbox、`cloudUserId`、对方云 rows 均不变（`npm test` **196** passed） |
+| A/B E2E | 账号切换段增加跳过 verify 的三条直接调用拒绝断言 |
+| PR #4 冲突 | **无**：#4 仅 `index.html`；#3 不改该文件；`merge-tree` clean |
+| Prod | **未部署** `car.adobesun.com` |
 
 ## 5. 缺陷与修复 PR
 
 | 项 | 说明 |
 |---|---|
-| **PR A（本轮）** | `fix/m2-account-switch-safety` — 阻止不安全账号切换；replaceLocal 双重确认；media 体积上限；disconnect 文案；A/B E2E；staging smoke 脚本 |
+| **PR A（本轮）** | `fix/m2-account-switch-safety` — 阻止不安全账号切换（含跳过 verify 的写路径）；replaceLocal 双重确认；media 体积上限；disconnect 文案；A/B E2E；staging smoke 脚本 |
 | **PR B（建议）** | 将本地 `35210b0` boot placeholder push 到 origin（staging 已跑此构建） |
 | Prod 部署 | **无**；明确禁止 |
 
-- https://github.com/spfroc/car-care-pwa/pull/3 — account-switch safety + acceptance report (`95a2c6e`)
+- https://github.com/spfroc/car-care-pwa/pull/3 — account-switch safety + P0 direct-path Auth guard + acceptance report
 - https://github.com/spfroc/car-care-pwa/pull/4 — boot placeholder `35210b0`（staging 已跑此构建）
 
 ## 6. 开放问题

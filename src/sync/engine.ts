@@ -259,6 +259,36 @@ export async function guardUserSwitch(userId: string | undefined): Promise<Accou
   };
 }
 
+/**
+ * Enforce Auth session user === locally bound account before upload / restore / sync.
+ * Does NOT rely on the user having clicked「校验连接」first.
+ * On mismatch with local business data or parked outbox → reject (no cloud/local mutation).
+ * Returns a failure result to short-circuit, or null to proceed.
+ */
+async function ensureAuthMatchesBoundAccount(
+  provider: CloudProvider,
+): Promise<SyncActionResult | null> {
+  let verify: VerifyResult;
+  try {
+    verify = await provider.verify();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await patchSyncMeta({ status: 'error', lastError: msg });
+    return { ok: false, message: msg };
+  }
+  if (!verify.ok) {
+    const msg = verify.error ?? '云端身份校验失败';
+    await patchSyncMeta({ status: 'error', lastError: msg });
+    return { ok: false, message: msg, verify };
+  }
+  const switchGuard = await guardUserSwitch(verify.userId);
+  if (!switchGuard.ok) {
+    await patchSyncMeta({ status: 'error', lastError: switchGuard.message });
+    return { ok: false, message: switchGuard.message, verify };
+  }
+  return null;
+}
+
 export async function verifyConnection(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) {
@@ -303,6 +333,8 @@ export async function verifyConnection(): Promise<SyncActionResult> {
 export async function firstUploadToCloud(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     const snap = await readLocalSnapshot();
@@ -361,6 +393,8 @@ export async function restoreFromCloud(opts?: {
 }): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     const snapshot = await provider.pullAll();
@@ -436,6 +470,9 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     await patchSyncMeta({ status: 'offline', lastError: '浏览器离线' });
     return { ok: false, message: '当前离线，变更已留在队列，联网后重试' };
   }
+
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
 
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {

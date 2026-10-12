@@ -628,6 +628,7 @@ describe('round-4: disconnect keep queue + restore account isolation', () => {
       status: 'idle',
       provider: 'supabase',
     });
+    mem.userId = 'user-a';
     await putVehicle(vehicle('v1', 'LocalA', '2026-01-01T00:00:00.000Z'));
     await (await getDB()).clear('sync_outbox');
     // Other account pending for same id must NOT block A's restore
@@ -663,6 +664,7 @@ describe('round-4: disconnect keep queue + restore account isolation', () => {
       status: 'idle',
       provider: 'supabase',
     });
+    mem.userId = 'user-a';
     await putVehicle(vehicle('va', 'A', '2026-01-01T00:00:00.000Z'));
     await putOutboxItem({
       opId: 'park-b',
@@ -689,5 +691,117 @@ describe('round-4: disconnect keep queue + restore account isolation', () => {
     const ids = (await (await getDB()).getAll('vehicles')).map((v) => v.id);
     expect(ids).toContain('cloud');
     expect(ids).not.toContain('va');
+  });
+});
+
+
+describe('P0 skip verify; upload/restore/sync enforce Auth === bound account', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+
+  async function seedPriorAccountLocal() {
+    await patchSyncMeta({
+      cloudUserId: 'old-user',
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'supabase',
+    });
+    await putVehicle(vehicle('v-prior', 'PriorAccountCar', '2026-01-01T00:00:00.000Z'));
+    expect(await countOutboxForOwner('old-user')).toBeGreaterThan(0);
+    // Auth session is a DIFFERENT user — never call verifyConnection
+    mem.userId = 'new-user';
+    mem.rows.clear();
+    mem.pushCallCount = 0;
+  }
+
+  it('firstUpload without verify rejects mismatch; no local/outbox/cloud mutation', async () => {
+    await seedPriorAccountLocal();
+    const beforeVehicle = await (await getDB()).get('vehicles', 'v-prior');
+    const beforeOutbox = await countOutboxForOwner('old-user');
+    const beforeCloudSize = mem.rows.size;
+
+    const r = await firstUploadToCloud();
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/阻止账号切换|IndexedDB/);
+
+    expect((await getSyncMeta()).cloudUserId).toBe('old-user');
+    expect(await (await getDB()).get('vehicles', 'v-prior')).toEqual(beforeVehicle);
+    expect(await countOutboxForOwner('old-user')).toBe(beforeOutbox);
+    expect(mem.rows.size).toBe(beforeCloudSize);
+    expect(mem.rows.has('vehicles:v-prior')).toBe(false);
+    expect(mem.pushCallCount).toBe(0);
+  });
+
+  it('restore without verify rejects mismatch; local business data untouched', async () => {
+    await seedPriorAccountLocal();
+    mem.rows.set('vehicles:evil', {
+      entity: 'vehicles',
+      id: 'evil',
+      payload: vehicle('evil', 'FromWrongAccount', '2026-06-01T00:00:00.000Z'),
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const beforeVehicle = await (await getDB()).get('vehicles', 'v-prior');
+    const beforeOutbox = await countOutboxForOwner('old-user');
+    const beforeIds = (await (await getDB()).getAll('vehicles')).map((v) => v.id).sort();
+
+    const r = await restoreFromCloud({ replaceLocal: true });
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/阻止账号切换|IndexedDB/);
+
+    expect((await getSyncMeta()).cloudUserId).toBe('old-user');
+    expect(await (await getDB()).get('vehicles', 'v-prior')).toEqual(beforeVehicle);
+    expect(await countOutboxForOwner('old-user')).toBe(beforeOutbox);
+    const afterIds = (await (await getDB()).getAll('vehicles')).map((v) => v.id).sort();
+    expect(afterIds).toEqual(beforeIds);
+    expect(afterIds).not.toContain('evil');
+  });
+
+  it('bidirectionalSync without verify rejects mismatch; no push and outbox intact', async () => {
+    await seedPriorAccountLocal();
+    // Make outbox immediately ready
+    const db = await getDB();
+    for (const item of await listOutbox()) {
+      await db.put('sync_outbox', { ...item, nextRetryAt: '2020-01-01T00:00:00.000Z' });
+    }
+    const beforeOutbox = await listOutboxForUser('old-user');
+    const beforeVehicle = await (await getDB()).get('vehicles', 'v-prior');
+
+    const r = await bidirectionalSync();
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/阻止账号切换|IndexedDB/);
+
+    expect((await getSyncMeta()).cloudUserId).toBe('old-user');
+    expect(await (await getDB()).get('vehicles', 'v-prior')).toEqual(beforeVehicle);
+    expect(await listOutboxForUser('old-user')).toEqual(beforeOutbox);
+    expect(mem.rows.has('vehicles:v-prior')).toBe(false);
+    expect(mem.pushCallCount).toBe(0);
+  });
+
+  it('same-account firstUpload without prior verify still succeeds', async () => {
+    await patchSyncMeta({
+      cloudUserId: 'test-user',
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'supabase',
+    });
+    await putVehicle(vehicle('v-ok', 'SameUser', '2026-01-01T00:00:00.000Z'));
+    mem.userId = 'test-user';
+    const r = await firstUploadToCloud();
+    expect(r.ok).toBe(true);
+    expect(mem.rows.has('vehicles:v-ok')).toBe(true);
   });
 });
