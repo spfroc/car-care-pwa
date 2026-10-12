@@ -73,12 +73,22 @@ export function validateEntityPayload(
         return 'media.mimeType';
       }
       if (typeof p.byteSize !== 'number' || p.byteSize < 0) return 'media.byteSize';
-      if (typeof p.base64 !== 'string' || p.base64.length < 8) return 'media.base64';
-      if (p.base64.length > MAX_MEDIA_BASE64_CHARS) return 'media.base64 too large';
       if (typeof p.byteSize === 'number' && p.byteSize > MAX_MEDIA_BYTE_SIZE) {
         return 'media.byteSize too large';
       }
       if (!isISO(p.createdAt)) return 'media.createdAt';
+      const hasKey = typeof p.storageKey === 'string' && p.storageKey.length > 0;
+      const hasB64 = typeof p.base64 === 'string' && p.base64.length >= 8;
+      if (!hasKey && !hasB64) return 'media needs storageKey or base64';
+      if (hasB64) {
+        if ((p.base64 as string).length > MAX_MEDIA_BASE64_CHARS) return 'media.base64 too large';
+      }
+      if (hasKey) {
+        if ((p.storageKey as string).includes('..')) return 'media.storageKey invalid';
+        if (p.contentSha256 != null && typeof p.contentSha256 !== 'string') {
+          return 'media.contentSha256';
+        }
+      }
       return null;
     }
     default:

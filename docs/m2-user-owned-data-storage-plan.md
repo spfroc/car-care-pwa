@@ -47,11 +47,11 @@
 6. 保留 JSON 导入/导出区块不变。  
 7. 自动化测试：merge/dedup/冲突/删除/队列重试/首次不覆盖；fake provider。
 
-### Phase C — 媒体对象存储与多设备 harden（后续）
+### Phase C — 媒体对象存储与多设备 harden
 
-1. Supabase Storage + 签名 URL；行表只留 `storage_key`。  
-2. Background Sync / 多标签锁。  
-3. 手动冲突合并 UI。
+1. **M3-A（本后续 PR）**：私有 Storage + RLS；行表只留 `storageKey` + metadata；见 `docs/m3a-media-storage-migration.md`。  
+2. Background Sync / 多标签锁（仍后续）。  
+3. 手动冲突合并 UI（仍后续）。
 
 ### Phase D — Notion（仅当可行性通过）⏳
 

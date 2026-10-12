@@ -29,7 +29,7 @@
 | Auth | 自建 OIDC 或 Clerk/Auth.js + 自有 user 表 | 禁止把 Notion personal token 当多用户方案 |
 | API | HTTPS JSON（Cloudflare Workers / 自有 Node） | 与 Contabo 静态 PWA 分离源 |
 | DB | Postgres（可用托管 Supabase **自有项目**，或自建） | 开启 RLS |
-| Blob | R2 / S3 兼容 | media 不进 Postgres row |
+| Blob | Supabase Storage（私有 bucket）/ R2 | media 不进 Postgres row；M3-A 见 `docs/m3a-media-storage-migration.md` |
 | 客户端队列 | IndexedDB `sync_outbox` + `sync_meta` | 与业务 store 分库或分 store |
 
 **明确不采用**：把用户养护数据写入个人 Notion workspace 作为主存储（隔离差、冲突模型弱、配额不可控）。
@@ -109,7 +109,7 @@ sync_outbox: [{ opId, entity, entityId, op: upsert|delete, payload, mutatedAt, a
 
 1. Auth + 空 Postgres schema + RLS  
 2. Outbox + push/pull MVP（无媒体）  
-3. 媒体签名上传下载  
+3. 媒体私有 Storage 上传下载（M3-A）  
 4. 冲突 UI + 删除恢复  
 5. E2E：双设备离线交叉编辑  
 

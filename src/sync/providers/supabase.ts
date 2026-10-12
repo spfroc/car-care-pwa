@@ -8,6 +8,8 @@ import type {
   SyncOutboxItem,
   VerifyResult,
 } from '../types';
+import { MEDIA_BUCKET } from '../types';
+import type { MediaObjectStore, MediaObjectBytes } from '../mediaStorage';
 
 type DbRow = {
   user_id: string;
@@ -212,6 +214,16 @@ export class SupabaseProvider implements CloudProvider {
     await this.client.auth.signOut();
   }
 
+  getMediaObjectStore(): MediaObjectStore {
+    return new SupabaseMediaObjectStore(this.client);
+  }
+
+  async getAuthUserId(): Promise<string | null> {
+    const { data, error } = await this.client.auth.getUser();
+    if (error || !data.user) return null;
+    return data.user.id;
+  }
+
   private async requireUser() {
     const { data, error } = await this.client.auth.getUser();
     if (error || !data.user) throw new Error(error?.message ?? '未登录');
@@ -234,4 +246,74 @@ function hashUrl(url: string): string {
   let h = 0;
   for (let i = 0; i < url.length; i++) h = (h * 31 + url.charCodeAt(i)) | 0;
   return Math.abs(h).toString(36);
+}
+
+
+export class SupabaseMediaObjectStore implements MediaObjectStore {
+  private client: SupabaseClient;
+  constructor(client: SupabaseClient) {
+    this.client = client;
+  }
+
+  async uploadMediaObject(opts: {
+    storageKey: string;
+    body: MediaObjectBytes;
+    contentType: string;
+  }): Promise<void> {
+    const { error } = await this.client.storage.from(MEDIA_BUCKET).upload(opts.storageKey, opts.body, {
+      upsert: true,
+      contentType: opts.contentType,
+      cacheControl: '3600',
+    });
+    if (error) throw new Error(`storage upload: ${error.message}`);
+  }
+
+  async downloadMediaObject(storageKey: string): Promise<Blob> {
+    const { data, error } = await this.client.storage.from(MEDIA_BUCKET).download(storageKey);
+    if (error || !data) throw new Error(`storage download: ${error?.message ?? 'empty'}`);
+    return data;
+  }
+
+  async removeMediaObject(storageKey: string): Promise<void> {
+    const { error } = await this.client.storage.from(MEDIA_BUCKET).remove([storageKey]);
+    if (error) throw new Error(`storage remove: ${error.message}`);
+  }
+
+  async listMediaObjectKeys(userId: string): Promise<string[]> {
+    const keys: string[] = [];
+    // List media_id folders under userId/
+    const { data: folders, error: folderErr } = await this.client.storage
+      .from(MEDIA_BUCKET)
+      .list(userId, { limit: 1000 });
+    if (folderErr) throw new Error(`storage list: ${folderErr.message}`);
+    for (const entry of folders ?? []) {
+      if (!entry.name) continue;
+      // Each entry may be a media_id "folder"
+      const prefix = `${userId}/${entry.name}`;
+      const { data: files, error: fileErr } = await this.client.storage
+        .from(MEDIA_BUCKET)
+        .list(prefix, { limit: 100 });
+      if (fileErr) continue;
+      for (const f of files ?? []) {
+        if (f.name) keys.push(`${prefix}/${f.name}`);
+      }
+    }
+    return keys;
+  }
+
+  async headMediaObject(storageKey: string): Promise<{ exists: boolean; byteSize?: number }> {
+    const parts = storageKey.split('/');
+    if (parts.length < 3) return { exists: false };
+    const folder = parts.slice(0, -1).join('/');
+    const fileName = parts[parts.length - 1];
+    const { data, error } = await this.client.storage.from(MEDIA_BUCKET).list(folder, {
+      search: fileName,
+      limit: 10,
+    });
+    if (error) return { exists: false };
+    const hit = (data ?? []).find((f) => f.name === fileName);
+    if (!hit) return { exists: false };
+    const size = (hit.metadata as { size?: number } | null)?.size;
+    return { exists: true, byteSize: typeof size === 'number' ? size : undefined };
+  }
 }

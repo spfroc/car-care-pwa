@@ -1,6 +1,63 @@
 import { nowISO } from '../../lib/constants';
 import type { CloudProvider } from './types';
 import type { CloudRow, CloudSnapshot, PushResult, SyncOutboxItem, VerifyResult } from '../types';
+import type { MediaObjectStore, MediaObjectBytes } from '../mediaStorage';
+
+/** In-memory fake Storage for unit tests. */
+export class MemoryMediaObjectStore implements MediaObjectStore {
+  objects = new Map<string, { body: Uint8Array; contentType: string }>();
+  failNextUpload = false;
+  failNextDownload = false;
+  uploadCount = 0;
+
+  async uploadMediaObject(opts: {
+    storageKey: string;
+    body: MediaObjectBytes;
+    contentType: string;
+  }): Promise<void> {
+    this.uploadCount += 1;
+    if (this.failNextUpload) {
+      this.failNextUpload = false;
+      throw new Error('simulated storage upload failure');
+    }
+    let bytes: Uint8Array;
+    if (opts.body instanceof Blob) {
+      bytes = new Uint8Array(await opts.body.arrayBuffer());
+    } else if (opts.body instanceof ArrayBuffer) {
+      bytes = new Uint8Array(opts.body);
+    } else {
+      bytes = opts.body;
+    }
+    this.objects.set(opts.storageKey, { body: bytes, contentType: opts.contentType });
+  }
+
+  async downloadMediaObject(storageKey: string): Promise<Blob> {
+    if (this.failNextDownload) {
+      this.failNextDownload = false;
+      throw new Error('simulated storage download failure');
+    }
+    const hit = this.objects.get(storageKey);
+    if (!hit) throw new Error(`storage download: not found ${storageKey}`);
+    // Copy buffer to satisfy BlobPart typing
+    const copy = new Uint8Array(hit.body);
+    return new Blob([copy], { type: hit.contentType });
+  }
+
+  async removeMediaObject(storageKey: string): Promise<void> {
+    this.objects.delete(storageKey);
+  }
+
+  async listMediaObjectKeys(userId: string): Promise<string[]> {
+    const prefix = `${userId}/`;
+    return [...this.objects.keys()].filter((k) => k.startsWith(prefix));
+  }
+
+  async headMediaObject(storageKey: string): Promise<{ exists: boolean; byteSize?: number }> {
+    const hit = this.objects.get(storageKey);
+    if (!hit) return { exists: false };
+    return { exists: true, byteSize: hit.body.byteLength };
+  }
+}
 
 /** In-memory fake provider for unit tests. */
 export class MemoryCloudProvider implements CloudProvider {
@@ -11,6 +68,9 @@ export class MemoryCloudProvider implements CloudProvider {
   offline = false;
   pageSize = 1000;
   pushCallCount = 0;
+  mediaStore = new MemoryMediaObjectStore();
+  /** When false, getMediaObjectStore returns null (legacy M2 behaviour). */
+  enableMediaStore = true;
 
   key(entity: string, id: string): string {
     return `${entity}:${id}`;
@@ -79,5 +139,13 @@ export class MemoryCloudProvider implements CloudProvider {
       nextRetryAt: r.updatedAt,
     }));
     return this.pushOps(ops);
+  }
+
+  getMediaObjectStore(): MediaObjectStore | null {
+    return this.enableMediaStore ? this.mediaStore : null;
+  }
+
+  async getAuthUserId(): Promise<string | null> {
+    return this.userId;
   }
 }
