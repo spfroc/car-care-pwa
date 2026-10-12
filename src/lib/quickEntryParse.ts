@@ -329,6 +329,50 @@ export function extractRelativeDate(text: string, now: Date = new Date()): strin
 }
 
 /**
+ * Absolute calendar date in text → ISO (keeps local clock from `now`).
+ * Supports `YYYY年M月D日` and `M月D日` (year from now; if that date is >1 day
+ * in the future, roll back one year — e.g. Dec spoken in January).
+ */
+export function extractAbsoluteDate(text: string, now: Date = new Date()): string | undefined {
+  const ymd = text.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
+  if (ymd) {
+    const iso = localCivilDateIso(now, Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+    if (iso) return iso;
+  }
+  const md = text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+  if (md) {
+    let year = now.getFullYear();
+    let month = Number(md[1]);
+    let day = Number(md[2]);
+    let iso = localCivilDateIso(now, year, month, day);
+    if (!iso) return undefined;
+    // Future by more than ~1 day → previous year (utterance about last Dec).
+    if (new Date(iso).getTime() - now.getTime() > 36 * 3600 * 1000) {
+      iso = localCivilDateIso(now, year - 1, month, day) ?? iso;
+    }
+    return iso;
+  }
+  return undefined;
+}
+
+/** Build ISO from local Y-M-D keeping hour/minute/second from `now`. */
+function localCivilDateIso(
+  now: Date,
+  year: number,
+  month: number,
+  day: number,
+): string | undefined {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return undefined;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  const d = new Date(now.getTime());
+  d.setFullYear(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+    return undefined; // invalid civil date (e.g. 2月30日)
+  }
+  return d.toISOString();
+}
+
+/**
  * When plate/name is omitted: sole vehicle, sole fuel/charge-capable for the
  * detected type, or most-recently-used for that type.
  */
@@ -459,9 +503,13 @@ export function extractFields(
 
   const relDate = extractRelativeDate(text, now);
   if (relDate) fields.date = relDate;
+  else {
+    const absDate = extractAbsoluteDate(text, now);
+    if (absDate) fields.date = absDate;
+  }
 
   // Strip unit-price and discount spans before scanning generic amounts,
-  // so `8块7毛2一升` / `优惠20块` are not mistaken for the fill total.
+  // so `8块7毛2一升` / `优惠20块` / `油价8.57元` are not mistaken for the fill total.
   let work = text;
   const cnUnit = work.match(
     /(\d+\s*块(?:\s*\d+\s*毛)?(?:\s*\d+\s*分?)?)\s*(?:一|\/|每)\s*(?:升|L)/i,
@@ -473,6 +521,7 @@ export function extractFields(
   }
   if (fields.unitPrice == null) {
     const unitM =
+      work.match(/油价\s*[为是:]?\s*(\d+(?:\.\d+)?)\s*(?:元|块钱|块)?/) ??
       work.match(/单价\s*[为是:]?\s*(\d+(?:\.\d+)?)/) ??
       work.match(/(\d+(?:\.\d+)?)\s*(?:元|块)\s*(?:一|\/|每)\s*(?:升|L)/i) ??
       work.match(/(\d+(?:\.\d+)?)\s*元\s*\/\s*[Ll升]/);
@@ -516,6 +565,9 @@ export function extractFields(
       fields.amountDue = roundMoney(dueExplicit);
     } else if (fields.discount != null && fields.discount > 0) {
       fields.amountDue = roundMoney(paidExplicit + fields.discount);
+    } else if (bareGross != null && roundMoney(bareGross) !== roundMoney(paidExplicit)) {
+      // e.g. 「39.25元,实付34.21元」→ bare is 应付, 实付 is paid
+      fields.amountDue = roundMoney(bareGross);
     }
   } else if (dueExplicit != null) {
     fields.amountDue = roundMoney(dueExplicit);
@@ -586,13 +638,23 @@ export function extractFields(
     if (t?.[1]) fields.title = t[1];
   }
 
-  // Derive liters from paid/due ÷ unit price when not spoken.
-  // Prefer 实付 (amountPaid) when present; else 应付.
+  // Derive liters from due/paid ÷ unit price when not spoken.
+  // Prefer 应付 (list total = 油价×升数); else 实付.
   if (fields.liters == null && fields.unitPrice != null && fields.unitPrice > 0) {
-    const basis = fields.amountPaid ?? fields.amountDue;
+    const basis = fields.amountDue ?? fields.amountPaid;
     if (basis != null && basis > 0) {
       fields.liters = Math.round((basis / fields.unitPrice) * 1000) / 1000;
     }
+  }
+
+  // If both due & paid known and discount omitted, fill 优惠 = due - paid.
+  if (
+    fields.discount == null &&
+    fields.amountDue != null &&
+    fields.amountPaid != null &&
+    fields.amountDue > fields.amountPaid
+  ) {
+    fields.discount = roundMoney(fields.amountDue - fields.amountPaid);
   }
 
   const trimmed = text.trim();

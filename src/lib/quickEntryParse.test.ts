@@ -3,6 +3,7 @@ import {
   buildVehicleMatchInputs,
   detectRecordTypes,
   extractFields,
+  extractAbsoluteDate,
   extractRelativeDate,
   isParseReady,
   matchStations,
@@ -52,6 +53,26 @@ const FAIL_SENTENCE = '昨天在中凯加了300块的油, 优惠20块, 8块7毛2
 /** 实付 N + 优惠 → paid=N, due=N+discount; odometer from N公里. */
 const SHIFU_ODO_SENTENCE =
   '昨天在中凯加了 实付300块的油, 优惠20块, 7块5毛5一升，42563公里';
+
+const USER_ZHONGKAI_SENTENCE =
+  '10月10日,在中凯加油 39.25元,实付34.21元,油价8.57元,里程  6757';
+
+describe('extractAbsoluteDate', () => {
+  it('parses M月D日 with year from now', () => {
+    const now = new Date('2026-10-12T14:25:00+08:00');
+    const iso = extractAbsoluteDate('10月10日加油', now)!;
+    expect(new Date(iso).toDateString()).toBe(
+      new Date('2026-10-10T14:25:00+08:00').toDateString(),
+    );
+  });
+  it('parses YYYY年M月D日', () => {
+    const now = new Date('2026-10-12T14:25:00+08:00');
+    const iso = extractAbsoluteDate('2025年3月5日', now)!;
+    expect(new Date(iso).toDateString()).toBe(
+      new Date('2025-03-05T14:25:00+08:00').toDateString(),
+    );
+  });
+});
 
 describe('detectRecordTypes', () => {
   it('detects fuel from 加油 / 升', () => {
@@ -236,7 +257,7 @@ describe('extractFields', () => {
     expect(f.discount).toBe(20);
     expect(f.amountPaid).toBe(280);
     expect(f.unitPrice).toBe(8.72);
-    expect(f.liters).toBeCloseTo(280 / 8.72, 3);
+    expect(f.liters).toBeCloseTo(300 / 8.72, 3);
     expect(f.date).toBeTruthy();
     expect(new Date(f.date!).toDateString()).toBe(
       new Date('2026-10-08T14:30:00+08:00').toDateString(),
@@ -251,7 +272,7 @@ describe('extractFields', () => {
     expect(f.amountDue).toBe(320);
     expect(f.unitPrice).toBe(7.55);
     expect(f.odometer).toBe(42563);
-    expect(f.liters).toBeCloseTo(300 / 7.55, 3);
+    expect(f.liters).toBeCloseTo(320 / 7.55, 3);
     expect(new Date(f.date!).toDateString()).toBe(
       new Date('2026-10-08T15:18:00+08:00').toDateString(),
     );
@@ -309,7 +330,7 @@ describe('parseQuickEntry', () => {
     expect(r.fields.discount).toBe(20);
     expect(r.fields.amountPaid).toBe(280);
     expect(r.fields.unitPrice).toBe(8.72);
-    expect(r.fields.liters).toBeCloseTo(32.11, 2);
+    expect(r.fields.liters).toBeCloseTo(300 / 8.72, 2);
     expect(isParseReady(r)).toBe(true);
   });
 
@@ -363,7 +384,45 @@ describe('parseQuickEntry', () => {
     expect(r.fields.amountDue).toBe(320);
     expect(r.fields.unitPrice).toBe(7.55);
     expect(r.fields.odometer).toBe(42563);
-    expect(r.fields.liters).toBeCloseTo(300 / 7.55, 3);
+    expect(r.fields.liters).toBeCloseTo(320 / 7.55, 3);
+    expect(isParseReady(r)).toBe(true);
+  });
+});
+
+describe('user sentence: 10月10日 中凯 油价/实付/应付', () => {
+  const now = new Date('2026-10-12T14:25:00+08:00');
+
+  it('extractFields: date, unitPrice, due, paid, liters, odometer, discount', () => {
+    const f = extractFields(USER_ZHONGKAI_SENTENCE, 'fuel', now);
+    expect(new Date(f.date!).toDateString()).toBe(
+      new Date('2026-10-10T14:25:00+08:00').toDateString(),
+    );
+    expect(f.stationName).toBe('中凯');
+    expect(f.unitPrice).toBe(8.57);
+    expect(f.amountDue).toBe(39.25);
+    expect(f.amountPaid).toBe(34.21);
+    expect(f.discount).toBeCloseTo(5.04, 2);
+    expect(f.odometer).toBe(6757);
+    expect(f.liters).toBeCloseTo(39.25 / 8.57, 3);
+  });
+
+  it('parseQuickEntry resolves 中凯 station + fuel fields', () => {
+    const r = parseQuickEntry(USER_ZHONGKAI_SENTENCE, [vehicles[0], vehicles[2]], {
+      now,
+      stations,
+    });
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBe('v-spacy');
+    expect(r.fields.stationName).toBe('中凯石油窑头路');
+    expect(r.fields.stationId).toBe('st-zhongkai');
+    expect(r.fields.unitPrice).toBe(8.57);
+    expect(r.fields.amountDue).toBe(39.25);
+    expect(r.fields.amountPaid).toBe(34.21);
+    expect(r.fields.odometer).toBe(6757);
+    expect(r.fields.liters).toBeCloseTo(39.25 / 8.57, 3);
+    expect(new Date(r.fields.date!).toDateString()).toBe(
+      new Date('2026-10-10T14:25:00+08:00').toDateString(),
+    );
     expect(isParseReady(r)).toBe(true);
   });
 });
