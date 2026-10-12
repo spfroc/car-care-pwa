@@ -5,6 +5,7 @@ import type {
   SyncOutboxItem,
   VerifyResult,
 } from '../types';
+import type { MediaObjectStore } from '../mediaStorage';
 
 export interface CloudProvider {
   readonly id: 'supabase' | 'notion' | 'memory';
@@ -16,4 +17,8 @@ export interface CloudProvider {
   /** Replace-all style bootstrap upload (first upload). */
   pushSnapshot(rows: CloudRow[]): Promise<PushResult>;
   signOut?(): Promise<void>;
+  /** M3-A: private media object store. Optional for providers without Storage. */
+  getMediaObjectStore?(): MediaObjectStore | null;
+  /** Current auth user id (for storage path prefix). */
+  getAuthUserId?(): Promise<string | null>;
 }

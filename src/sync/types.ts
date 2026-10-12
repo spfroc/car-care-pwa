@@ -59,6 +59,12 @@ export interface CloudStorageConfig {
   notionWorkspaceHint?: string;
 }
 
+/** M2 JSONB/base64 body. */
+export const MEDIA_SCHEMA_BASE64 = 1;
+/** M3-A private Storage object ref. */
+export const MEDIA_SCHEMA_STORAGE = 2;
+export const MEDIA_BUCKET = 'car-care-media';
+
 export interface CloudMediaPayload {
   id: UUID;
   mimeType: string;
@@ -66,8 +72,17 @@ export interface CloudMediaPayload {
   width?: number;
   height?: number;
   createdAt: ISODateTime;
-  /** MVP: base64 body; Phase C → storage_key */
-  base64: string;
+  /** 1 = base64 in jsonb (M2); 2 = Storage object (M3-A). */
+  schemaVersion?: number;
+  /**
+   * M2 / migration: base64 body.
+   * M3-A live rows omit this after upload+verify+ref switch.
+   */
+  base64?: string;
+  /** Relative path inside private bucket `car-care-media`. */
+  storageKey?: string;
+  /** Hex SHA-256 of binary bytes (dedupe + verify). */
+  contentSha256?: string;
 }
 
 export interface CloudRow {
