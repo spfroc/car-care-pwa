@@ -61,3 +61,7 @@
 - 脚本：`scripts/m3a-browser-acceptance.mjs`
 - 结果：**22/22 PASS**（A–E + prod 未动）；详见 `docs/m3a-staging-deploy-report.md` §8
 - 产物：`artifacts/m3a-browser-accept/`
+
+## 8. 生产发布（已批准）
+
+见 **`docs/m3a-prod-deploy-report.md`**：生产 `8f335bc` / `index-D4Bw8zWY.js`；备份与回滚；只读冒烟 24/24；正式 Supabase 未改。
