@@ -47,15 +47,12 @@
 6. 保留 JSON 导入/导出区块不变。  
 7. 自动化测试：merge/dedup/冲突/删除/队列重试/首次不覆盖；fake provider。
 
-### Phase C — 媒体对象存储与多设备 harden
+### Phase C / M3 分阶（见 `docs/m3-roadmap.md`）
 
-1. **M3-A（本后续 PR）**：私有 Storage + RLS；行表只留 `storageKey` + metadata；见 `docs/m3a-media-storage-migration.md`。  
-2. Background Sync / 多标签锁（仍后续）。  
-3. 手动冲突合并 UI（仍后续）。
-
-### Phase D — Notion（仅当可行性通过）⏳
-
-见 `docs/notion-sync-feasibility.md`。在安全认证或受控代理落地前 **不**接真实 API。
+1. **M3-A** ✅：私有 Storage + RLS；见 `docs/m3a-media-storage-migration.md`。  
+2. **M3-B** 🚧：多标签锁 / Background Sync 渐进增强 / Outbox harden；见 `docs/m3b-tab-lock-outbox-harden.md`。  
+3. **M3-C** 📋：手动冲突合并 UI（后续）。  
+4. **M3-D** 📋：Notion（仅可行性通过后）；见 `docs/notion-sync-feasibility.md`。
 
 ## 3. 同步语义（本 PR 实现）
 

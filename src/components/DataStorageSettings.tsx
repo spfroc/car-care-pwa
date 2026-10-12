@@ -30,6 +30,7 @@ export function DataStorageSettings() {
   const [statusLine, setStatusLine] = useState('');
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [outboxCount, setOutboxCount] = useState(0);
+  const [outboxReadyCount, setOutboxReadyCount] = useState(0);
 
   const refreshStatus = useCallback(async () => {
     const summary = await getSyncStatusSummary();
@@ -37,6 +38,7 @@ export function DataStorageSettings() {
     setUrl(summary.config.supabaseUrl ?? '');
     setAnon(summary.config.supabaseAnonKey ?? '');
     setOutboxCount(summary.outboxCount);
+    setOutboxReadyCount(summary.outboxReadyCount);
     setConflicts(await listConflicts());
     const m = summary.meta;
     const parts = [
@@ -253,7 +255,7 @@ export function DataStorageSettings() {
           >
             {t('storage.disconnect')}
           </button>
-          {outboxCount > 0 && (
+          {outboxCount > 0 && outboxReadyCount >= 0 && (
             <button
               type="button"
               className="btn block"

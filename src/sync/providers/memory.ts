@@ -13,6 +13,11 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
   /** When true, list throws (network error). */
   listThrows = false;
   uploadCount = 0;
+  downloadCount = 0;
+  /** Test: hold upload until resolved (lease-loss mid migrate). */
+  uploadGate: Promise<void> | null = null;
+  /** Test: hold download until resolved (lease-loss mid materialize). */
+  downloadGate: Promise<void> | null = null;
   /** Injectable clock for createdAt on upload. */
   nowMs = () => Date.now();
 
@@ -22,6 +27,7 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
     contentType: string;
   }): Promise<void> {
     this.uploadCount += 1;
+    if (this.uploadGate) await this.uploadGate;
     if (this.failNextUpload) {
       this.failNextUpload = false;
       throw new Error('simulated storage upload failure');
@@ -43,6 +49,8 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
   }
 
   async downloadMediaObject(storageKey: string): Promise<Blob> {
+    this.downloadCount += 1;
+    if (this.downloadGate) await this.downloadGate;
     if (this.failNextDownload) {
       this.failNextDownload = false;
       throw new Error('simulated storage download failure');
@@ -95,6 +103,8 @@ export class MemoryCloudProvider implements CloudProvider {
   offline = false;
   pageSize = 1000;
   pushCallCount = 0;
+  /** Test: resolve before pushOps continues (lease-loss mid-flight). */
+  pushGate: Promise<void> | null = null;
   mediaStore = new MemoryMediaObjectStore();
   /** When false, getMediaObjectStore returns null (legacy M2 behaviour). */
   enableMediaStore = true;
@@ -119,6 +129,7 @@ export class MemoryCloudProvider implements CloudProvider {
   /** Atomic LWW — skipped_cloud_newer is conflict-only (not applied). */
   async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
     this.pushCallCount += 1;
+    if (this.pushGate) await this.pushGate;
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
     if (this.failNextPush) {
       this.failNextPush = false;

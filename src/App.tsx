@@ -10,6 +10,8 @@ import { useAppBootstrap } from './hooks/useAppData';
 import { AppDataProvider } from './i18n';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { translate } from './i18n/messages';
+import { useEffect } from 'react';
+import { installSyncLifecycle } from './sync/syncLifecycle';
 
 function AppRoutes({ persisted }: { persisted: boolean }) {
   return (
@@ -34,6 +36,12 @@ function AppRoutes({ persisted }: { persisted: boolean }) {
 
 export default function App() {
   const { ready, error, persisted } = useAppBootstrap();
+
+  useEffect(() => {
+    if (!ready || error) return;
+    const { stop } = installSyncLifecycle();
+    return stop;
+  }, [ready, error]);
 
   if (error) {
     return (
