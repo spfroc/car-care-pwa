@@ -63,6 +63,121 @@ describe('fuelIntervals', () => {
     expect(ivs[0].economyPer100).toBeCloseTo(5, 5);
     expect(ivs[0].lowConfidence).toBe(true);
   });
+
+  it('ignores odometer≤0 history补录 so they cannot invent a 0→firstFill mega-interval', () => {
+    // Repro: X-RV screenshot showed 1.27 L/100km because odo=0 rows + first real fill
+    // created (25.85L / 34448km)*100 ≈ 0.08 dominating the weighted average.
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'hist',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2021-08-15T04:00:00.000Z',
+        odometer: 0,
+        liters: 0,
+        fuelGrade: '92#',
+        filledUp: false,
+        amountPaid: 200,
+        flags: { lowConfidenceEconomy: true },
+      },
+      {
+        ...base,
+        id: 'hist2',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2022-06-01T04:00:00.000Z',
+        odometer: 0,
+        liters: 36.86,
+        fuelGrade: '92#',
+        filledUp: false,
+        amountPaid: 282,
+        flags: { lowConfidenceEconomy: true },
+      },
+      {
+        ...base,
+        id: 'a',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2025-12-20T04:00:00.000Z',
+        odometer: 34448,
+        liters: 25.85,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 152.77,
+      },
+      {
+        ...base,
+        id: 'b',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-01T04:00:00.000Z',
+        odometer: 35072,
+        liters: 34.6,
+        fuelGrade: '92#',
+        filledUp: false,
+        amountPaid: 200,
+      },
+      {
+        ...base,
+        id: 'c',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-25T04:00:00.000Z',
+        odometer: 35488,
+        liters: 41.37,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 241.6,
+      },
+      {
+        ...base,
+        id: 'd',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-10-06T04:00:00.000Z',
+        odometer: 41864,
+        liters: 39.75,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 296.96,
+      },
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs.some((iv) => iv.fromOdometer === 0)).toBe(false);
+    // Without the fix, odo=0 → 34448 (25.85L) would dominate → ~1.27 with full history.
+    // With the fix, first interval starts at 34448→35072.
+    expect(ivs[0].fromOdometer).toBe(34448);
+    expect(ivs[0].toOdometer).toBe(35072);
+    const avg = averageFuelEconomy(records)!;
+    // Still includes a long 35488→41864 gap in this slim fixture; assert not crushed by odo=0.
+    expect(avg).toBeGreaterThan(1.27);
+    expect(fuelEconomySummary(records).lowConfidence).toBe(true); // partial fill b
+  });
+
+  it('marks flags.lowConfidenceEconomy as 参考 but keeps the fill in the chain', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'a', vehicleId: 'v', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '95#', filledUp: true },
+      {
+        ...base,
+        id: 'mid',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-01-05T10:00:00.000Z',
+        odometer: 1300,
+        liters: 20,
+        fuelGrade: '95#',
+        filledUp: true,
+        flags: { lowConfidenceEconomy: true },
+      },
+      { ...base, id: 'c', vehicleId: 'v', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1600, liters: 40, fuelGrade: '95#', filledUp: true },
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs[0].lowConfidence).toBe(true); // flagged end
+    expect(ivs[1].lowConfidence).toBe(false);
+    expect(averageFuelEconomy(records)).toBeCloseTo((20 + 40) / (300 + 300) * 100, 5);
+  });
 });
 
 describe('electricIntervals', () => {

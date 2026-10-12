@@ -82,6 +82,54 @@ describe('summarizeMileage', () => {
     expect(s.trackedMileage).toBe(300);
   });
 
+  it('ignores odometer≤0 when deriving baseline (history补录)', () => {
+    const records: CareRecord[] = [
+      {
+        ...base,
+        id: 'hist',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2021-08-15T04:00:00.000Z',
+        odometer: 0,
+        liters: 0,
+        fuelGrade: '92#',
+        filledUp: false,
+        amountPaid: 200,
+      },
+      {
+        ...base,
+        id: 'a',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2025-12-20T04:00:00.000Z',
+        odometer: 34448,
+        liters: 25.85,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 152.77,
+      },
+      {
+        ...base,
+        id: 'b',
+        vehicleId: 'v',
+        type: 'fuel',
+        date: '2026-10-06T04:00:00.000Z',
+        odometer: 41864,
+        liters: 39.75,
+        fuelGrade: '92#',
+        filledUp: true,
+        amountPaid: 296.96,
+      },
+    ];
+    const s = summarizeMileage({}, records);
+    expect(s.baselineOdometer).toBe(34448);
+    expect(s.drivingOdometer).toBe(41864);
+    expect(s.trackedMileage).toBe(7416);
+    expect(formatMileagePair(s)).toBe('7416/41864');
+    // Hero spend: strictly after baseline — excludes odo=0 history and baseline fill
+    expect(fuelSpendAfterBaseline(records, s.baselineOdometer)).toBeCloseTo(296.96, 5);
+  });
+
   it('shows initial only when there are no record odometers', () => {
     const s = summarizeMileage({ initialOdometer: 12000 }, []);
     expect(s.drivingOdometer).toBe(12000);

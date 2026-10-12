@@ -3,6 +3,20 @@ import type { CareRecord, ChargeRecord, EconomyInterval, FuelRecord, Km } from '
 /** SOC after charge ≥ this → treat as "full enough" for high-confidence electric economy. */
 export const CHARGE_FULL_SOC_THRESHOLD = 95;
 
+/**
+ * Odometer usable for economy intervals / mileage anchors.
+ * Rejects missing, non-finite, and ≤0 (history补录 often stores unknown mileage as 0,
+ * which would invent a 0→firstRealFill mega-interval and crush weighted L/100km).
+ */
+export function isUsableOdometer(n: unknown): n is number {
+  return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
+
+/** History补录 flag — mark interval as 参考, do not drop mid-chain fills (would undercount liters). */
+function excludeFromEconomy(r: { flags?: { lowConfidenceEconomy?: boolean } }): boolean {
+  return r.flags?.lowConfidenceEconomy === true;
+}
+
 function sortByOdometerThenDate<T extends { odometer: Km; date: string }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
     if (a.odometer !== b.odometer) return a.odometer - b.odometer;
@@ -34,7 +48,14 @@ export function isChargeLowConfidence(end: ChargeRecord): boolean {
 
 function fuelIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
   const fuels = sortByOdometerThenDate(
-    records.filter((r): r is FuelRecord => r.type === 'fuel' && typeof r.odometer === 'number'),
+    records.filter(
+      (r): r is FuelRecord =>
+        r.type === 'fuel' &&
+        isUsableOdometer(r.odometer) &&
+        typeof r.liters === 'number' &&
+        Number.isFinite(r.liters) &&
+        r.liters > 0,
+    ),
   );
   const out: EconomyInterval[] = [];
   for (let i = 1; i < fuels.length; i++) {
@@ -48,7 +69,7 @@ function fuelIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
       toOdometer: b.odometer,
       amount: b.liters,
       economyPer100: (b.liters / dKm) * 100,
-      lowConfidence: !b.filledUp,
+      lowConfidence: !b.filledUp || excludeFromEconomy(b),
       endRecordId: b.id,
     });
   }
@@ -57,7 +78,14 @@ function fuelIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
 
 function electricIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
   const charges = sortByOdometerThenDate(
-    records.filter((r): r is ChargeRecord => r.type === 'charge' && typeof r.odometer === 'number'),
+    records.filter(
+      (r): r is ChargeRecord =>
+        r.type === 'charge' &&
+        isUsableOdometer(r.odometer) &&
+        typeof r.kWh === 'number' &&
+        Number.isFinite(r.kWh) &&
+        r.kWh > 0,
+    ),
   );
   const out: EconomyInterval[] = [];
   for (let i = 1; i < charges.length; i++) {
@@ -71,7 +99,7 @@ function electricIntervalsOneVehicle(records: CareRecord[]): EconomyInterval[] {
       toOdometer: b.odometer,
       amount: b.kWh,
       economyPer100: (b.kWh / dKm) * 100,
-      lowConfidence: isChargeLowConfidence(b),
+      lowConfidence: isChargeLowConfidence(b) || excludeFromEconomy(b),
       endRecordId: b.id,
     });
   }
@@ -144,7 +172,7 @@ export function combinedEconomy(
 
   const scope = groups[0];
   const anchors = scope.filter(
-    (r) => (r.type === 'fuel' || r.type === 'charge') && typeof r.odometer === 'number',
+    (r) => (r.type === 'fuel' || r.type === 'charge') && isUsableOdometer(r.odometer),
   ) as Array<(FuelRecord | ChargeRecord)>;
   if (anchors.length < 2) return null;
 

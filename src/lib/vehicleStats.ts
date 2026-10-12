@@ -31,11 +31,15 @@ export interface VehicleMileageSummary {
   baselineOdometer: Km | null;
 }
 
-/** All numeric odometer readings on records (any type). */
+/**
+ * Numeric odometer readings usable for 行驶/统计里程.
+ * Ignores ≤0 — history补录 often stores unknown mileage as 0; treating that as
+ * baseline would make 统计里程 = 行驶里程 and exclude those spends inconsistently.
+ */
 export function recordOdometers(records: CareRecord[]): Km[] {
   const out: Km[] = [];
   for (const r of records) {
-    if (typeof r.odometer === 'number' && Number.isFinite(r.odometer)) {
+    if (typeof r.odometer === 'number' && Number.isFinite(r.odometer) && r.odometer > 0) {
       out.push(r.odometer);
     }
   }
