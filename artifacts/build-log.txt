@@ -1,0 +1,23 @@
+
+> car-care-pwa@0.0.0 build
+> tsc -b && vite build
+
+vite v8.3.3 building client environment for production...
+transforming...
+✓ 64 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/manifest.webmanifest                          0.47 kB
+dist/index.html                                    0.92 kB │ gzip:   0.48 kB
+dist/assets/index-DUfOadJ-.css                    16.08 kB │ gzip:   3.90 kB
+dist/assets/workbox-window.prod.es5-Bd17z0YL.js    5.65 kB │ gzip:   2.20 kB
+dist/assets/index-BLZy7T_X.js                    422.39 kB │ gzip: 129.84 kB
+
+✓ built in 466ms
+
+PWA v2.0.0
+mode      generateSW
+precache  16 entries (451.12 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-9c191d2f.js

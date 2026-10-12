@@ -178,6 +178,9 @@ const zhCN = {
   'interval.tripFuel': '本次加油行驶里程 {dist} km',
   'interval.tripCharge': '本次充电行驶里程 {dist} km',
   'interval.notFull': ' · 未加满（参考）',
+  'interval.partialCharge': ' · 未充至满电（参考）',
+  'eco.estimate': '（参考）',
+  'eco.lowConfHint': '含未加满/未满电区间，数值仅供参考',
 
   // Settings
   'settings.title': '设置',
@@ -576,6 +579,9 @@ const en: { [K in MessageKey]: string } = {
   'interval.tripFuel': 'This fuel trip {dist} km',
   'interval.tripCharge': 'This charge trip {dist} km',
   'interval.notFull': ' · Not full (estimate)',
+  'interval.partialCharge': ' · Not fully charged (estimate)',
+  'eco.estimate': ' (est.)',
+  'eco.lowConfHint': 'Includes partial fill/charge intervals — estimate only',
 
   'settings.title': 'Settings',
   'settings.general': 'General',

@@ -128,3 +128,17 @@ export function isQuotaError(e: unknown): boolean {
     /quota/i.test(any.message ?? '')
   );
 }
+
+/** Close DB and reset module state — for vitest / fake-indexeddb only. */
+export async function closeDBForTests(): Promise<void> {
+  if (dbPromise) {
+    try {
+      const db = await dbPromise;
+      db.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  dbPromise = null;
+  openError = null;
+}

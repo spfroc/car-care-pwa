@@ -7,10 +7,10 @@ import type { CareRecord, RecordType, Vehicle } from '../types';
 import { formatMoney, recordTypeColor, recordTypeLabel, RECORD_TYPE_ORDER } from '../lib/constants';
 import { summarizeSpend, filterByRange, monthlySpendByType } from '../lib/spend';
 import {
-  averageElectricEconomy,
-  averageFuelEconomy,
   combinedEconomy,
+  electricEconomySummary,
   electricIntervals,
+  fuelEconomySummary,
   formatEconomy,
   fuelIntervals,
 } from '../lib/economy';
@@ -101,9 +101,10 @@ export function StatsPage() {
 
   const fuelIvs = fuelIntervals(filtered);
   const elecIvs = electricIntervals(filtered);
-  const fuelAvg = averageFuelEconomy(filtered);
-  const elecAvg = averageElectricEconomy(filtered);
+  const fuelAvg = fuelEconomySummary(filtered);
+  const elecAvg = electricEconomySummary(filtered);
   const combined = settings ? combinedEconomy(filtered, settings.kwhToLiterFactor) : null;
+  const ecoLowConf = fuelAvg.lowConfidence || elecAvg.lowConfidence;
 
   if (!settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
@@ -206,9 +207,9 @@ export function StatsPage() {
             <p>
               {t('stats.avgFuel')}{' '}
               <strong>
-                {fuelAvg == null
+                {fuelAvg.value == null
                   ? t('stats.insufficient')
-                  : `${formatEconomy(fuelAvg, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}`}
+                  : `${formatEconomy(fuelAvg.value, settings.fuelEconomyUnit)} ${settings.fuelEconomyUnit}${fuelAvg.lowConfidence ? t('eco.estimate') : ''}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -226,9 +227,9 @@ export function StatsPage() {
             <p style={{ marginTop: showFuelEco ? 14 : undefined }}>
               {t('stats.avgElec')}{' '}
               <strong>
-                {elecAvg == null
+                {elecAvg.value == null
                   ? t('stats.insufficient')
-                  : `${formatEconomy(elecAvg, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}`}
+                  : `${formatEconomy(elecAvg.value, settings.electricEconomyUnit)} ${settings.electricEconomyUnit}${elecAvg.lowConfidence ? t('eco.estimate') : ''}`}
               </strong>
             </p>
             <h3 className="interval-meta" style={{ marginTop: 10, fontWeight: 600 }}>
@@ -251,6 +252,7 @@ export function StatsPage() {
             </strong>
           </p>
         )}
+        {ecoLowConf && <p className="muted small">{t('eco.lowConfHint')}</p>}
         {!vehicle && <p className="muted small">{t('stats.allVehiclesEcoHint')}</p>}
         {vehicle?.energyType === 'FCEV' && <p className="muted">{t('stats.fcevHint')}</p>}
       </section>

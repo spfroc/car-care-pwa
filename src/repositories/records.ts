@@ -1,6 +1,5 @@
 import { getDB } from '../db';
 import type { CareRecord, RecordType } from '../types';
-import { deleteMedia } from './media';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -29,22 +28,69 @@ export async function putRecord(r: CareRecord): Promise<void> {
   await (await getDB()).put('records', r);
 }
 
+/**
+ * Delete one record and its media that are not referenced by any other record.
+ * Single transaction: media + records stay consistent on abort.
+ */
 export async function deleteRecord(id: string): Promise<void> {
   const db = await getDB();
   const rec = await db.get('records', id);
-  if (rec) {
-    for (const mid of rec.mediaIds ?? []) {
-      await deleteMedia(mid);
+  if (!rec) return;
+
+  const mediaIds = [...(rec.mediaIds ?? [])];
+  const allRecords = mediaIds.length ? await db.getAll('records') : [];
+
+  const stillReferenced = new Set<string>();
+  if (mediaIds.length) {
+    for (const other of allRecords) {
+      if (other.id === id) continue;
+      for (const mid of other.mediaIds ?? []) {
+        if (mediaIds.includes(mid)) stillReferenced.add(mid);
+      }
     }
-    await db.delete('records', id);
   }
+
+  const tx = db.transaction(['records', 'media'], 'readwrite');
+  for (const mid of mediaIds) {
+    if (!stillReferenced.has(mid)) {
+      await tx.objectStore('media').delete(mid);
+    }
+  }
+  await tx.objectStore('records').delete(id);
+  await tx.done;
 }
 
+/**
+ * Delete all records for a vehicle (+ orphaned media) inside one transaction.
+ * Used by deleteVehicle; prefer deleteVehicle for full cascade including the vehicle row.
+ */
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {
-  const rows = await listRecordsByVehicle(vehicleId);
+  const db = await getDB();
+  const rows = await db.getAllFromIndex('records', 'byVehicle', vehicleId);
+  const mediaToDelete = new Set<string>();
   for (const r of rows) {
-    await deleteRecord(r.id);
+    for (const mid of r.mediaIds ?? []) mediaToDelete.add(mid);
   }
+
+  // Keep media still referenced by other vehicles' records
+  if (mediaToDelete.size) {
+    const all = await db.getAll('records');
+    for (const other of all) {
+      if (other.vehicleId === vehicleId) continue;
+      for (const mid of other.mediaIds ?? []) {
+        mediaToDelete.delete(mid);
+      }
+    }
+  }
+
+  const tx = db.transaction(['records', 'media'], 'readwrite');
+  for (const r of rows) {
+    await tx.objectStore('records').delete(r.id);
+  }
+  for (const mid of mediaToDelete) {
+    await tx.objectStore('media').delete(mid);
+  }
+  await tx.done;
 }
 
 export async function latestOdometer(vehicleId: string): Promise<number | undefined> {

@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   averageFuelEconomy,
   combinedEconomy,
+  confidentElectricEconomy,
+  confidentFuelEconomy,
   convertEconomy,
+  electricEconomySummary,
   electricIntervals,
   formatEconomy,
+  fuelEconomySummary,
   fuelIntervals,
   latestFuelEconomy,
   weightedAverage,
@@ -226,5 +230,51 @@ describe('convertEconomy / formatEconomy unit conversion', () => {
   it('defaults to raw per-100 when unit omitted (backward compatible)', () => {
     expect(formatEconomy(6.1)).toBe('6.10');
     expect(convertEconomy(6.1)).toBe(6.1);
+  });
+});
+
+describe('low-confidence summaries & partial charge', () => {
+  it('fuelEconomySummary flags lowConfidence when any interval is partial fill', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'a', vehicleId: 'v', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'b', vehicleId: 'v', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1500, liters: 40, fuelGrade: '95#', filledUp: true },
+      { ...base, id: 'c', vehicleId: 'v', type: 'fuel', date: '2026-01-20T10:00:00.000Z', odometer: 1700, liters: 10, fuelGrade: '95#', filledUp: false },
+    ];
+    const s = fuelEconomySummary(records);
+    expect(s.value).not.toBeNull();
+    expect(s.lowConfidence).toBe(true);
+    expect(s.lowConfidenceCount).toBe(1);
+    expect(s.intervalCount).toBe(2);
+    // Confident-only excludes the partial interval
+    expect(confidentFuelEconomy(records)).toBeCloseTo(8, 5);
+  });
+
+  it('returns null averages when fewer than 2 fuel records (missing data)', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'a', vehicleId: 'v', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '95#', filledUp: true },
+    ];
+    expect(fuelEconomySummary(records).value).toBeNull();
+    expect(fuelIntervals(records)).toHaveLength(0);
+  });
+
+  it('marks electric interval lowConfidence when socAfter < 95', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'a', vehicleId: 'v', type: 'charge', date: '2026-01-01T10:00:00.000Z', odometer: 1000, kWh: 40, stationName: 'x', stationKind: 'home', socAfter: 100 },
+      { ...base, id: 'b', vehicleId: 'v', type: 'charge', date: '2026-01-05T10:00:00.000Z', odometer: 1200, kWh: 20, stationName: 'x', stationKind: 'public', socAfter: 60 },
+    ];
+    const ivs = electricIntervals(records);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].lowConfidence).toBe(true);
+    expect(electricEconomySummary(records).lowConfidence).toBe(true);
+    expect(confidentElectricEconomy(records)).toBeNull();
+  });
+
+  it('combinedEconomy returns null for multi-vehicle input (no cross-stitch)', () => {
+    const records: CareRecord[] = [
+      { ...base, id: 'f1', vehicleId: 'a', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 20, fuelGrade: '95#', filledUp: true, amountPaid: 1 },
+      { ...base, id: 'c1', vehicleId: 'a', type: 'charge', date: '2026-01-02T10:00:00.000Z', odometer: 1100, kWh: 10, stationName: 'h', stationKind: 'home', amountPaid: 0 },
+      { ...base, id: 'f2', vehicleId: 'b', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1500, liters: 15, fuelGrade: '95#', filledUp: true, amountPaid: 1 },
+    ];
+    expect(combinedEconomy(records, 0.112)).toBeNull();
   });
 });
