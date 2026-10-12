@@ -63,4 +63,4 @@
 - ❌ Production：https://car.adobesun.com（本轮禁止）  
 - ❌ 生产 Supabase 变更（本轮禁止）  
 
-合并 SHA、bundle 指纹与浏览器验收见 **`docs/m3b-staging-deploy-report.md`**。
+合并 SHA **`d7dd681`**；bundle 指纹与浏览器验收见 **`docs/m3b-staging-deploy-report.md`**。
