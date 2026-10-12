@@ -210,25 +210,83 @@ async function applyCloudRows(
 }
 
 /**
- * Account switch: NEVER wipe unsynced outbox.
- * Queues are isolated by ownerUserId; only reset cursor for the new account.
+ * Account switch safety: IndexedDB is a SINGLE shared DB (`car-care-db`).
+ * Outbox is owner-scoped, but vehicles/records/media are NOT.
+ * Switching cloud accounts while local business data (or parked outbox) exists
+ * can leak/mix data across users — block with clear UX instead of silent switch.
  */
-async function guardUserSwitch(userId: string | undefined): Promise<string | undefined> {
-  if (!userId) return undefined;
+export type AccountSwitchGuard =
+  | { ok: true; note?: string }
+  | { ok: false; message: string };
+
+async function countLocalBusinessRows(): Promise<number> {
+  const db = await getDB();
+  const [v, r, s, m] = await Promise.all([
+    db.count('vehicles'),
+    db.count('records'),
+    db.count('stations'),
+    db.count('media'),
+  ]);
+  return v + r + s + m;
+}
+
+export async function guardUserSwitch(userId: string | undefined): Promise<AccountSwitchGuard> {
+  if (!userId) return { ok: true };
   const meta = await getSyncMeta();
-  if (meta.cloudUserId && meta.cloudUserId !== userId) {
-    const parked = await countOutboxForOwner(meta.cloudUserId);
-    await patchSyncMeta({
-      cloudUserId: userId,
-      serverCursor: undefined,
-      // Do not clear lastError here — verifyConnection may overwrite
-    });
-    if (parked > 0) {
-      return `云端账号已切换（${meta.cloudUserId.slice(0, 8)}… → ${userId.slice(0, 8)}…）。原账号仍有 ${parked} 条待同步，已按账号隔离保留，不会推到新账号；切回原账号后可继续同步。`;
-    }
-    return `云端账号已切换。`;
+  if (!meta.cloudUserId || meta.cloudUserId === userId) return { ok: true };
+
+  const parked = await countOutboxForOwner(meta.cloudUserId);
+  const localRows = await countLocalBusinessRows();
+  if (parked > 0 || localRows > 0) {
+    return {
+      ok: false,
+      message:
+        `已阻止账号切换：本机 IndexedDB 跨云端账号共享，当前绑定 ${meta.cloudUserId.slice(0, 8)}…，` +
+        `本地业务数据 ${localRows} 条、原账号待同步 ${parked} 条。` +
+        `请先导出 JSON 备份 → 断开云连接 →（如需换号）清空本地业务数据或用「从云端完全替换本地」恢复新账号数据，再连接新账号。` +
+        `切勿在未清空时把本地数据首次上传到另一账号。`,
+    };
   }
-  return undefined;
+
+  // Empty local + no parked outbox: safe to rebind cursor only
+  await patchSyncMeta({
+    cloudUserId: userId,
+    serverCursor: undefined,
+  });
+  return {
+    ok: true,
+    note: `云端账号已切换（${meta.cloudUserId.slice(0, 8)}… → ${userId.slice(0, 8)}…）；本地无业务数据，已重置同步游标。`,
+  };
+}
+
+/**
+ * Enforce Auth session user === locally bound account before upload / restore / sync.
+ * Does NOT rely on the user having clicked「校验连接」first.
+ * On mismatch with local business data or parked outbox → reject (no cloud/local mutation).
+ * Returns a failure result to short-circuit, or null to proceed.
+ */
+async function ensureAuthMatchesBoundAccount(
+  provider: CloudProvider,
+): Promise<SyncActionResult | null> {
+  let verify: VerifyResult;
+  try {
+    verify = await provider.verify();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await patchSyncMeta({ status: 'error', lastError: msg });
+    return { ok: false, message: msg };
+  }
+  if (!verify.ok) {
+    const msg = verify.error ?? '云端身份校验失败';
+    await patchSyncMeta({ status: 'error', lastError: msg });
+    return { ok: false, message: msg, verify };
+  }
+  const switchGuard = await guardUserSwitch(verify.userId);
+  if (!switchGuard.ok) {
+    await patchSyncMeta({ status: 'error', lastError: switchGuard.message });
+    return { ok: false, message: switchGuard.message, verify };
+  }
+  return null;
 }
 
 export async function verifyConnection(): Promise<SyncActionResult> {
@@ -241,7 +299,11 @@ export async function verifyConnection(): Promise<SyncActionResult> {
     if (verify.ok) {
       const metaBefore = await getSyncMeta();
       const prevUser = metaBefore.cloudUserId;
-      const switchNote = await guardUserSwitch(verify.userId);
+      const switchGuard = await guardUserSwitch(verify.userId);
+      if (!switchGuard.ok) {
+        await patchSyncMeta({ status: 'error', lastError: switchGuard.message });
+        return { ok: false, message: switchGuard.message, verify };
+      }
       // Only bind unbound ops on first connect / same user — never on account switch
       if (verify.userId && (!prevUser || prevUser === verify.userId)) {
         await rebindUnboundOutbox(verify.userId);
@@ -254,7 +316,7 @@ export async function verifyConnection(): Promise<SyncActionResult> {
       });
       return {
         ok: true,
-        message: `连接成功${verify.email ? `（${verify.email}）` : ''}；云端约 ${verify.cloudRowCount ?? 0} 行。不会自动改动本地数据。${switchNote ? ` ${switchNote}` : ''}`,
+        message: `连接成功${verify.email ? `（${verify.email}）` : ''}；云端约 ${verify.cloudRowCount ?? 0} 行。不会自动改动本地数据。${switchGuard.note ? ` ${switchGuard.note}` : ''}`,
         verify,
       };
     }
@@ -271,6 +333,8 @@ export async function verifyConnection(): Promise<SyncActionResult> {
 export async function firstUploadToCloud(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     const snap = await readLocalSnapshot();
@@ -329,6 +393,8 @@ export async function restoreFromCloud(opts?: {
 }): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     const snapshot = await provider.pullAll();
@@ -404,6 +470,9 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     await patchSyncMeta({ status: 'offline', lastError: '浏览器离线' });
     return { ok: false, message: '当前离线，变更已留在队列，联网后重试' };
   }
+
+  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  if (authBlock) return authBlock;
 
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {

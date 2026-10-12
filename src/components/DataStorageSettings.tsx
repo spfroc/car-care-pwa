@@ -224,6 +224,18 @@ export function DataStorageSettings() {
           </button>
           <button
             type="button"
+            className="btn danger block"
+            disabled={busy}
+            onClick={() => {
+              if (!confirm(t('storage.restoreReplaceConfirm1'))) return;
+              if (!confirm(t('storage.restoreReplaceConfirm2'))) return;
+              void run(() => restoreFromCloud({ replaceLocal: true }));
+            }}
+          >
+            {t('storage.restoreReplace')}
+          </button>
+          <button
+            type="button"
             className="btn primary block"
             disabled={busy}
             onClick={() => void run(bidirectionalSync)}
