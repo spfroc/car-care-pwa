@@ -7,10 +7,10 @@ import { createClient } from "@supabase/supabase-js";
 const URL = process.env.SMOKE_SUPABASE_URL;
 const ANON = process.env.SMOKE_SUPABASE_ANON;
 const EMAIL = process.env.SMOKE_EMAIL || "m2smoke@carcare.test";
-const PASS = process.env.SMOKE_PASS || "M2SmokeTest!pass9";
+const PASS = process.env.SMOKE_PASS;
 
-if (!URL || !ANON) {
-  console.error("Need SMOKE_SUPABASE_URL and SMOKE_SUPABASE_ANON");
+if (!URL || !ANON || !PASS) {
+  console.error("Need SMOKE_SUPABASE_URL, SMOKE_SUPABASE_ANON, and SMOKE_PASS (no hardcoded defaults)");
   process.exit(2);
 }
 

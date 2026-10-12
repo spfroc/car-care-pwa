@@ -12,16 +12,18 @@ const BASE = process.env.STAGING_URL || 'https://car-test.adobesun.com';
 const PROD = 'https://car.adobesun.com';
 const PROD_REF = 'tqjowsffppgoqtdokbzp';
 const SMOKE_URL = process.env.SMOKE_SUPABASE_URL || 'https://skwoahneuqkqgxzpkkzl.supabase.co';
-const SMOKE_ANON =
-  process.env.SMOKE_SUPABASE_ANON ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrd29haG5ldXFrcWd4enBra3psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3NjM1MDEsImV4cCI6MjEwNzMzOTUwMX0.kJkCnJ1vgaWps8KLfH5AowEnWN_eWzY9uGZuCY8II8s';
+const SMOKE_ANON = process.env.SMOKE_SUPABASE_ANON;
 const EMAIL = process.env.SMOKE_EMAIL || 'm2smoke@carcare.test';
-const PASS = process.env.SMOKE_PASS || 'M2SmokeTest!pass9';
+const PASS = process.env.SMOKE_PASS;
 const BUCKET = 'car-care-media';
 const OUT = path.resolve('artifacts/m3a-browser-accept');
 const EXPECT_BUNDLE = 'index-D4Bw8zWY.js';
 const EXPECT_GIT = '8f335bc';
 
+if (!SMOKE_ANON || !PASS) {
+  console.error('Need SMOKE_SUPABASE_ANON and SMOKE_PASS env (no hardcoded secrets)');
+  process.exit(2);
+}
 if (SMOKE_URL.includes(PROD_REF)) {
   console.error('Refusing production Supabase ref');
   process.exit(2);

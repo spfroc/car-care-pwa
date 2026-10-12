@@ -27,8 +27,11 @@ const URL = process.env.SMOKE_SUPABASE_URL;
 const ANON = process.env.SMOKE_SUPABASE_ANON;
 const EMAIL_A = process.env.SMOKE_EMAIL || 'm2smoke@carcare.test';
 const EMAIL_B = process.env.SMOKE_EMAIL_B || 'm2smoke-b@carcare.test';
-const PASS = process.env.SMOKE_PASS || 'M2SmokeTest!pass9';
+const PASS = process.env.SMOKE_PASS;
 const live = Boolean(URL && ANON);
+if (live && !PASS) {
+  throw new Error('SMOKE_PASS required when SMOKE_SUPABASE_URL/ANON are set (no hardcoded password)');
+}
 
 const PREFIX = `ab-${Date.now().toString(36)}-`;
 /** ISO timestamps anchored in the past relative to wall clock so LWW deletes/edits apply. */

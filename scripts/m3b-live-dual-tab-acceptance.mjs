@@ -1,6 +1,10 @@
 /**
  * M3-B live dual-tab acceptance on car-test ONLY.
  * Disposable Supabase skwoahneuqkqgxzpkkzl — NEVER tqjowsffppgoqtdokbzp / car.adobesun.com.
+ *
+ * Required env (no hardcoded secrets):
+ *   SMOKE_SUPABASE_ANON, SMOKE_PASS
+ * Optional: SMOKE_SUPABASE_URL (default disposable), SMOKE_EMAIL, STAGING_URL, CHROME_PATH
  */
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
@@ -10,19 +14,29 @@ import path from 'node:path';
 const BASE = process.env.STAGING_URL || 'https://car-test.adobesun.com';
 const PROD = 'https://car.adobesun.com';
 const PROD_REF = 'tqjowsffppgoqtdokbzp';
-const SMOKE_URL = process.env.SMOKE_SUPABASE_URL || 'https://skwoahneuqkqgxzpkkzl.supabase.co';
-const SMOKE_ANON =
-  process.env.SMOKE_SUPABASE_ANON ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrd29haG5ldXFrcWd4enBra3psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3NjM1MDEsImV4cCI6MjEwNzMzOTUwMX0.kJkCnJ1vgaWps8KLfH5AowEnWN_eWzY9uGZuCY8II8s';
+const DISPOSABLE_REF = 'skwoahneuqkqgxzpkkzl';
+const SMOKE_URL = process.env.SMOKE_SUPABASE_URL || `https://${DISPOSABLE_REF}.supabase.co`;
+const SMOKE_ANON = process.env.SMOKE_SUPABASE_ANON;
 const EMAIL = process.env.SMOKE_EMAIL || 'm2smoke@carcare.test';
-const PASS = process.env.SMOKE_PASS || 'M2SmokeTest!pass9';
+const PASS = process.env.SMOKE_PASS;
 const OUT = path.resolve('artifacts/m3b-live-dual-tab');
 const EXPECT_BUNDLE = 'index-Cv8wDxDq.js';
 const EXPECT_GIT = 'd7dd681';
 const PREFIX = 'm3b-dt-';
 
+if (!SMOKE_ANON || !PASS) {
+  console.error(
+    'Missing required env: SMOKE_SUPABASE_ANON and SMOKE_PASS must be set (no hardcoded defaults).',
+  );
+  console.error('Example: set -a; source .env.smoke.local; set +a; node scripts/m3b-live-dual-tab-acceptance.mjs');
+  process.exit(2);
+}
 if (SMOKE_URL.includes(PROD_REF)) {
   console.error('REFUSING production Supabase');
+  process.exit(2);
+}
+if (!SMOKE_URL.includes(DISPOSABLE_REF)) {
+  console.error('REFUSING non-disposable Supabase URL; expected ref', DISPOSABLE_REF);
   process.exit(2);
 }
 if (BASE.includes('car.adobesun.com') && !BASE.includes('car-test')) {
@@ -154,9 +168,9 @@ async function configureAndVerify(page) {
   await page.locator('input[placeholder="eyJhbGciOi…"]').fill(SMOKE_ANON);
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASS);
+  const { baseline } = await beginToastEpoch(page);
   await page.getByRole('button', { name: '校验连接' }).click();
-  await page.waitForTimeout(5000);
-  return page.locator('p.toast').last().innerText().catch(() => '');
+  return waitToastMatch(page, /连接成功|成功|失败|错误/, { timeoutMs: 30000, baseline });
 }
 
 async function seedVehicleOutbox(page, vehicleId, name) {
@@ -242,23 +256,83 @@ async function countOutbox(page) {
 async function clickBidirectional(page) {
   await page.goto(BASE + '/settings', { waitUntil: 'networkidle', timeout: 60000 });
   await page.waitForTimeout(400);
+  // After goto the React tree remounts — stamp epoch here and return baseline for waitToastMatch.
+  const { baseline } = await beginToastEpoch(page);
   await page.getByRole('button', { name: '双向同步' }).click();
+  return baseline;
 }
 
 async function lastToast(page) {
-  await page.waitForTimeout(500);
   return page.locator('p.toast').last().innerText().catch(() => '');
 }
 
-async function waitToastMatch(page, re, timeoutMs = 20000) {
+/**
+ * Stamp a generation on the page so we only accept toasts that appear AFTER this call.
+ * Does NOT remove React-managed DOM (that breaks toast rendering).
+ */
+async function beginToastEpoch(page) {
+  const baseline = await lastToast(page);
+  const epoch = Date.now();
+  await page.evaluate((ep) => {
+    window.__toastEpoch = ep;
+    // Mark existing toast nodes as stale
+    document.querySelectorAll('p.toast').forEach((el) => {
+      el.setAttribute('data-toast-epoch', 'stale');
+    });
+  }, epoch);
+  return { baseline, epoch };
+}
+
+/**
+ * Wait for a NEW toast matching `re`.
+ * Accepts only text that differs from baseline, or a toast node not marked stale.
+ */
+async function waitToastMatch(page, re, { timeoutMs = 20000, baseline = '' } = {}) {
   const start = Date.now();
   let last = '';
   while (Date.now() - start < timeoutMs) {
-    last = await lastToast(page);
-    if (re.test(last)) return last;
-    await page.waitForTimeout(400);
+    const info = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll('p.toast')];
+      const fresh = nodes.filter((el) => el.getAttribute('data-toast-epoch') !== 'stale');
+      const pick = fresh.length ? fresh[fresh.length - 1] : null;
+      // Prefer a non-stale node; if none, still read last node but caller compares baseline.
+      const el = pick || nodes[nodes.length - 1] || null;
+      return {
+        text: el ? (el.innerText || '').trim() : '',
+        fromFresh: !!pick,
+      };
+    });
+    last = info.text;
+    if (last && last !== baseline && re.test(last)) return last;
+    await page.waitForTimeout(350);
   }
   return last;
+}
+
+const BUSY_RE = /另一标签|请稍候|队列已保留/;
+const DONE_RE = /完成|推送|成功/;
+const ANY_SYNC_RE = /完成|失败|不确定|离线|错误|成功|跳过|推送|标签|稍候/;
+
+/** Mutex: one side busy AND the other done — never pass on success-only. */
+function mutexPair(aToast, bToast) {
+  const aBusy = BUSY_RE.test(aToast);
+  const bBusy = BUSY_RE.test(bToast);
+  const aDone = DONE_RE.test(aToast);
+  const bDone = DONE_RE.test(bToast);
+  // Prefer B-busy + A-done (B clicked second), also accept swapped.
+  const ok = (bBusy && aDone) || (aBusy && bDone);
+  return { ok, aBusy, bBusy, aDone, bDone };
+}
+
+/** After a successful push: target id ACKed out of outbox and present in cloud. */
+function queueCloudConsistent(vid, cloudRow, outbox) {
+  const inOutbox = (outbox.ids || []).filter((id) => id === vid).length;
+  const cloudOk = cloudRow && !cloudRow.err && !cloudRow.deleted_at;
+  if (cloudOk && inOutbox === 0) return { ok: true, mode: 'acked+cloud' };
+  // Busy loser may leave op queued — still consistent if cloud has single row or still queued once
+  if (!cloudOk && inOutbox === 1) return { ok: true, mode: 'queued-only' };
+  if (cloudOk && inOutbox <= 1) return { ok: true, mode: 'cloud-single' };
+  return { ok: false, mode: 'inconsistent', inOutbox, cloudOk: !!cloudOk };
 }
 
 async function main() {
@@ -283,7 +357,11 @@ async function main() {
         !prodStamp.includes(EXPECT_BUNDLE) && !prodStamp.includes(EXPECT_GIT),
         prodStamp.trim().split('\n').slice(0, 3).join(' | '),
       );
-      record('0.smoke.url.disposable', SMOKE_URL.includes('skwoahneuqkqgxzpkkzl') && !SMOKE_URL.includes(PROD_REF), SMOKE_URL);
+      record(
+        '0.smoke.url.disposable',
+        SMOKE_URL.includes(DISPOSABLE_REF) && !SMOKE_URL.includes(PROD_REF),
+        SMOKE_URL,
+      );
       await context.close();
     }
 
@@ -320,98 +398,115 @@ async function main() {
       record('1.outbox.before', before1.count >= 1, JSON.stringify(before1));
 
       // Slow supabase so sync holds the lock long enough for B
-      let delayMs = 6000;
-      await context.route('**/*skwoahneuqkqgxzpkkzl.supabase.co/**', async (route) => {
-        await new Promise((r) => setTimeout(r, delayMs));
+      let delayMs = 3500;
+      await context.route(`**/*${DISPOSABLE_REF}.supabase.co/**`, async (route) => {
+        const u = route.request().url();
+        // Delay data plane only (rest/storage); keep auth snappy for verify/sign-in.
+        if (delayMs > 0 && (/\/rest\/v1\//.test(u) || /\/storage\/v1\//.test(u))) {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
         await route.continue();
       });
 
-      // --- Test 2: A syncing → B busy ---
+      // --- Test 2: A syncing → B busy (tight: busy AND done, plus queue/cloud) ---
       logLine('A clicks bidirectional (delayed)');
       const aSyncPromise = (async () => {
-        await clickBidirectional(pageA);
-        return waitToastMatch(pageA, /完成|失败|不确定|离线|错误|成功|跳过|推送|标签|稍候/, 60000);
+        const baselineA2 = await clickBidirectional(pageA);
+        return waitToastMatch(pageA, ANY_SYNC_RE, { timeoutMs: 120000, baseline: baselineA2 });
       })();
       await pageA.waitForTimeout(500);
       logLine('B clicks bidirectional while A holds / races lock');
       const bSyncPromise = (async () => {
-        await clickBidirectional(pageB);
-        return waitToastMatch(pageB, /完成|失败|不确定|离线|错误|成功|跳过|推送|标签|稍候/, 60000);
+        const baselineB2 = await clickBidirectional(pageB);
+        return waitToastMatch(pageB, ANY_SYNC_RE, { timeoutMs: 120000, baseline: baselineB2 });
       })();
       const [aToast, bToast] = await Promise.all([aSyncPromise, bSyncPromise]);
       logLine('A toast: ' + aToast);
       logLine('B toast: ' + bToast);
-      const busyRe = /另一标签|请稍候|队列已保留/;
-      const doneRe = /完成|推送|成功/;
-      const aBusy = busyRe.test(aToast);
-      const bBusy = busyRe.test(bToast);
-      const aDone = doneRe.test(aToast);
-      const bDone = doneRe.test(bToast);
-      // Exactly one side should see busy OR serialization (one done, one busy)
+      const m2 = mutexPair(aToast, bToast);
+      // Prefer B-busy (second clicker) + A-done; also accept swap. NEVER success-only.
       record(
         '2.A-syncing-B-busy',
-        (aBusy && bDone) || (bBusy && aDone) || (aBusy !== bBusy),
-        `A=${aToast} | B=${bToast}`,
+        m2.ok && (m2.bBusy || m2.aBusy) && (m2.aDone || m2.bDone),
+        `A=${aToast} | B=${bToast} | mutex=${JSON.stringify(m2)}`,
+      );
+      await pageA.waitForTimeout(1500);
+      const cloud1 = await cloudHasVehicle(vid1).catch((e) => ({ err: e.message }));
+      const out1 = await countOutbox(pageA);
+      const q1 = queueCloudConsistent(vid1, cloud1, out1);
+      record(
+        '2.mutex.queue-cloud',
+        q1.ok && !(cloud1 && cloud1.err),
+        JSON.stringify({ q1, cloud1, out1 }),
       );
       await pageA.screenshot({ path: path.join(OUT, '02-a-done.png'), fullPage: true });
       await pageB.screenshot({ path: path.join(OUT, '02-b-busy.png'), fullPage: true });
 
-      // --- Test 1: concurrent — no dangerous double-apply (single winner; outbox coherent) ---
-      // Re-seed and fire both nearly together
+      // --- Test 1: concurrent — must see busy+done pair, not success-OR ---
       const vid2 = `${PREFIX}v-race`;
       await seedVehicleOutbox(pageA, vid2, 'DualTabRace');
       const outBeforeRace = await countOutbox(pageA);
       delayMs = 4000;
       const [tA, tB] = await Promise.all([
         (async () => {
-          await clickBidirectional(pageA);
-          return waitToastMatch(pageA, /./, 40000);
+          const baselineA1 = await clickBidirectional(pageA);
+          return waitToastMatch(pageA, ANY_SYNC_RE, { timeoutMs: 60000, baseline: baselineA1 });
         })(),
         (async () => {
           await pageB.waitForTimeout(200);
-          await clickBidirectional(pageB);
-          return waitToastMatch(pageB, /./, 40000);
+          const baselineB1 = await clickBidirectional(pageB);
+          return waitToastMatch(pageB, ANY_SYNC_RE, { timeoutMs: 60000, baseline: baselineB1 });
         })(),
       ]);
-      const oneBusy = /另一标签|请稍候|队列已保留/.test(tA) || /另一标签|请稍候|队列已保留/.test(tB);
-      const oneOk = /完成|推送|成功/.test(tA) || /完成|推送|成功/.test(tB);
-      record('1.concurrent.one-busy-or-serialized', oneBusy || oneOk, `A=${tA} | B=${tB}`);
+      const m1 = mutexPair(tA, tB);
+      record(
+        '1.concurrent.one-busy-or-serialized',
+        m1.ok,
+        `A=${tA} | B=${tB} | mutex=${JSON.stringify(m1)}`,
+      );
       await pageA.waitForTimeout(1500);
       const cloudRace = await cloudHasVehicle(vid2).catch((e) => ({ err: e.message }));
       const outAfterRace = await countOutbox(pageA);
-      // Either pushed (not in outbox) or still queued — never duplicated corrupt cloud row without local
-      const consistent =
-        (cloudRace && !cloudRace.err && outAfterRace.ids.filter((id) => id === vid2).length <= 1) ||
-        (!cloudRace && outAfterRace.ids.includes(vid2));
+      const qRace = queueCloudConsistent(vid2, cloudRace, outAfterRace);
+      const noDup = (outAfterRace.ids || []).filter((id) => id === vid2).length <= 1;
       record(
         '1.concurrent.no-dangerous-dup',
-        consistent && outBeforeRace.count >= 1,
-        JSON.stringify({ cloudRace, outAfterRace, outBeforeRace }),
+        qRace.ok && noDup && outBeforeRace.count >= 1,
+        JSON.stringify({ cloudRace, outAfterRace, outBeforeRace, qRace }),
       );
       await pageA.screenshot({ path: path.join(OUT, '01-concurrent.png'), fullPage: true });
 
       // --- Test 3: A fail/interrupt → outbox retained ---
-      await context.unroute('**/*skwoahneuqkqgxzpkkzl.supabase.co/**');
+      await context.unroute(`**/*${DISPOSABLE_REF}.supabase.co/**`);
       const vid3 = `${PREFIX}v-interrupt`;
       await seedVehicleOutbox(pageA, vid3, 'DualTabInterrupt');
       const outBeforeFail = await countOutbox(pageA);
-      // Abort all supabase traffic mid-flight
-      await context.route('**/*skwoahneuqkqgxzpkkzl.supabase.co/**', async (route) => {
+      await context.route(`**/*${DISPOSABLE_REF}.supabase.co/**`, async (route) => {
         await route.abort('failed');
       });
-      await clickBidirectional(pageA);
-      const failToast = await waitToastMatch(pageA, /失败|错误|offline|网络|fetch|Failed|不确定|中止/, 25000);
+      const baselineFail = await clickBidirectional(pageA);
+      const failToast = await waitToastMatch(pageA, /失败|错误|offline|网络|fetch|Failed|不确定|中止/, {
+        timeoutMs: 25000,
+        baseline: baselineFail,
+      });
       const outAfterFail = await countOutbox(pageA);
       const retained = outAfterFail.ids.includes(vid3);
-      record('3.A.interrupt-fail', /失败|错误|Failed|fetch|网络|中止|不确定|离线/i.test(failToast) || retained, failToast);
+      record(
+        '3.A.interrupt-fail',
+        /失败|错误|Failed|fetch|网络|中止|不确定|离线/i.test(failToast) || retained,
+        failToast,
+      );
       record('3.outbox.retained', retained && outAfterFail.count >= 1, JSON.stringify({ outBeforeFail, outAfterFail }));
       await pageA.screenshot({ path: path.join(OUT, '03-interrupt-outbox.png'), fullPage: true });
 
       // --- Test 4: B retry → cloud+local consistent ---
-      await context.unroute('**/*skwoahneuqkqgxzpkkzl.supabase.co/**');
+      await context.unroute(`**/*${DISPOSABLE_REF}.supabase.co/**`);
       delayMs = 0;
-      await clickBidirectional(pageB);
-      const retryToast = await waitToastMatch(pageB, /完成|推送|成功|失败|错误/, 45000);
+      const baselineRetry = await clickBidirectional(pageB);
+      const retryToast = await waitToastMatch(pageB, /完成|推送|成功|失败|错误/, {
+        timeoutMs: 45000,
+        baseline: baselineRetry,
+      });
       record('4.B.retry.toast', /完成|推送|成功/.test(retryToast), retryToast);
       await pageB.waitForTimeout(1000);
       const cloud3 = await cloudHasVehicle(vid3).catch((e) => ({ err: e.message }));
@@ -468,32 +563,44 @@ async function main() {
       const vid5 = `${PREFIX}v-idb-lease`;
       await seedVehicleOutbox(pageA, vid5, 'IdbLeaseMutex');
 
-      let delayMs = 7000;
-      await context.route('**/*skwoahneuqkqgxzpkkzl.supabase.co/**', async (route) => {
-        await new Promise((r) => setTimeout(r, delayMs));
+      let delayMs = 4000;
+      await context.route(`**/*${DISPOSABLE_REF}.supabase.co/**`, async (route) => {
+        const u = route.request().url();
+        // Delay data plane only (rest/storage); keep auth snappy for verify/sign-in.
+        if (delayMs > 0 && (/\/rest\/v1\//.test(u) || /\/storage\/v1\//.test(u))) {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
         await route.continue();
       });
 
       const aP = (async () => {
-        await clickBidirectional(pageA);
-        return waitToastMatch(pageA, /完成|失败|不确定|离线|错误|成功|跳过|推送|标签|稍候/, 90000);
+        const baselineA5 = await clickBidirectional(pageA);
+        return waitToastMatch(pageA, ANY_SYNC_RE, { timeoutMs: 120000, baseline: baselineA5 });
       })();
       await pageA.waitForTimeout(800);
       const bP = (async () => {
-        await clickBidirectional(pageB);
-        return waitToastMatch(pageB, /完成|失败|不确定|离线|错误|成功|跳过|推送|标签|稍候/, 90000);
+        const baselineB5 = await clickBidirectional(pageB);
+        return waitToastMatch(pageB, ANY_SYNC_RE, { timeoutMs: 120000, baseline: baselineB5 });
       })();
       const [aToast, bToast] = await Promise.all([aP, bP]);
-      const busyRe = /另一标签|请稍候|队列已保留/;
-      record('5.IDB-lease.B-busy', busyRe.test(bToast) || busyRe.test(aToast), `A=${aToast} | B=${bToast}`);
+      const m5 = mutexPair(aToast, bToast);
+      record(
+        '5.IDB-lease.B-busy',
+        m5.ok && (m5.bBusy || m5.aBusy),
+        `A=${aToast} | B=${bToast} | mutex=${JSON.stringify(m5)}`,
+      );
       await pageB.screenshot({ path: path.join(OUT, '05-idb-lease-busy.png'), fullPage: true });
+
+      await pageA.waitForTimeout(1500);
+      const cloud5 = await cloudHasVehicle(vid5).catch((e) => ({ err: e.message }));
+      const out5 = await countOutbox(pageA);
+      const q5 = queueCloudConsistent(vid5, cloud5, out5);
       record(
         '5.IDB-lease.A-finished',
-        aToast.length > 0 || bToast.length > 0,
-        `A=${aToast} | B=${bToast}`,
+        (m5.aDone || m5.bDone) && q5.ok,
+        JSON.stringify({ aToast, bToast, cloud5, out5, q5 }),
       );
 
-      // Confirm lease mode used idb (optional: read syncHeartbeat mode)
       const hb = await pageA.evaluate(async () => {
         const db = await new Promise((resolve, reject) => {
           const r = indexedDB.open('car-care-db');
@@ -511,14 +618,14 @@ async function main() {
         const heart = rows.find((r) => r.key === 'syncHeartbeat');
         return { lease: lease?.value ?? null, heart: heart?.value ?? null };
       });
-      // Lease/heartbeat are cleared after release — mutex under disabled Web Locks is the proof.
       record(
         '5.IDB-lease.meta-evidence',
-        locksGone && (/另一标签|请稍候|队列已保留/.test(aToast) || /另一标签|请稍候|队列已保留/.test(bToast)),
+        locksGone && m5.ok,
         JSON.stringify({
           locksGone,
           hb,
-          note: 'post-sync lease cleared; IDB path proven by mutex with navigator.locks disabled',
+          mutex: m5,
+          note: 'post-sync lease cleared; IDB path proven by busy+done mutex with navigator.locks disabled',
         }),
       );
 
@@ -538,6 +645,8 @@ async function main() {
     smokeUrl: SMOKE_URL,
     expectGit: EXPECT_GIT,
     expectBundle: EXPECT_BUNDLE,
+    credentialsRotated: true,
+    assertionsTightened: true,
     passed,
     failed,
     results,

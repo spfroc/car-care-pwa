@@ -18,8 +18,11 @@ import { SupabaseProvider } from './providers/supabase';
 const URL = process.env.SMOKE_SUPABASE_URL;
 const ANON = process.env.SMOKE_SUPABASE_ANON;
 const EMAIL = process.env.SMOKE_EMAIL || 'm2smoke@carcare.test';
-const PASS = process.env.SMOKE_PASS || 'M2SmokeTest!pass9';
+const PASS = process.env.SMOKE_PASS;
 const live = Boolean(URL && ANON);
+if (live && !PASS) {
+  throw new Error('SMOKE_PASS required when SMOKE_SUPABASE_URL/ANON are set (no hardcoded password)');
+}
 
 function vehicle(id: string, name: string, updatedAt: string): Vehicle {
   return {
