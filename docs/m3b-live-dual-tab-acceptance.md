@@ -83,6 +83,11 @@ node scripts/m3b-live-dual-tab-acceptance.mjs
 - 飞行中推送失败时 outbox **保留**（本验收 #3）；成功重试后 ACK（#4）  
 - 未改 M3-B 业务功能代码  
 
+## 本提交
+
+- git: `bc28c36` / full `bc28c364da5a24d01fd9d3af55ac120bbaed6f59`
+- 业务 tip 仍为 car-test `d7dd681` / `index-Cv8wDxDq.js`（本轮未改业务、未部署）
+
 ## 结论
 
 **集成验收 PASS（收紧后 22/22）。** 凭据已轮换且去硬编码；双标签互斥（Web Locks + IDB 回退）以 busy∧done + 队列/云一致判定；失败保留 outbox、重试后云/本地一致，均在 car-test + disposable 上得到真实浏览器证据。
