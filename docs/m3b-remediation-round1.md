@@ -15,6 +15,8 @@
 | 飞行中网络 | 返回后若已 abort → 结果不确定；**绝不** delete/ACK outbox |
 | 不声称已安全停住 | 文案含「不确定 / 队列未确认删除」 |
 | Web Locks 路径 | 不变（signal 不由锁层 abort） |
+| applyCloudRows 下载后/写 txn 前 | `materialize` 每张图后 + 开 txn 前 `throwIfSyncAborted`；txn 内 abort → `tx.abort()` |
+| migrateCloudLegacyMedia | 每张 upload 前 / verify 后 / RPC 前 / 下一张前检查；lease lost 不再写下一张 |
 
 ## P1 — BG Sync 路径不完整
 

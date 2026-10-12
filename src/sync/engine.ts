@@ -228,12 +228,16 @@ export async function localSnapshotToCloudRows(
 async function materializeMediaUpserts(
   toUpsert: CloudRow[],
   mediaStore?: MediaObjectStore | null,
+  signal?: AbortSignal,
 ): Promise<Map<string, Media>> {
   const out = new Map<string, Media>();
   for (const row of toUpsert) {
     if (row.entity !== 'media' || row.deletedAt) continue;
+    if (signal) throwIfSyncAborted(signal);
     const p = row.payload as CloudMediaPayload;
     const media = await cloudPayloadToMediaAsync(p, mediaStore);
+    // Recheck after each image download — do not proceed to IDB merge if lease lost.
+    if (signal) throwIfSyncAborted(signal);
     out.set(row.id, media);
   }
   return out;
@@ -250,12 +254,17 @@ async function applyCloudRows(
     replaceLocal?: boolean;
     clearOutboxOpIds?: string[];
     mediaStore?: MediaObjectStore | null;
+    signal?: AbortSignal;
   },
 ): Promise<void> {
   assertCloudRowsValid(toUpsert);
+  const signal = opts?.signal;
 
   // Download / decode media outside the IDB txn (network + crypto)
-  const mediaMap = await materializeMediaUpserts(toUpsert, opts?.mediaStore);
+  const mediaMap = await materializeMediaUpserts(toUpsert, opts?.mediaStore, signal);
+
+  // Recheck after all downloads, before opening the write txn
+  if (signal) throwIfSyncAborted(signal);
 
   const db = await getDB();
   const stores =
@@ -265,6 +274,7 @@ async function applyCloudRows(
   const tx = db.transaction(stores, 'readwrite');
 
   try {
+    if (signal) throwIfSyncAborted(signal);
     if (opts?.replaceLocal) {
       for (const store of ['vehicles', 'records', 'stations', 'media'] as const) {
         await tx.objectStore(store).clear();
@@ -280,6 +290,7 @@ async function applyCloudRows(
     }
 
     for (const row of toDelete) {
+      if (signal) throwIfSyncAborted(signal);
       if (row.entity === 'settings') await tx.objectStore('settings').delete(row.id);
       else if (row.entity === 'vehicles') await tx.objectStore('vehicles').delete(row.id);
       else if (row.entity === 'records') await tx.objectStore('records').delete(row.id);
@@ -288,6 +299,7 @@ async function applyCloudRows(
     }
 
     for (const row of toUpsert) {
+      if (signal) throwIfSyncAborted(signal);
       runSyncTxHook('during_restore_apply', { store: row.entity });
       if (row.entity === 'vehicles') {
         await tx.objectStore('vehicles').put(row.payload as Vehicle);
@@ -306,6 +318,7 @@ async function applyCloudRows(
       }
     }
   } catch (e) {
+    // Abort mid-txn so the old task cannot merge local after lease loss
     try {
       tx.abort();
     } catch {
@@ -554,6 +567,7 @@ async function restoreFromCloudUnlocked(
         replaceLocal: opts?.replaceLocal,
         clearOutboxOpIds: opts?.replaceLocal ? pendingMine.map((o) => o.opId) : undefined,
         mediaStore: provider.getMediaObjectStore?.() ?? null,
+        signal,
       });
     } catch (e) {
       if (e instanceof SyncLeaseLostError) throw e;
@@ -564,7 +578,7 @@ async function restoreFromCloudUnlocked(
 
     // Progressive migrate: legacy base64 cloud rows → Storage (idempotent)
     throwIfSyncAborted(signal);
-    const mediaMigrate = await migrateCloudLegacyMedia(provider);
+    const mediaMigrate = await migrateCloudLegacyMedia(provider, signal);
     // NOTE: orphan GC is NOT auto-run here (upload→ref race). Use explicit cleanup.
 
     throwIfSyncAborted(signal);
@@ -693,6 +707,7 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     try {
       await applyCloudRows(plan.toUpsert, plan.toDelete, {
         mediaStore: provider.getMediaObjectStore?.() ?? null,
+        signal,
       });
     } catch (e) {
       if (e instanceof SyncLeaseLostError) throw e;
@@ -711,7 +726,7 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     await removeStorageForDeletedMedia(provider, plan.toDelete);
     // Progressive migrate remaining base64 rows — surface errors; do not strip failed base64
     throwIfSyncAborted(signal);
-    const mediaMigrate = await migrateCloudLegacyMedia(provider);
+    const mediaMigrate = await migrateCloudLegacyMedia(provider, signal);
     // P0: do NOT auto-run orphan GC during sync (A upload / B GC before DB ref race).
     // Use runOrphanMediaCleanup explicitly (grace + recheck).
 
@@ -816,13 +831,17 @@ function formatMediaMigrateNote(m: MediaMigrateSummary): string {
  * Never strips base64 until upload+verify succeeds and refs are switched via LWW upsert.
  * Partial success is OK: failed rows keep base64 for retry.
  */
-export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<MediaMigrateSummary> {
+export async function migrateCloudLegacyMedia(
+  provider: CloudProvider,
+  signal?: AbortSignal,
+): Promise<MediaMigrateSummary> {
   const store = provider.getMediaObjectStore?.() ?? null;
   const userId = await provider.getAuthUserId?.();
   if (!store || !userId) {
     return { migrated: 0, skipped: 0, unmigrated: 0, failed: 0, errors: [], ok: true };
   }
 
+  if (signal) throwIfSyncAborted(signal);
   const snapshot = await provider.pullAll();
   let migrated = 0;
   let skipped = 0;
@@ -830,6 +849,8 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
   const errors: string[] = [];
 
   for (const row of snapshot.rows) {
+    // Before next image — stop after lease lost (no new migrate writes)
+    if (signal) throwIfSyncAborted(signal);
     if (row.entity !== 'media' || row.deletedAt) continue;
     const p = row.payload as CloudMediaPayload;
     if (isStorageMediaPayload(p) && !p.base64) {
@@ -841,6 +862,8 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
       continue;
     }
     try {
+      // Before each upload
+      if (signal) throwIfSyncAborted(signal);
       // Upload+verify FIRST — only then switch refs (drop base64)
       const v2 = await migrateLegacyPayloadToStorage({
         store,
@@ -848,6 +871,8 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
         payload: p,
         blobFromBase64: base64ToBlob,
       });
+      // After verify, before RPC that writes cloud refs
+      if (signal) throwIfSyncAborted(signal);
       const push = await provider.pushOps([
         {
           opId: `migrate-media-${row.id}`,
@@ -860,6 +885,12 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
           nextRetryAt: nowISO(),
         },
       ]);
+      // In-flight RPC uncertain if lease lost — do not count as migrated success path for next images
+      if (signal?.aborted) {
+        throw new SyncLeaseLostError(
+          '同步锁已超时并被其他标签页接管；媒体迁移结果不确定，未继续下一张，请重试。',
+        );
+      }
       if (push.error) {
         failed += 1;
         errors.push(`${row.id}: ${push.error}`);
@@ -873,11 +904,13 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
         errors.push(`${row.id}: push skipped (cloud newer / conflict); will re-check`);
       }
     } catch (e) {
+      if (e instanceof SyncLeaseLostError) throw e;
       failed += 1;
       errors.push(`${row.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
+  if (signal) throwIfSyncAborted(signal);
   // Re-count remaining legacy after this pass (source of truth for retry)
   const after = await provider.pullAll();
   let unmigrated = 0;
