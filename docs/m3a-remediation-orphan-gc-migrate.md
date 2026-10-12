@@ -51,3 +51,11 @@ Sync awaited migrate but discarded the result; UI showed success while some imag
 - Unit (no live env): **222 passed**
 - Media unit/migration suite: **26 passed**
 - Live media E2E on disposable `skwoahneuqkqgxzpkkzl` (grace=0 for intentional orphan only)
+
+
+## Final status（第二轮审查通过后）
+
+- Review tip：**`602a94a`** — PASS
+- Merged to `main`：见 `docs/m3a-staging-deploy-report.md`
+- Staging-only deploy：https://car-test.adobesun.com
+- Production：未部署、未改 Supabase
