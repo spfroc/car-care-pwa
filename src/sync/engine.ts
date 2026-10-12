@@ -7,11 +7,11 @@ import { mergeCloudIntoPlan } from './merge';
 import {
   ackOutboxCoveredByUpload,
   appendConflicts,
-  clearOutbox,
   countOutboxForOwner,
   ensureDeviceId,
   getSyncMeta,
   listOutbox,
+  listOutboxForUser,
   listReadyOutbox,
   markOutboxFailure,
   patchSyncMeta,
@@ -141,14 +141,15 @@ export async function localSnapshotToCloudRows(snap: LocalSnapshot): Promise<Clo
 async function applyCloudRows(
   toUpsert: CloudRow[],
   toDelete: CloudRow[],
-  opts?: { replaceLocal?: boolean },
+  opts?: { replaceLocal?: boolean; clearOutboxOpIds?: string[] },
 ): Promise<void> {
   assertCloudRowsValid(toUpsert);
 
   const db = await getDB();
-  const stores = opts?.replaceLocal
-    ? (['vehicles', 'records', 'stations', 'settings', 'media', 'sync_outbox'] as const)
-    : (['vehicles', 'records', 'stations', 'settings', 'media'] as const);
+  const stores =
+    opts?.replaceLocal
+      ? (['vehicles', 'records', 'stations', 'settings', 'media', 'sync_outbox'] as const)
+      : (['vehicles', 'records', 'stations', 'settings', 'media'] as const);
   const tx = db.transaction(stores, 'readwrite');
 
   try {
@@ -160,7 +161,10 @@ async function applyCloudRows(
       for (const s of settings) {
         if (s.key !== 'cloudStorage') await tx.objectStore('settings').delete(s.key);
       }
-      await tx.objectStore('sync_outbox').clear();
+      // Only drop CURRENT account pending ops — never wipe other accounts' queues
+      for (const opId of opts.clearOutboxOpIds ?? []) {
+        await tx.objectStore('sync_outbox').delete(opId);
+      }
     }
 
     for (const row of toDelete) {
@@ -331,7 +335,10 @@ export async function restoreFromCloud(opts?: {
     // Validate before any local mutation
     assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
 
-    const pending = opts?.replaceLocal ? [] : await listOutbox();
+    const meta = await getSyncMeta();
+    // Conflict / skip checks use ONLY current account pending ops
+    const pendingMine = await listOutboxForUser(meta.cloudUserId);
+    const pending = opts?.replaceLocal ? [] : pendingMine;
     const localIndex = opts?.replaceLocal ? new Map() : await buildLocalIndex();
     const plan = mergeCloudIntoPlan(
       snapshot.rows,
@@ -343,6 +350,7 @@ export async function restoreFromCloud(opts?: {
     try {
       await applyCloudRows(plan.toUpsert, plan.toDelete, {
         replaceLocal: opts?.replaceLocal,
+        clearOutboxOpIds: opts?.replaceLocal ? pendingMine.map((o) => o.opId) : undefined,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -436,7 +444,7 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     const snapshot = await provider.pullAll();
     assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
     const localIndex = await buildLocalIndex();
-    const pending = await listOutbox();
+    const pending = await listOutboxForUser((await getSyncMeta()).cloudUserId);
     const plan = mergeCloudIntoPlan(
       snapshot.rows,
       (entity, id) => localIndex.get(`${entity}:${id}`),
@@ -515,21 +523,29 @@ async function enrichOutboxPayloads(
 
 export async function disconnectCloud(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
+  const metaBefore = await getSyncMeta();
+  const parked = metaBefore.cloudUserId
+    ? await countOutboxForOwner(metaBefore.cloudUserId)
+    : (await listOutbox()).length;
   try {
     await provider?.signOut?.();
   } catch {
     /* ignore */
   }
   await clearCloudStorageConfig();
-  await clearOutbox();
+  // Keep pending outbox so same-account reconnect can resume sync
   await patchSyncMeta({
     status: 'disconnected',
     provider: 'none',
-    cloudUserId: undefined,
+    cloudUserId: metaBefore.cloudUserId,
     serverCursor: undefined,
     lastError: undefined,
   });
-  return { ok: true, message: '已断开云存储；本地数据保留。' };
+  const parkNote =
+    parked > 0
+      ? `待同步队列 ${parked} 条已保留；同一账号重新连接后可继续同步。`
+      : '无待同步项。';
+  return { ok: true, message: `已断开云存储；本地业务数据保留。${parkNote}` };
 }
 
 export async function getSyncStatusSummary(): Promise<{
@@ -537,10 +553,10 @@ export async function getSyncStatusSummary(): Promise<{
   outboxCount: number;
   config: CloudStorageConfig;
 }> {
-  const [meta, outbox, config] = await Promise.all([
-    getSyncMeta(),
-    listOutbox(),
-    getCloudStorageConfig(),
-  ]);
+  const meta = await getSyncMeta();
+  const config = await getCloudStorageConfig();
+  const outbox = meta.cloudUserId
+    ? await listOutboxForUser(meta.cloudUserId)
+    : await listOutbox();
   return { meta, outboxCount: outbox.length, config };
 }

@@ -8,6 +8,7 @@ import { setCloudStorageConfig } from './config';
 import {
   bidirectionalSync,
   firstUploadToCloud,
+  disconnectCloud,
   restoreFromCloud,
   setCloudProviderForTests,
   verifyConnection,
@@ -563,5 +564,125 @@ describe('config security', () => {
         supabaseAnonKey: 'eyJhbGciOi.test.anon',
       }),
     ).rejects.toThrow(/https/);
+  });
+});
+
+describe('round-4: disconnect keep queue + restore account isolation', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+
+  it('disconnect keeps pending outbox; same-account reconnect resumes', async () => {
+    await patchSyncMeta({
+      cloudUserId: 'user-a',
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'supabase',
+    });
+    await putVehicle(vehicle('v1', 'KeepMe', '2026-01-01T00:00:00.000Z'));
+    expect(await countOutboxForOwner('user-a')).toBeGreaterThan(0);
+    const d = await disconnectCloud();
+    expect(d.ok).toBe(true);
+    expect(d.message).toMatch(/保留/);
+    expect(await countOutboxForOwner('user-a')).toBeGreaterThan(0);
+    // Reconnect config + same user
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+    mem.userId = 'user-a';
+    const v = await verifyConnection();
+    expect(v.ok).toBe(true);
+    // Make ops immediately ready
+    const db = await getDB();
+    for (const item of await listOutbox()) {
+      await db.put('sync_outbox', { ...item, nextRetryAt: '2020-01-01T00:00:00.000Z' });
+    }
+    const sync = await bidirectionalSync();
+    expect(sync.ok).toBe(true);
+    expect(mem.rows.has('vehicles:v1')).toBe(true);
+  });
+
+  it('restore merge only blocks on current-account pending ops', async () => {
+    await patchSyncMeta({
+      cloudUserId: 'user-a',
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'supabase',
+    });
+    await putVehicle(vehicle('v1', 'LocalA', '2026-01-01T00:00:00.000Z'));
+    await (await getDB()).clear('sync_outbox');
+    // Other account pending for same id must NOT block A's restore
+    await putOutboxItem({
+      opId: 'other-b',
+      entity: 'vehicles',
+      entityId: 'v1',
+      op: 'upsert',
+      payload: vehicle('v1', 'FromB', '2026-01-05T00:00:00.000Z'),
+      mutatedAt: '2026-01-05T00:00:00.000Z',
+      attempts: 0,
+      nextRetryAt: '2026-01-05T00:00:00.000Z',
+      ownerUserId: 'user-b',
+    });
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudA', '2026-02-01T00:00:00.000Z'),
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const r = await restoreFromCloud();
+    expect(r.ok).toBe(true);
+    expect((await (await getDB()).get('vehicles', 'v1'))?.name).toBe('CloudA');
+    // B's parked op still present
+    expect(await countOutboxForOwner('user-b')).toBe(1);
+  });
+
+  it('replaceLocal restore clears only current account outbox', async () => {
+    await patchSyncMeta({
+      cloudUserId: 'user-a',
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'supabase',
+    });
+    await putVehicle(vehicle('va', 'A', '2026-01-01T00:00:00.000Z'));
+    await putOutboxItem({
+      opId: 'park-b',
+      entity: 'vehicles',
+      entityId: 'vb',
+      op: 'upsert',
+      payload: vehicle('vb', 'B', '2026-01-01T00:00:00.000Z'),
+      mutatedAt: '2026-01-01T00:00:00.000Z',
+      attempts: 0,
+      nextRetryAt: '2026-01-01T00:00:00.000Z',
+      ownerUserId: 'user-b',
+    });
+    mem.rows.set('vehicles:cloud', {
+      entity: 'vehicles',
+      id: 'cloud',
+      payload: vehicle('cloud', 'FromCloud', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const r = await restoreFromCloud({ replaceLocal: true });
+    expect(r.ok).toBe(true);
+    expect(await countOutboxForOwner('user-a')).toBe(0);
+    expect(await countOutboxForOwner('user-b')).toBe(1);
+    const ids = (await (await getDB()).getAll('vehicles')).map((v) => v.id);
+    expect(ids).toContain('cloud');
+    expect(ids).not.toContain('va');
   });
 });

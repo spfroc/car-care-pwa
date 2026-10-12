@@ -250,9 +250,20 @@ export async function removeStaleConflictOps(
   return { removed, keptNewer };
 }
 
+/**
+ * Wipe entire outbox — prefer clearOutboxForUser to avoid cross-account data loss.
+ * Kept for tests / explicit full reset only.
+ */
 export async function clearOutbox(): Promise<void> {
   const db = await getDB();
   await db.clear('sync_outbox');
+}
+
+/** Delete only ops belonging to the given cloud user (incl. unbound when that user is active). */
+export async function clearOutboxForUser(cloudUserId: string | undefined): Promise<number> {
+  const mine = await listOutboxForUser(cloudUserId);
+  await removeOutboxItems(mine.map((o) => o.opId));
+  return mine.length;
 }
 
 /**
