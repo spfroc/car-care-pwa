@@ -119,7 +119,8 @@ Anon/publishable 仅通过环境变量注入；报告与 git **不含密钥**。
 | **PR B（建议）** | 将本地 `35210b0` boot placeholder push 到 origin（staging 已跑此构建） |
 | Prod 部署 | **无**；明确禁止 |
 
-> PR URL 在 push 后填入本节 / 父代理摘要。
+- https://github.com/spfroc/car-care-pwa/pull/3 — account-switch safety + acceptance report (`95a2c6e`)
+- https://github.com/spfroc/car-care-pwa/pull/4 — boot placeholder `35210b0`（staging 已跑此构建）
 
 ## 6. 开放问题
 
