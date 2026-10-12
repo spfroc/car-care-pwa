@@ -10,8 +10,8 @@
 | 项 | 值 |
 |---|---|
 | Feature tip（审查通过） | `602a94a` |
-| Merge 后 main | 见 `docs/m3a-staging-deploy-report.md` |
-| Staging | https://car-test.adobesun.com → `/var/www/car-care-staging/` |
+| Merge 后 main | `8f335bc0b8bdbfa7dd5b95e72708b2e12862e54f` |
+| Staging | https://car-test.adobesun.com → `/var/www/car-care-staging/`（bundle `index-D4Bw8zWY.js`） |
 | Prod | https://car.adobesun.com → **未部署、未写入** |
 | Disposable Supabase | `car-care-m2-smoke` / `skwoahneuqkqgxzpkkzl` |
 
@@ -50,3 +50,8 @@
 - 生产 Contabo / `car.adobesun.com` 发布（需用户另行批准）
 - Notion
 - 自动 orphan GC 在同步路径恢复（刻意关闭）
+
+
+## 6. Staging 部署
+
+完整步骤、冒烟与浏览器验收清单见 **`docs/m3a-staging-deploy-report.md`**。
