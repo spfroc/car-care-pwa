@@ -11,9 +11,22 @@
     <meta name="theme-color" content="#6d28d9" />
     <meta name="description" content="车护助手 — 离线车辆养护账本 PWA" />
     <title>车护助手</title>
+    <style>
+      /* Boot placeholder — replaced when React mounts; avoids empty #root flash */
+      #root:empty::before {
+        content: "正在初始化车护助手…";
+        display: block;
+        max-width: 420px;
+        margin: 40px auto;
+        padding: 24px;
+        text-align: center;
+        color: #334155;
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><p style="max-width:420px;margin:40px auto;padding:24px;text-align:center;color:#334155;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif">正在初始化车护助手…</p></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
