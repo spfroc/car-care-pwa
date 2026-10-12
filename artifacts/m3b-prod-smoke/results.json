@@ -1,0 +1,128 @@
+{
+  "at": "2026-10-12T09:20:40.965Z",
+  "results": [
+    {
+      "name": "prod.https.home",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "prod.bundle",
+      "ok": true,
+      "detail": "index-Cv8wDxDq.js"
+    },
+    {
+      "name": "prod.stamp",
+      "ok": true,
+      "detail": "git=d7dd681fc934fa07915ae6cff2434b75122aa4a0 | bundle=index-Cv8wDxDq.js | sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc | builtAt=2026-10-12T17:19:52+0800"
+    },
+    {
+      "name": "prod.sw",
+      "ok": true,
+      "detail": "{\"controlling\":true,\"scriptURL\":\"https://car.adobesun.com/sw.js\"}"
+    },
+    {
+      "name": "prod.route/home",
+      "ok": true,
+      "detail": "https://car.adobesun.com/"
+    },
+    {
+      "name": "prod.route/stats",
+      "ok": true,
+      "detail": "https://car.adobesun.com/stats"
+    },
+    {
+      "name": "prod.route/settings",
+      "ok": true,
+      "detail": "https://car.adobesun.com/settings"
+    },
+    {
+      "name": "prod.settings.storageUI",
+      "ok": true,
+      "detail": "storage section visible"
+    },
+    {
+      "name": "prod.settings.importExport",
+      "ok": true,
+      "detail": "import/export visible"
+    },
+    {
+      "name": "prod.noCloudWrite",
+      "ok": true,
+      "detail": "skipped connect/upload/sync by design"
+    },
+    {
+      "name": "prod.idb",
+      "ok": true,
+      "detail": "[\"learning\",\"media\",\"meta\",\"records\",\"settings\",\"stations\",\"sync_meta\",\"sync_outbox\",\"vehicles\"]"
+    },
+    {
+      "name": "prod.console",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "stage.https.home",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "stage.bundle",
+      "ok": true,
+      "detail": "index-Cv8wDxDq.js"
+    },
+    {
+      "name": "stage.stamp",
+      "ok": true,
+      "detail": "git=d7dd681fc934fa07915ae6cff2434b75122aa4a0 | bundle=index-Cv8wDxDq.js | sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc | builtAt=2026-10-12T16:25:30+0800"
+    },
+    {
+      "name": "stage.sw",
+      "ok": true,
+      "detail": "{\"controlling\":true,\"scriptURL\":\"https://car-test.adobesun.com/sw.js\"}"
+    },
+    {
+      "name": "stage.route/home",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/"
+    },
+    {
+      "name": "stage.route/stats",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/stats"
+    },
+    {
+      "name": "stage.route/settings",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/settings"
+    },
+    {
+      "name": "stage.settings.storageUI",
+      "ok": true,
+      "detail": "storage section visible"
+    },
+    {
+      "name": "stage.settings.importExport",
+      "ok": true,
+      "detail": "import/export visible"
+    },
+    {
+      "name": "stage.noCloudWrite",
+      "ok": true,
+      "detail": "skipped connect/upload/sync by design"
+    },
+    {
+      "name": "stage.idb",
+      "ok": true,
+      "detail": "[\"learning\",\"media\",\"meta\",\"records\",\"settings\",\"stations\",\"sync_meta\",\"sync_outbox\",\"vehicles\"]"
+    },
+    {
+      "name": "stage.console",
+      "ok": true,
+      "detail": "clean"
+    }
+  ],
+  "passed": 24,
+  "failed": 0,
+  "failedNames": []
+}
