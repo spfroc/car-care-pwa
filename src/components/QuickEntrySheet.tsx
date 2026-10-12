@@ -93,7 +93,7 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
         amountDialect: learning.amountDialect,
       });
       setParsed(r);
-      setPickVehicleId(r.vehicleId ?? (r.vehicleIds[0] ?? ''));
+      setPickVehicleId(r.vehicleId ?? '');
       setPickType(r.type ?? (r.types[0] ?? ''));
       setErr('');
       return r;
@@ -222,10 +222,11 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
 
   if (!open) return null;
 
+  // Require explicit pick whenever parse did not uniquely resolve a vehicle.
   const needsVehiclePick =
     !!parsed &&
     !parsed.vehicleId &&
-    (parsed.vehicleIds.length !== 1 || vehicles.length > 1);
+    (vehicles.length > 1 || parsed.vehicleIds.length !== 1);
   const needsTypePick = !!parsed && !parsed.type;
   const vehicleOptions =
     parsed && parsed.vehicleIds.length > 1

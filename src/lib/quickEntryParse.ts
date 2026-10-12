@@ -1,5 +1,5 @@
 import { allowsCharge, allowsFuel } from './energy';
-import type { AmountDialectPreference, EnergyType, ParkingKind, RecordType, Station, StationType, Vehicle } from '../types';
+import type { AmountDialectPreference, BodyType, EnergyType, ParkingKind, RecordType, Station, StationType, Vehicle } from '../types';
 export type { AmountDialectPreference };
 
 /** Prefill payload passed to the record form (never written to IDB by itself). */
@@ -42,13 +42,24 @@ export type QuickEntryParseResult = {
 
 export type VehicleMatchInput = Pick<Vehicle, 'id' | 'name' | 'plate'> & {
   energyType?: EnergyType;
+  bodyType?: BodyType;
   /** Spoken / typed short names that should resolve to this vehicle (incl. learned). */
   aliases?: string[];
   /** ISO time of most recent fuel record for this vehicle. */
   lastFuelAt?: string;
   /** ISO time of most recent charge record for this vehicle. */
   lastChargeAt?: string;
+  /** Highest known odometer (records + initialOdometer). */
+  maxOdometer?: number;
+  tankCapacityL?: number;
 };
+
+/** Two-wheel / micro body types — small tank, lower typical odometer. */
+const TWO_WHEEL_BODIES = new Set<BodyType>(['SCOOTER', 'MOTORCYCLE', 'E_BIKE', 'BIKE']);
+
+export function isTwoWheelBody(bodyType?: BodyType): boolean {
+  return !!bodyType && TWO_WHEEL_BODIES.has(bodyType);
+}
 
 
 export type StationMatchInput = Pick<Station, 'id' | 'name' | 'stationType'> & {
@@ -372,13 +383,79 @@ function localCivilDateIso(
   return d.toISOString();
 }
 
+export type VehicleHintFields = {
+  odometer?: number;
+  liters?: number;
+  kWh?: number;
+};
+
 /**
- * When plate/name is omitted: sole vehicle, sole fuel/charge-capable for the
- * detected type, or most-recently-used for that type.
+ * Score how well a vehicle fits spoken odometer / liters (higher = better).
+ * Large odometer regressions vs known max strongly penalize (wrong car).
+ */
+export function scoreVehicleAgainstHints(
+  v: VehicleMatchInput,
+  hints: VehicleHintFields = {},
+): number {
+  let score = 0;
+  const odo = hints.odometer;
+  const liters = hints.liters;
+  const twoWheel = isTwoWheelBody(v.bodyType);
+
+  if (odo != null && Number.isFinite(odo)) {
+    const maxOdo = v.maxOdometer;
+    if (maxOdo != null && Number.isFinite(maxOdo)) {
+      const delta = odo - maxOdo;
+      if (delta >= 0) {
+        // Natural progression; closer gaps slightly preferred.
+        score += 120 - Math.min(40, Math.floor(delta / 500));
+      } else if (delta >= -200) {
+        // Tiny regression / same ballpark (typo / redo).
+        score += 40;
+      } else if (delta >= -2000) {
+        score -= 30;
+      } else {
+        // Would trip「里程小于已有最大里程」— almost certainly wrong vehicle.
+        score -= 250;
+      }
+    } else {
+      // No history: prefer two-wheel for mid-range odo with small fill later.
+      score += 5;
+    }
+  }
+
+  if (liters != null && Number.isFinite(liters) && liters > 0) {
+    const tank = v.tankCapacityL;
+    if (liters <= 12) {
+      if (twoWheel) score += 50;
+      else if (tank != null && tank <= 20) score += 40;
+      else score -= 15; // car-sized tank rarely fills only ~5L as full trip cue
+    } else if (liters >= 20) {
+      if (twoWheel) score -= 60;
+      else score += 40;
+    } else {
+      // 12–20L ambiguous
+      if (twoWheel) score += 5;
+      else score += 15;
+    }
+    if (tank != null && Number.isFinite(tank) && tank > 0) {
+      if (liters <= tank * 1.05) score += 10;
+      else score -= 40; // over tank capacity
+    }
+  }
+
+  return score;
+}
+
+/**
+ * When plate/name is omitted: sole vehicle, sole fuel/charge-capable, or a
+ * *high-confidence* odometer/liters match. Otherwise return candidates without
+ * `picked` so the UI forces a manual vehicle choose (never silent wrong-car).
  */
 export function resolveVehicleWithoutMention(
   vehicles: VehicleMatchInput[],
   preferredType?: RecordType,
+  hints: VehicleHintFields = {},
 ): { vehicles: VehicleMatchInput[]; confidence: MatchConfidence; picked?: VehicleMatchInput } {
   if (!vehicles.length) return { vehicles: [], confidence: 'none' };
 
@@ -386,21 +463,31 @@ export function resolveVehicleWithoutMention(
     return { vehicles, confidence: 'high', picked: vehicles[0] };
   }
 
+  const hasHints =
+    (hints.odometer != null && Number.isFinite(hints.odometer)) ||
+    (hints.liters != null && Number.isFinite(hints.liters)) ||
+    (hints.kWh != null && Number.isFinite(hints.kWh));
+
   if (preferredType === 'fuel') {
     const capable = vehicles.filter((v) => (v.energyType ? allowsFuel(v.energyType) : true));
     if (capable.length === 1) {
       return { vehicles: capable, confidence: 'high', picked: capable[0] };
     }
     if (capable.length > 1) {
-      const ranked = [...capable].sort((a, b) => {
-        const ta = a.lastFuelAt ?? '';
-        const tb = b.lastFuelAt ?? '';
-        return tb.localeCompare(ta);
-      });
-      if (ranked[0]?.lastFuelAt) {
-        return { vehicles: capable, confidence: 'low', picked: ranked[0] };
+      // Only auto-pick on *high* confidence (strong odo/liters separation).
+      // Never silent-pick from lastFuelAt alone — that caused wrong-car saves.
+      if (hasHints) {
+        const scored = capable
+          .map((v) => ({ v, score: scoreVehicleAgainstHints(v, hints) }))
+          .sort((a, b) => b.score - a.score);
+        const best = scored[0];
+        const second = scored[1];
+        const margin = best.score - (second?.score ?? -Infinity);
+        if (best.score >= 40 && margin >= 80) {
+          return { vehicles: capable, confidence: 'high', picked: best.v };
+        }
       }
-      // Multiple fuel vehicles, no recency signal → ask user (list fuel-capable).
+      // Ambiguous / weak hints → UI must show vehicle picker.
       return { vehicles: capable, confidence: 'low' };
     }
   }
@@ -413,13 +500,16 @@ export function resolveVehicleWithoutMention(
       return { vehicles: capable, confidence: 'high', picked: capable[0] };
     }
     if (capable.length > 1) {
-      const ranked = [...capable].sort((a, b) => {
-        const ta = a.lastChargeAt ?? '';
-        const tb = b.lastChargeAt ?? '';
-        return tb.localeCompare(ta);
-      });
-      if (ranked[0]?.lastChargeAt) {
-        return { vehicles: capable, confidence: 'low', picked: ranked[0] };
+      if (hints.odometer != null && Number.isFinite(hints.odometer)) {
+        const scored = capable
+          .map((v) => ({ v, score: scoreVehicleAgainstHints(v, { odometer: hints.odometer }) }))
+          .sort((a, b) => b.score - a.score);
+        const best = scored[0];
+        const second = scored[1];
+        const margin = best.score - (second?.score ?? -Infinity);
+        if (best.score >= 40 && margin >= 80) {
+          return { vehicles: capable, confidence: 'high', picked: best.v };
+        }
       }
       return { vehicles: capable, confidence: 'low' };
     }
@@ -428,13 +518,17 @@ export function resolveVehicleWithoutMention(
   return { vehicles: [], confidence: 'none' };
 }
 
-/** Build match inputs from vehicles + optional records (last fuel/charge times). */
+/** Build match inputs from vehicles + optional records (last fuel/charge + max odo). */
 export function buildVehicleMatchInputs(
-  vehicles: Pick<Vehicle, 'id' | 'name' | 'plate' | 'energyType'>[],
-  records?: { vehicleId: string; type: string; date: string }[],
+  vehicles: Pick<
+    Vehicle,
+    'id' | 'name' | 'plate' | 'energyType' | 'bodyType' | 'initialOdometer' | 'tankCapacityL'
+  >[],
+  records?: { vehicleId: string; type: string; date: string; odometer?: number }[],
 ): VehicleMatchInput[] {
   const lastFuel = new Map<string, string>();
   const lastCharge = new Map<string, string>();
+  const maxOdo = new Map<string, number>();
   if (records) {
     for (const r of records) {
       if (r.type === 'fuel') {
@@ -444,16 +538,29 @@ export function buildVehicleMatchInputs(
         const prev = lastCharge.get(r.vehicleId);
         if (!prev || r.date > prev) lastCharge.set(r.vehicleId, r.date);
       }
+      if (typeof r.odometer === 'number' && Number.isFinite(r.odometer)) {
+        const prev = maxOdo.get(r.vehicleId);
+        if (prev == null || r.odometer > prev) maxOdo.set(r.vehicleId, r.odometer);
+      }
     }
   }
-  return vehicles.map((v) => ({
-    id: v.id,
-    name: v.name,
-    plate: v.plate,
-    energyType: v.energyType,
-    lastFuelAt: lastFuel.get(v.id),
-    lastChargeAt: lastCharge.get(v.id),
-  }));
+  return vehicles.map((v) => {
+    let max = maxOdo.get(v.id);
+    if (typeof v.initialOdometer === 'number' && Number.isFinite(v.initialOdometer)) {
+      max = max == null ? v.initialOdometer : Math.max(max, v.initialOdometer);
+    }
+    return {
+      id: v.id,
+      name: v.name,
+      plate: v.plate,
+      energyType: v.energyType,
+      bodyType: v.bodyType,
+      tankCapacityL: v.tankCapacityL,
+      maxOdometer: max,
+      lastFuelAt: lastFuel.get(v.id),
+      lastChargeAt: lastCharge.get(v.id),
+    };
+  });
 }
 
 /** Known station brand prefixes (longer first for 中石油 before shorter tails). */
@@ -687,10 +794,14 @@ export function parseQuickEntry(
     });
   }
 
-  // 1) Vehicle-first: explicit plate/name/alias, else sole / fuel-capable / last-used.
-  const explicitHits = matchVehicles(raw, vehicleInputs);
+  // 1) Type + fields early so odometer/liters can disambiguate vehicles.
   const typeHitsEarly = detectRecordTypes(raw);
   const earlyType = typeHitsEarly.length === 1 ? typeHitsEarly[0] : undefined;
+  const dialect = options.amountDialect ?? 'bareAsDue';
+  const fields = extractFields(raw, earlyType ?? typeHitsEarly[0], now, dialect);
+
+  // 2) Vehicle: explicit plate/name/alias, else sole / hints / last-used.
+  const explicitHits = matchVehicles(raw, vehicleInputs);
 
   let vehicleHits = explicitHits;
   let vehicleConf: MatchConfidence = 'none';
@@ -702,13 +813,17 @@ export function parseQuickEntry(
   } else if (explicitHits.length > 1) {
     vehicleConf = 'low';
   } else {
-    const fb = resolveVehicleWithoutMention(vehicleInputs, earlyType);
+    const fb = resolveVehicleWithoutMention(vehicleInputs, earlyType, {
+      odometer: fields.odometer,
+      liters: fields.liters,
+      kWh: fields.kWh,
+    });
     vehicleHits = fb.vehicles.length ? fb.vehicles : [];
     vehicleConf = fb.confidence;
     if (fb.picked) vehicleId = fb.picked.id;
   }
 
-  // 2) Type (+ fields)
+  // 3) Finalize type confidence
   const typeHits = typeHitsEarly;
   let typeConf: MatchConfidence = 'none';
   let type: RecordType | undefined;
@@ -718,12 +833,9 @@ export function parseQuickEntry(
   } else if (typeHits.length > 1) {
     typeConf = 'low';
   }
-
-  const dialect = options.amountDialect ?? 'bareAsDue';
-  const fields = extractFields(raw, type ?? typeHits[0], now, dialect);
   const stationQuery = fields.stationName;
 
-  // 3) Resolve spoken/typed short station name → favorite / learned station.
+  // 4) Resolve spoken/typed short station name → favorite / learned station.
   let stations = options.stations ?? [];
   if (options.learnedStationAliases?.length) {
     stations = stations.map((s) => {

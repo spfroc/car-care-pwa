@@ -11,13 +11,34 @@ import {
   parseChineseYuan,
   parseQuickEntry,
   resolveVehicleWithoutMention,
+  scoreVehicleAgainstHints,
   truncateStationCapture,
 } from './quickEntryParse';
 
 const vehicles = [
-  { id: 'v-spacy', name: 'Spacy125', plate: '鲁AZ7G61', energyType: 'ICE' as const },
-  { id: 'v-xrv', name: 'X-RV', plate: '鲁A4GC10', energyType: 'ICE' as const },
-  { id: 'v-ev', name: '城市纯电轿车', plate: '沪A12345', energyType: 'EV' as const },
+  {
+    id: 'v-spacy',
+    name: 'Spacy125',
+    plate: '鲁AZ7G61',
+    energyType: 'ICE' as const,
+    bodyType: 'SCOOTER' as const,
+    tankCapacityL: 7,
+  },
+  {
+    id: 'v-xrv',
+    name: 'X-RV',
+    plate: '鲁A4GC10',
+    energyType: 'ICE' as const,
+    bodyType: 'CROSSOVER' as const,
+    tankCapacityL: 50,
+  },
+  {
+    id: 'v-ev',
+    name: '城市纯电轿车',
+    plate: '沪A12345',
+    energyType: 'EV' as const,
+    bodyType: 'SEDAN' as const,
+  },
 ];
 
 
@@ -156,14 +177,15 @@ describe('resolveVehicleWithoutMention / vehicle-first', () => {
     expect(r.picked?.id).toBe('v-spacy');
     expect(r.confidence).toBe('high');
   });
-  it('picks most-recent fuel vehicle when multiple ICE', () => {
+  it('does not silent-pick most-recent fuel when multiple ICE (ask user)', () => {
     const withLast = buildVehicleMatchInputs(vehicles, [
       { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z' },
       { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-01T00:00:00.000Z' },
     ]);
     const r = resolveVehicleWithoutMention(withLast, 'fuel');
-    expect(r.picked?.id).toBe('v-xrv');
+    expect(r.picked).toBeUndefined();
     expect(r.confidence).toBe('low');
+    expect(r.vehicles.map((v) => v.id).sort()).toEqual(['v-spacy', 'v-xrv']);
   });
   it('lists fuel-capable without pick when multiple and no lastFuelAt', () => {
     const r = resolveVehicleWithoutMention(vehicles, 'fuel');
@@ -314,7 +336,7 @@ describe('parseQuickEntry', () => {
     expect(r.type).toBe('fuel');
     expect(isParseReady(r)).toBe(true);
   });
-  it('vehicle-first: last-used fuel when plate/name omitted', () => {
+  it('vehicle-first: last-used alone is not enough — liters~34L picks car high', () => {
     const inputs = buildVehicleMatchInputs(vehicles, [
       { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-08T12:00:00.000Z' },
       { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T12:00:00.000Z' },
@@ -323,8 +345,9 @@ describe('parseQuickEntry', () => {
       now: new Date('2026-10-09T14:30:00+08:00'),
     });
     expect(r.type).toBe('fuel');
+    // ~34L fill + car body outweighs scooter → high confidence auto-pick X-RV
     expect(r.vehicleId).toBe('v-xrv');
-    expect(r.confidence.vehicle).toBe('low');
+    expect(r.confidence.vehicle).toBe('high');
     expect(r.fields.stationName).toBe('中凯');
     expect(r.fields.amountDue).toBe(300);
     expect(r.fields.discount).toBe(20);
@@ -332,6 +355,19 @@ describe('parseQuickEntry', () => {
     expect(r.fields.unitPrice).toBe(8.72);
     expect(r.fields.liters).toBeCloseTo(300 / 8.72, 2);
     expect(isParseReady(r)).toBe(true);
+  });
+
+  it('vehicle-first: no liters/odo hints → no silent pick (UI must choose)', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-08T12:00:00.000Z' },
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T12:00:00.000Z' },
+    ]);
+    const r = parseQuickEntry('加油花了 200 元', inputs);
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBeUndefined();
+    expect(r.confidence.vehicle).toBe('low');
+    expect(r.vehicleIds.sort()).toEqual(['v-spacy', 'v-xrv']);
+    expect(isParseReady(r)).toBe(false);
   });
 
   it('resolves 中凯 → 中凯石油窑头路 stationId when stations passed', () => {
@@ -424,5 +460,70 @@ describe('user sentence: 10月10日 中凯 油价/实付/应付', () => {
       new Date('2026-10-10T14:25:00+08:00').toDateString(),
     );
     expect(isParseReady(r)).toBe(true);
+  });
+});
+
+describe('vehicle pick via odometer + liters (scooter vs car)', () => {
+  const now = new Date('2026-10-12T14:25:00+08:00');
+
+  it('scoreVehicleAgainstHints: odo 6757 fits scooter max~6k, not car max~41k', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z', odometer: 6700 },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-01T00:00:00.000Z', odometer: 41864 },
+    ]);
+    const spacy = inputs.find((v) => v.id === 'v-spacy')!;
+    const xrv = inputs.find((v) => v.id === 'v-xrv')!;
+    expect(spacy.maxOdometer).toBe(6700);
+    expect(xrv.maxOdometer).toBe(41864);
+    const hints = { odometer: 6757, liters: 4.58 };
+    expect(scoreVehicleAgainstHints(spacy, hints)).toBeGreaterThan(
+      scoreVehicleAgainstHints(xrv, hints) + 80,
+    );
+  });
+
+  it('resolveVehicleWithoutMention picks Spacy over last-used X-RV', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z', odometer: 6700 },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-11T00:00:00.000Z', odometer: 41864 },
+    ]);
+    const r = resolveVehicleWithoutMention(inputs, 'fuel', { odometer: 6757, liters: 4.58 });
+    expect(r.picked?.id).toBe('v-spacy');
+    expect(r.confidence).toBe('high');
+  });
+
+  it('USER sentence picks Spacy125 not X-RV despite X-RV last fuel', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z', odometer: 6700 },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-11T12:00:00.000Z', odometer: 41864 },
+    ]);
+    const r = parseQuickEntry(USER_ZHONGKAI_SENTENCE, inputs, { now, stations });
+    expect(r.type).toBe('fuel');
+    expect(r.vehicleId).toBe('v-spacy');
+    expect(r.confidence.vehicle).toBe('high');
+    expect(r.fields.odometer).toBe(6757);
+    expect(r.fields.liters).toBeCloseTo(39.25 / 8.57, 3);
+    expect(r.fields.stationId).toBe('st-zhongkai');
+    expect(isParseReady(r)).toBe(true);
+  });
+
+  it('large fill ~40L still prefers car over scooter', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z', odometer: 6700 },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-01T00:00:00.000Z', odometer: 41800 },
+    ]);
+    const r = resolveVehicleWithoutMention(inputs, 'fuel', { odometer: 42000, liters: 40 });
+    expect(r.picked?.id).toBe('v-xrv');
+    expect(r.confidence).toBe('high');
+  });
+
+  it('ambiguous mid liters without odo → no auto-pick', () => {
+    const inputs = buildVehicleMatchInputs(vehicles, [
+      { vehicleId: 'v-spacy', type: 'fuel', date: '2026-09-01T00:00:00.000Z', odometer: 6700 },
+      { vehicleId: 'v-xrv', type: 'fuel', date: '2026-10-01T00:00:00.000Z', odometer: 41864 },
+    ]);
+    // 15L is in the ambiguous band; scores too close → picker required
+    const r = resolveVehicleWithoutMention(inputs, 'fuel', { liters: 15 });
+    expect(r.picked).toBeUndefined();
+    expect(r.confidence).toBe('low');
   });
 });
