@@ -85,7 +85,7 @@ node scripts/m3b-live-dual-tab-acceptance.mjs
 
 ## 本提交
 
-- git: `bc28c36` / full `bc28c364da5a24d01fd9d3af55ac120bbaed6f59`
+- git tip: `cf33b8e` (docs SHA); 主变更 `de11219` security+asserts; artifacts logs `bc28c36`
 - 业务 tip 仍为 car-test `d7dd681` / `index-Cv8wDxDq.js`（本轮未改业务、未部署）
 
 ## 结论
