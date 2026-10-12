@@ -1,0 +1,6 @@
+M2 user-owned data storage
+branch: feature/m2-user-owned-data-storage
+tests: 169 passed
+tsc: ok
+build: ok
+deploy: NOT done (per request)

@@ -1,5 +1,12 @@
 import { getDB } from '../db';
 import type { CareRecord, RecordType } from '../types';
+import {
+  isCloudEnqueueEnabled,
+  makeOutboxItem,
+  putOutboxInTx,
+  settleTx,
+  stampOutboxOwner,
+} from '../sync/outbox';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -25,12 +32,27 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 }
 
 export async function putRecord(r: CareRecord): Promise<void> {
-  await (await getDB()).put('records', r);
+  const db = await getDB();
+  const sync = await isCloudEnqueueEnabled();
+  const outboxItem = sync
+    ? await stampOutboxOwner(
+        makeOutboxItem({
+          entity: 'records',
+          entityId: r.id,
+          op: 'upsert',
+          payload: r,
+          mutatedAt: r.updatedAt,
+        }),
+      )
+    : null;
+  const stores = sync ? (['records', 'sync_outbox'] as const) : (['records'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('records').put(r);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
+  });
 }
 
-/**
- * Collect media ids that are still referenced by other records or any vehicle cover.
- */
 async function mediaStillReferenced(
   mediaIds: string[],
   excludeRecordId?: string,
@@ -57,9 +79,7 @@ async function mediaStillReferenced(
 }
 
 /**
- * Delete one record and its media that are not referenced by any other record
- * or by any vehicle's coverMediaId.
- * Single transaction: media + records stay consistent on abort.
+ * Delete one record (+ orphan media) and outbox tombstones in one transaction.
  */
 export async function deleteRecord(id: string): Promise<void> {
   const db = await getDB();
@@ -68,22 +88,30 @@ export async function deleteRecord(id: string): Promise<void> {
 
   const mediaIds = [...(rec.mediaIds ?? [])];
   const stillReferenced = await mediaStillReferenced(mediaIds, id);
-
-  const tx = db.transaction(['records', 'media'], 'readwrite');
-  for (const mid of mediaIds) {
-    if (!stillReferenced.has(mid)) {
+  const sync = await isCloudEnqueueEnabled();
+  const orphanMedia = mediaIds.filter((mid) => !stillReferenced.has(mid));
+  const mutatedAt = new Date().toISOString();
+  const outboxItems = sync
+    ? await Promise.all([
+        stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt })),
+        ...orphanMedia.map((mid) =>
+          stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
+        ),
+      ])
+    : [];
+  const stores = sync
+    ? (['records', 'media', 'sync_outbox'] as const)
+    : (['records', 'media'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    for (const mid of orphanMedia) {
       await tx.objectStore('media').delete(mid);
     }
-  }
-  await tx.objectStore('records').delete(id);
-  await tx.done;
+    await tx.objectStore('records').delete(id);
+    for (const item of outboxItems) await putOutboxInTx(tx, item);
+  });
 }
 
-/**
- * Delete all records for a vehicle (+ orphaned media) inside one transaction.
- * Protects media still used as another vehicle's cover or by other records.
- * Used by deleteVehicle; prefer deleteVehicle for full cascade including the vehicle row.
- */
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {
   const db = await getDB();
   const rows = await db.getAllFromIndex('records', 'byVehicle', vehicleId);
@@ -94,7 +122,6 @@ export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> 
 
   if (mediaToDelete.size) {
     const still = await mediaStillReferenced([...mediaToDelete], undefined, vehicleId);
-    // Also keep this vehicle's own cover while only deleting records (vehicle row stays)
     const self = await db.get('vehicles', vehicleId);
     if (self?.coverMediaId) still.add(self.coverMediaId);
     for (const mid of still) mediaToDelete.delete(mid);

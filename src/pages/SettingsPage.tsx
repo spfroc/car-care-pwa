@@ -20,6 +20,7 @@ import {
 import { useSettings } from '../hooks/useAppData';
 import type { Station } from '../types';
 import { useEffect } from 'react';
+import { DataStorageSettings } from '../components/DataStorageSettings';
 
 export function SettingsPage() {
   const { settings, saveSetting, refresh, t, language } = useSettings();
@@ -335,6 +336,8 @@ export function SettingsPage() {
         <h2>{t('settings.quickLearn')}</h2>
         <p className="muted small">{t('settings.quickLearnHint')}</p>
       </section>
+
+      <DataStorageSettings />
 
       <section className="card">
         <h2>{t('settings.data')}</h2>

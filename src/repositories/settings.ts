@@ -1,6 +1,13 @@
 import { getDB } from '../db';
 import { OCR_DEFAULTS, nowISO } from '../lib/constants';
 import type { SettingRow } from '../types';
+import {
+  isCloudEnqueueEnabled,
+  makeOutboxItem,
+  putOutboxInTx,
+  settleTx,
+  stampOutboxOwner,
+} from '../sync/outbox';
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
   const row = await (await getDB()).get('settings', key);
@@ -9,7 +16,25 @@ export async function getSetting<T = unknown>(key: string): Promise<T | undefine
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
   const row: SettingRow = { key, value, updatedAt: nowISO() };
-  await (await getDB()).put('settings', row);
+  const db = await getDB();
+  const sync = key !== 'cloudStorage' && (await isCloudEnqueueEnabled());
+  const outboxItem = sync
+    ? await stampOutboxOwner(
+        makeOutboxItem({
+          entity: 'settings',
+          entityId: key,
+          op: 'upsert',
+          payload: row,
+          mutatedAt: row.updatedAt,
+        }),
+      )
+    : null;
+  const stores = sync ? (['settings', 'sync_outbox'] as const) : (['settings'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('settings').put(row);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
+  });
 }
 
 export async function getAllSettings(): Promise<SettingRow[]> {

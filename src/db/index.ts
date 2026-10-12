@@ -3,8 +3,8 @@ import type { CareRecord, LearningRow, Media, MetaRow, SettingRow, Station, Vehi
 import { APP_SCHEMA_VERSION, DEFAULT_FUEL_GRADES, OCR_DEFAULTS, nowISO } from '../lib/constants';
 
 export const DB_NAME = 'car-care-db';
-/** IndexedDB open version. 2 = learning store for quick-entry corrections. */
-export const DB_VERSION = 2;
+/** IndexedDB open version. 2 = learning; 3 = sync_outbox + sync_meta. */
+export const DB_VERSION = 3;
 
 export interface CarCareDB extends DBSchema {
   vehicles: { key: string; value: Vehicle; indexes: { byEnergy: string; byUpdated: string } };
@@ -25,6 +25,24 @@ export interface CarCareDB extends DBSchema {
   meta: { key: string; value: MetaRow };
   /** Local-only quick-entry learning (aliases / amount dialect). Never uploaded. */
   learning: { key: string; value: LearningRow; indexes: { byKind: string } };
+  /** Pending cloud mutations when a provider is configured. */
+  sync_outbox: {
+    key: string;
+    value: {
+      opId: string;
+      entity: string;
+      entityId: string;
+      op: string;
+      payload?: unknown;
+      mutatedAt: string;
+      attempts: number;
+      nextRetryAt: string;
+      lastError?: string;
+    };
+    indexes: { byNextRetry: string; byEntityId: [string, string] };
+  };
+  /** Sync status / device id / conflict buffer (key-value). */
+  sync_meta: { key: string; value: { key: string; value: unknown } };
 }
 
 let dbPromise: Promise<IDBPDatabase<CarCareDB>> | null = null;
@@ -61,6 +79,12 @@ export async function getDB(): Promise<IDBPDatabase<CarCareDB>> {
         if (oldVersion < 2) {
           const learning = db.createObjectStore('learning', { keyPath: 'key' });
           learning.createIndex('byKind', 'kind');
+        }
+        if (oldVersion < 3) {
+          const outbox = db.createObjectStore('sync_outbox', { keyPath: 'opId' });
+          outbox.createIndex('byNextRetry', 'nextRetryAt');
+          outbox.createIndex('byEntityId', ['entity', 'entityId']);
+          db.createObjectStore('sync_meta', { keyPath: 'key' });
         }
       },
     }).catch((e) => {
