@@ -39,6 +39,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // M3-B: optional Background Sync signal (clients still run the engine)
+        importScripts: ['bg-sync-sw-addon.js'],
       },
     }),
   ],

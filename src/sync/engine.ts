@@ -28,6 +28,8 @@ import {
   removeOutboxItems,
   removeStaleConflictOps,
 } from './outbox';
+import { hasActiveForeignLease, withSyncLock } from './tabLock';
+import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
 import { SupabaseProvider } from './providers/supabase';
@@ -62,7 +64,41 @@ export type SyncActionResult = {
   pulled?: number;
   /** Progressive M2→Storage migration outcome (when Storage available). */
   mediaMigrate?: MediaMigrateSummary;
+  /** M3-B: set when another tab/task holds the sync lock. */
+  lockBusy?: boolean;
 };
+
+/**
+ * M3-B: if a previous tab crashed mid-sync, status may stick on `syncing`.
+ * Clear when no foreign lease is active (this tab is not syncing either).
+ */
+export async function recoverStaleSyncingStatus(): Promise<boolean> {
+  const meta = await getSyncMeta();
+  if (meta.status !== 'syncing') return false;
+  if (await hasActiveForeignLease()) return false;
+  await patchSyncMeta({
+    status: 'idle',
+    lastError: '检测到上次同步异常中断（可能关页/崩溃）；队列仍保留，可重新同步。',
+  });
+  return true;
+}
+
+async function runExclusiveSync(
+  _label: string,
+  fn: () => Promise<SyncActionResult>,
+): Promise<SyncActionResult> {
+  await recoverStaleSyncingStatus();
+  const locked = await withSyncLock(fn);
+  if (!locked.ok) {
+    return { ok: false, message: locked.message, lockBusy: true };
+  }
+  const result = locked.value;
+  // Progressive BG Sync: if we finished offline-ish or failed push, ask SW to retry later
+  if (!result.ok || result.message.includes('离线')) {
+    void registerBackgroundOutboxSync();
+  }
+  return result;
+}
 
 let providerOverride: CloudProvider | null = null;
 
@@ -387,7 +423,7 @@ export async function verifyConnection(): Promise<SyncActionResult> {
 }
 
 /** First upload: local → cloud. Does not pull/overwrite local. */
-export async function firstUploadToCloud(): Promise<SyncActionResult> {
+async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
   const authBlock = await ensureAuthMatchesBoundAccount(provider);
@@ -447,7 +483,7 @@ export async function firstUploadToCloud(): Promise<SyncActionResult> {
  * Restore from cloud into local (merge LWW).
  * replaceLocal: clear+apply in ONE transaction; failure leaves prior local intact.
  */
-export async function restoreFromCloud(opts?: {
+async function restoreFromCloudUnlocked(opts?: {
   replaceLocal?: boolean;
 }): Promise<SyncActionResult> {
   const provider = await resolveProvider();
@@ -531,7 +567,7 @@ async function buildLocalIndex(): Promise<Map<string, { updatedAt: string }>> {
 }
 
 /** Bidirectional: push ready outbox, then pull+merge. */
-export async function bidirectionalSync(): Promise<SyncActionResult> {
+async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
 
@@ -879,12 +915,38 @@ export async function disconnectCloud(): Promise<SyncActionResult> {
 export async function getSyncStatusSummary(): Promise<{
   meta: Awaited<ReturnType<typeof getSyncMeta>>;
   outboxCount: number;
+  outboxReadyCount: number;
   config: CloudStorageConfig;
 }> {
+  await recoverStaleSyncingStatus();
   const meta = await getSyncMeta();
   const config = await getCloudStorageConfig();
   const outbox = meta.cloudUserId
     ? await listOutboxForUser(meta.cloudUserId)
     : await listOutbox();
-  return { meta, outboxCount: outbox.length, config };
+  const ready = await listReadyOutbox();
+  return {
+    meta,
+    outboxCount: outbox.length,
+    outboxReadyCount: ready.length,
+    config,
+  };
+}
+
+
+/** M3-B: exclusive first upload (cross-tab lock). */
+export async function firstUploadToCloud(): Promise<SyncActionResult> {
+  return runExclusiveSync('firstUpload', () => firstUploadToCloudUnlocked());
+}
+
+/** M3-B: exclusive restore (cross-tab lock). */
+export async function restoreFromCloud(opts?: {
+  replaceLocal?: boolean;
+}): Promise<SyncActionResult> {
+  return runExclusiveSync('restore', () => restoreFromCloudUnlocked(opts));
+}
+
+/** M3-B: exclusive bidirectional sync (cross-tab lock). */
+export async function bidirectionalSync(): Promise<SyncActionResult> {
+  return runExclusiveSync('bidirectional', () => bidirectionalSyncUnlocked());
 }

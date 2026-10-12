@@ -105,12 +105,14 @@ sync_outbox: [{ opId, entity, entityId, op: upsert|delete, payload, mutatedAt, a
 
 上云前必须跑通：**校验 → 原子覆盖导入**（本审计 P0）以免脏包污染云端真相源。
 
-## 10. 实施里程碑（未开工）
+## 10. 实施里程碑
 
-1. Auth + 空 Postgres schema + RLS  
-2. Outbox + push/pull MVP（无媒体）  
-3. 媒体私有 Storage 上传下载（M3-A）  
-4. 冲突 UI + 删除恢复  
-5. E2E：双设备离线交叉编辑  
+见 **`docs/m3-roadmap.md`**（权威分阶）：
+
+1. ✅ M2：Auth + schema + RLS + outbox MVP  
+2. ✅ M3-A：媒体私有 Storage  
+3. 🚧 M3-B：多标签锁 / BG Sync 增强 / outbox harden  
+4. 📋 M3-C：冲突 UI + 删除恢复 + 双设备交叉编辑验收  
+5. 📋 M3-D：Notion（可行性通过后）  
 
 **本文不授权任何生产部署或现网数据写入。**
