@@ -1,9 +1,10 @@
 # M3-B：多标签同步互斥 · Background Sync · Outbox 可靠性
 
 > **用户选择**：C（本项）  
-> **状态**：设计 + 实现（feature 分支，**不合并 / 不部署**）  
+> **状态**：Round-4 已批准并合并；**仅 staging 部署**（见 `docs/m3b-staging-deploy-report.md`）  
 > **硬约束**：IndexedDB local-first；不改正式 Supabase；不动 Notion；不破坏 M2/M3-A 数据与 schema。  
-> **Round-1 整改**：见 `docs/m3b-remediation-round1.md`（原子 IDB lease、生命周期 BG Sync、Web Locks 兼容的 stale 康复）。
+> **Round-1 整改**：见 `docs/m3b-remediation-round1.md`  
+> **最终整改**：见 `docs/m3b-remediation-final.md`（原子 IDB lease、生命周期 BG Sync、Web Locks 兼容的 stale 康复）。
 
 ## 1. 目标
 
