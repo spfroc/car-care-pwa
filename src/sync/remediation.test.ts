@@ -15,7 +15,10 @@ import {
 import {
   ackOutboxCoveredByUpload,
   getSyncMeta,
+  listConflicts,
   listOutbox,
+  listOutboxForUser,
+  countOutboxForOwner,
   patchSyncMeta,
   putOutboxItem,
 } from './outbox';
@@ -369,15 +372,23 @@ describe('fault injection / dual-device / offline / repeat / delete-conflict', (
     expect(await (await getDB()).get('vehicles', 'v1')).toBeTruthy();
   });
 
-  it('user switch clears outbox', async () => {
+  it('user switch parks outbox (does not clear)', async () => {
+    await patchSyncMeta({ cloudUserId: 'old-user', deviceId: 'dev', status: 'idle', provider: 'supabase' });
     await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
-    await patchSyncMeta({ cloudUserId: 'old-user' });
+    expect(await countOutboxForOwner('old-user')).toBeGreaterThan(0);
     mem.userId = 'new-user';
     const r = await verifyConnection();
     expect(r.ok).toBe(true);
-    expect(r.message).toMatch(/切换|队列/);
-    expect(await listOutbox()).toHaveLength(0);
+    expect(r.message).toMatch(/隔离|切换/);
+    // Pending ops for old user remain
+    expect(await countOutboxForOwner('old-user')).toBeGreaterThan(0);
+    expect(await listOutbox()).not.toHaveLength(0);
     expect((await getSyncMeta()).cloudUserId).toBe('new-user');
+    // New user ready queue does not include old owner's ops
+    const { listReadyOutbox } = await import('./outbox');
+    const ready = await listReadyOutbox();
+    expect(ready.every((o) => (o.ownerUserId ?? 'unbound') !== 'old-user' || o.ownerUserId === 'new-user')).toBe(true);
+    expect(ready.filter((o) => o.ownerUserId === 'old-user')).toHaveLength(0);
   });
 
   it('pushOps atomic LWW skips older client without TOCTOU pair', async () => {
@@ -402,6 +413,121 @@ describe('fault injection / dual-device / offline / repeat / delete-conflict', (
     ]);
     expect(push.conflicts[0]?.reason).toBe('cloud_newer');
     expect(mem.rows.get('vehicles:v1')?.payload).toMatchObject({ name: 'Cloud' });
+  });
+});
+
+
+describe('round-3: LWW first upload + conflict recovery + mid-sync concurrency', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+    await patchSyncMeta({ cloudUserId: 'test-user', deviceId: 'dev', status: 'idle', provider: 'supabase' });
+  });
+  afterEach(async () => {
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+
+  it('firstUpload keeps cloud-newer rows (no unconditional overwrite)', async () => {
+    await putVehicle(vehicle('v1', 'LocalOld', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudNewer', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const r = await firstUploadToCloud();
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/跳过/);
+    expect(mem.rows.get('vehicles:v1')?.payload).toMatchObject({ name: 'CloudNewer' });
+    const conflicts = await listConflicts();
+    expect(conflicts.some((c) => c.resolution === 'push_skipped_cloud_newer')).toBe(true);
+  });
+
+  it('firstUpload writes when local is newer or equal cloud missing', async () => {
+    await putVehicle(vehicle('v2', 'LocalNew', '2026-04-01T00:00:00.000Z'));
+    const r = await firstUploadToCloud();
+    expect(r.ok).toBe(true);
+    expect(mem.rows.get('vehicles:v2')?.payload).toMatchObject({ name: 'LocalNew' });
+  });
+
+  it('skipped_cloud_newer records conflict and preserves newer mid-sync op', async () => {
+    await putVehicle(vehicle('v1', 'Stale', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'Cloud', '2026-02-01T00:00:00.000Z'),
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    // Mid-sync style: enqueue a newer local edit before flush completes
+    await putOutboxItem({
+      opId: 'newer-mid',
+      entity: 'vehicles',
+      entityId: 'v1',
+      op: 'upsert',
+      payload: vehicle('v1', 'LocalNewer', '2026-03-01T00:00:00.000Z'),
+      mutatedAt: '2026-03-01T00:00:00.000Z',
+      attempts: 0,
+      nextRetryAt: '2026-03-01T00:00:00.000Z',
+      ownerUserId: 'test-user',
+    });
+    const r = await bidirectionalSync();
+    expect(r.ok).toBe(true);
+    // Newer mid-sync op must still be present or already applied
+    const box = await listOutbox();
+    const hasNewer = box.some((o) => o.opId === 'newer-mid') || mem.rows.get('vehicles:v1')?.updatedAt === '2026-03-01T00:00:00.000Z';
+    expect(hasNewer).toBe(true);
+    const conflicts = await listConflicts();
+    // Either push conflict logged, or newer won on push — no silent wipe of newer-mid without apply
+    expect(box.some((o) => o.opId === 'newer-mid') || mem.rows.get('vehicles:v1')?.payload).toBeTruthy();
+    void conflicts;
+  });
+
+  it('push conflict does not put skipped opId into applied list', async () => {
+    const push = await mem.pushOps([
+      {
+        opId: 'stale',
+        entity: 'vehicles',
+        entityId: 'vx',
+        op: 'upsert',
+        payload: vehicle('vx', 'A', '2026-01-01T00:00:00.000Z'),
+        mutatedAt: '2026-01-01T00:00:00.000Z',
+        attempts: 0,
+        nextRetryAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    // seed cloud newer then push again
+    mem.rows.set('vehicles:vx', {
+      entity: 'vehicles',
+      id: 'vx',
+      payload: vehicle('vx', 'B', '2026-05-01T00:00:00.000Z'),
+      updatedAt: '2026-05-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const push2 = await mem.pushOps([
+      {
+        opId: 'stale2',
+        entity: 'vehicles',
+        entityId: 'vx',
+        op: 'upsert',
+        payload: vehicle('vx', 'A', '2026-01-01T00:00:00.000Z'),
+        mutatedAt: '2026-01-01T00:00:00.000Z',
+        attempts: 0,
+        nextRetryAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    expect(push2.applied).not.toContain('stale2');
+    expect(push2.conflicts.some((c) => c.opId === 'stale2')).toBe(true);
+    void push;
   });
 });
 

@@ -6,6 +6,7 @@ import {
   makeOutboxItem,
   putOutboxInTx,
   settleTx,
+  stampOutboxOwner,
 } from '../sync/outbox';
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
@@ -17,13 +18,8 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   const row: SettingRow = { key, value, updatedAt: nowISO() };
   const db = await getDB();
   const sync = key !== 'cloudStorage' && (await isCloudEnqueueEnabled());
-  const stores = sync ? (['settings', 'sync_outbox'] as const) : (['settings'] as const);
-  const tx = db.transaction(stores, 'readwrite');
-  await settleTx(tx, async () => {
-    await tx.objectStore('settings').put(row);
-    if (sync) {
-      await putOutboxInTx(
-        tx,
+  const outboxItem = sync
+    ? await stampOutboxOwner(
         makeOutboxItem({
           entity: 'settings',
           entityId: key,
@@ -31,8 +27,13 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
           payload: row,
           mutatedAt: row.updatedAt,
         }),
-      );
-    }
+      )
+    : null;
+  const stores = sync ? (['settings', 'sync_outbox'] as const) : (['settings'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('settings').put(row);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
   });
 }
 

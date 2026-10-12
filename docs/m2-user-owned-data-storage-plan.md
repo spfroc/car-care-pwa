@@ -3,7 +3,7 @@
 > **分支**：`feature/m2-user-owned-data-storage`  
 > **约束**：不部署 Contabo / 生产；local-first；前端永不嵌入 `service_role` / Notion 长效密钥。  
 > **基线**：`main` @ 见 PR；既有 `docs/own-cloud-sync-architecture.md` 为协议参考。
-> **审查修复**：见 `docs/m2-remediation-report.md`（原子事务 / LWW RPC / 分页 / 载荷校验）。
+> **审查修复**：见 `docs/m2-remediation-report.md`（原子事务 / LWW RPC / 分页 / 载荷校验；round-3：账号队列隔离 / 首次上传 LWW / 冲突与 mid-sync）。
 
 ## 0. 现状审计（本里程碑前）
 

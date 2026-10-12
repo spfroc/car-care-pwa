@@ -5,6 +5,7 @@ import {
   makeOutboxItem,
   putOutboxInTx,
   settleTx,
+  stampOutboxOwner,
 } from '../sync/outbox';
 
 export async function listStations(type?: StationType): Promise<Station[]> {
@@ -18,13 +19,8 @@ export async function listStations(type?: StationType): Promise<Station[]> {
 export async function putStation(s: Station): Promise<void> {
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled();
-  const stores = sync ? (['stations', 'sync_outbox'] as const) : (['stations'] as const);
-  const tx = db.transaction(stores, 'readwrite');
-  await settleTx(tx, async () => {
-    await tx.objectStore('stations').put(s);
-    if (sync) {
-      await putOutboxInTx(
-        tx,
+  const outboxItem = sync
+    ? await stampOutboxOwner(
         makeOutboxItem({
           entity: 'stations',
           entityId: s.id,
@@ -32,8 +28,13 @@ export async function putStation(s: Station): Promise<void> {
           payload: s,
           mutatedAt: s.updatedAt,
         }),
-      );
-    }
+      )
+    : null;
+  const stores = sync ? (['stations', 'sync_outbox'] as const) : (['stations'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('stations').put(s);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
   });
 }
 
@@ -41,37 +42,35 @@ export async function deleteStation(id: string): Promise<void> {
   const db = await getDB();
   const records = await db.getAll('records');
   const sync = await isCloudEnqueueEnabled();
+  const mutatedAt = new Date().toISOString();
+  const touched = records.filter((r) => 'stationId' in r && r.stationId === id);
+  const nextRecords = touched.map((r) => ({ ...r, stationId: undefined, updatedAt: mutatedAt }));
+  const outboxItems = sync
+    ? await Promise.all([
+        ...nextRecords.map((next) =>
+          stampOutboxOwner(
+            makeOutboxItem({
+              entity: 'records',
+              entityId: next.id,
+              op: 'upsert',
+              payload: next,
+              mutatedAt,
+            }),
+          ),
+        ),
+        stampOutboxOwner(makeOutboxItem({ entity: 'stations', entityId: id, op: 'delete', mutatedAt })),
+      ])
+    : [];
   const stores = sync
     ? (['stations', 'records', 'sync_outbox'] as const)
     : (['stations', 'records'] as const);
   const tx = db.transaction(stores, 'readwrite');
   await settleTx(tx, async () => {
-    const mutatedAt = new Date().toISOString();
-    for (const r of records) {
-      if ('stationId' in r && r.stationId === id) {
-        const next = { ...r, stationId: undefined, updatedAt: mutatedAt };
-        await tx.objectStore('records').put(next as typeof r);
-        if (sync) {
-          await putOutboxInTx(
-            tx,
-            makeOutboxItem({
-              entity: 'records',
-              entityId: r.id,
-              op: 'upsert',
-              payload: next,
-              mutatedAt,
-            }),
-          );
-        }
-      }
+    for (const next of nextRecords) {
+      await tx.objectStore('records').put(next as (typeof records)[number]);
     }
     await tx.objectStore('stations').delete(id);
-    if (sync) {
-      await putOutboxInTx(
-        tx,
-        makeOutboxItem({ entity: 'stations', entityId: id, op: 'delete', mutatedAt }),
-      );
-    }
+    for (const item of outboxItems) await putOutboxInTx(tx, item);
   });
 }
 

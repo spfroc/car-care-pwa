@@ -5,6 +5,7 @@ import {
   makeOutboxItem,
   putOutboxInTx,
   settleTx,
+  stampOutboxOwner,
 } from '../sync/outbox';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
@@ -33,13 +34,8 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 export async function putRecord(r: CareRecord): Promise<void> {
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled();
-  const stores = sync ? (['records', 'sync_outbox'] as const) : (['records'] as const);
-  const tx = db.transaction(stores, 'readwrite');
-  await settleTx(tx, async () => {
-    await tx.objectStore('records').put(r);
-    if (sync) {
-      await putOutboxInTx(
-        tx,
+  const outboxItem = sync
+    ? await stampOutboxOwner(
         makeOutboxItem({
           entity: 'records',
           entityId: r.id,
@@ -47,8 +43,13 @@ export async function putRecord(r: CareRecord): Promise<void> {
           payload: r,
           mutatedAt: r.updatedAt,
         }),
-      );
-    }
+      )
+    : null;
+  const stores = sync ? (['records', 'sync_outbox'] as const) : (['records'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('records').put(r);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
   });
 }
 
@@ -88,32 +89,26 @@ export async function deleteRecord(id: string): Promise<void> {
   const mediaIds = [...(rec.mediaIds ?? [])];
   const stillReferenced = await mediaStillReferenced(mediaIds, id);
   const sync = await isCloudEnqueueEnabled();
+  const orphanMedia = mediaIds.filter((mid) => !stillReferenced.has(mid));
+  const mutatedAt = new Date().toISOString();
+  const outboxItems = sync
+    ? await Promise.all([
+        stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt })),
+        ...orphanMedia.map((mid) =>
+          stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
+        ),
+      ])
+    : [];
   const stores = sync
     ? (['records', 'media', 'sync_outbox'] as const)
     : (['records', 'media'] as const);
   const tx = db.transaction(stores, 'readwrite');
   await settleTx(tx, async () => {
-    const orphanMedia: string[] = [];
-    for (const mid of mediaIds) {
-      if (!stillReferenced.has(mid)) {
-        await tx.objectStore('media').delete(mid);
-        orphanMedia.push(mid);
-      }
+    for (const mid of orphanMedia) {
+      await tx.objectStore('media').delete(mid);
     }
     await tx.objectStore('records').delete(id);
-    if (sync) {
-      const mutatedAt = new Date().toISOString();
-      await putOutboxInTx(
-        tx,
-        makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt }),
-      );
-      for (const mid of orphanMedia) {
-        await putOutboxInTx(
-          tx,
-          makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt }),
-        );
-      }
-    }
+    for (const item of outboxItems) await putOutboxInTx(tx, item);
   });
 }
 

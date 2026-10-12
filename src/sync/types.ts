@@ -19,6 +19,12 @@ export interface SyncOutboxItem {
   attempts: number;
   nextRetryAt: ISODateTime;
   lastError?: string;
+  /**
+   * Cloud auth user that owns this pending op.
+   * Isolates queues across account switches; never push another user's ops.
+   * 'unbound' = enqueued before first successful verify.
+   */
+  ownerUserId?: string;
 }
 
 export interface SyncConflict {
@@ -27,7 +33,7 @@ export interface SyncConflict {
   entityId: string;
   localUpdatedAt?: ISODateTime;
   cloudUpdatedAt?: ISODateTime;
-  resolution: 'kept_local' | 'kept_cloud' | 'kept_edit_over_delete';
+  resolution: 'kept_local' | 'kept_cloud' | 'kept_edit_over_delete' | 'push_skipped_cloud_newer';
   notedAt: ISODateTime;
 }
 
@@ -95,8 +101,18 @@ export interface VerifyResult {
 }
 
 export interface PushResult {
+  /** Successfully written to cloud (opIds). */
   applied: string[];
-  conflicts: Array<{ opId: string; reason: string }>;
+  /** Skipped due to LWW / errors that are not hard failures. Not included in applied. */
+  conflicts: Array<{
+    opId: string;
+    reason: string;
+    entity?: SyncEntity | string;
+    entityId?: string;
+    cloudUpdatedAt?: string;
+    /** Local mutatedAt that was skipped — used to drop matching outbox without touching newer mid-sync ops */
+    attemptedAt?: string;
+  }>;
   error?: string;
 }
 

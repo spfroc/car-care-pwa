@@ -7,6 +7,7 @@ import {
   makeOutboxItem,
   putOutboxInTx,
   settleTx,
+  stampOutboxOwner,
 } from '../sync/outbox';
 
 export async function putMediaFromFile(file: File): Promise<Media> {
@@ -23,21 +24,21 @@ export async function putMediaFromFile(file: File): Promise<Media> {
     };
     const db = await getDB();
     const sync = await isCloudEnqueueEnabled();
-    const stores = sync ? (['media', 'sync_outbox'] as const) : (['media'] as const);
-    const tx = db.transaction(stores, 'readwrite');
-    await settleTx(tx, async () => {
-      await tx.objectStore('media').put(media);
-      if (sync) {
-        await putOutboxInTx(
-          tx,
+    const outboxItem = sync
+      ? await stampOutboxOwner(
           makeOutboxItem({
             entity: 'media',
             entityId: media.id,
             op: 'upsert',
             mutatedAt: media.createdAt,
           }),
-        );
-      }
+        )
+      : null;
+    const stores = sync ? (['media', 'sync_outbox'] as const) : (['media'] as const);
+    const tx = db.transaction(stores, 'readwrite');
+    await settleTx(tx, async () => {
+      await tx.objectStore('media').put(media);
+      if (outboxItem) await putOutboxInTx(tx, outboxItem);
     });
     return media;
   } catch (e) {
@@ -53,21 +54,21 @@ export async function getMedia(id: string): Promise<Media | undefined> {
 export async function deleteMedia(id: string): Promise<void> {
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled();
-  const stores = sync ? (['media', 'sync_outbox'] as const) : (['media'] as const);
-  const tx = db.transaction(stores, 'readwrite');
-  await settleTx(tx, async () => {
-    await tx.objectStore('media').delete(id);
-    if (sync) {
-      await putOutboxInTx(
-        tx,
+  const outboxItem = sync
+    ? await stampOutboxOwner(
         makeOutboxItem({
           entity: 'media',
           entityId: id,
           op: 'delete',
           mutatedAt: nowISO(),
         }),
-      );
-    }
+      )
+    : null;
+  const stores = sync ? (['media', 'sync_outbox'] as const) : (['media'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('media').delete(id);
+    if (outboxItem) await putOutboxInTx(tx, outboxItem);
   });
 }
 

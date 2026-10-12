@@ -4,6 +4,7 @@ import {
   isCloudEnqueueEnabled,
   makeOutboxItem,
   putOutboxInTx,
+  stampOutboxOwner,
   settleTx,
 } from '../sync/outbox';
 import { runSyncTxHook } from '../sync/txHooks';
@@ -21,14 +22,8 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 export async function putVehicle(v: Vehicle): Promise<void> {
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled();
-  const stores = sync ? (['vehicles', 'sync_outbox'] as const) : (['vehicles'] as const);
-  const tx = db.transaction(stores, 'readwrite');
-  await settleTx(tx, async () => {
-    await tx.objectStore('vehicles').put(v);
-    if (sync) {
-      runSyncTxHook('after_business_before_outbox', { store: 'vehicles' });
-      await putOutboxInTx(
-        tx,
+  const outboxItem = sync
+    ? await stampOutboxOwner(
         makeOutboxItem({
           entity: 'vehicles',
           entityId: v.id,
@@ -36,7 +31,15 @@ export async function putVehicle(v: Vehicle): Promise<void> {
           payload: v,
           mutatedAt: v.updatedAt,
         }),
-      );
+      )
+    : null;
+  const stores = sync ? (['vehicles', 'sync_outbox'] as const) : (['vehicles'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('vehicles').put(v);
+    if (outboxItem) {
+      runSyncTxHook('after_business_before_outbox', { store: 'vehicles' });
+      await putOutboxInTx(tx, outboxItem);
     }
   });
 }
@@ -72,6 +75,18 @@ export async function deleteVehicle(id: string): Promise<void> {
   }
 
   const sync = await isCloudEnqueueEnabled();
+  const mutatedAt = new Date().toISOString();
+  const outboxItems = sync
+    ? await Promise.all([
+        stampOutboxOwner(makeOutboxItem({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt })),
+        ...rows.map((r) =>
+          stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt })),
+        ),
+        ...[...mediaToDelete].map((mid) =>
+          stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
+        ),
+      ])
+    : [];
   const stores = sync
     ? (['vehicles', 'records', 'media', 'sync_outbox'] as const)
     : (['vehicles', 'records', 'media'] as const);
@@ -84,25 +99,8 @@ export async function deleteVehicle(id: string): Promise<void> {
       await tx.objectStore('media').delete(mid);
     }
     await tx.objectStore('vehicles').delete(id);
-
-    if (sync) {
-      const mutatedAt = new Date().toISOString();
-      await putOutboxInTx(
-        tx,
-        makeOutboxItem({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt }),
-      );
-      for (const r of rows) {
-        await putOutboxInTx(
-          tx,
-          makeOutboxItem({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt }),
-        );
-      }
-      for (const mid of mediaToDelete) {
-        await putOutboxInTx(
-          tx,
-          makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt }),
-        );
-      }
+    for (const item of outboxItems) {
+      await putOutboxInTx(tx, item);
     }
   });
 }

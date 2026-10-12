@@ -33,7 +33,6 @@ export class SupabaseProvider implements CloudProvider {
     if (/service_role/i.test(opts.anonKey)) {
       throw new Error('Refusing to initialize Supabase client with a service_role key');
     }
-    // anon keys are JWTs; reject obvious non-JWT secrets
     if (opts.anonKey && !opts.anonKey.includes('.') && opts.anonKey.length > 40) {
       throw new Error('anon key 格式异常：请粘贴 Project Settings → API → anon public key');
     }
@@ -74,7 +73,6 @@ export class SupabaseProvider implements CloudProvider {
   }
 
   async verify(): Promise<VerifyResult> {
-    // Prefer getUser() — validates JWT with Auth server (not just local session)
     const { data: userData, error: userError } = await this.client.auth.getUser();
     if (userError) return { ok: false, error: userError.message };
     const user = userData.user;
@@ -125,10 +123,10 @@ export class SupabaseProvider implements CloudProvider {
 
   /**
    * Push via DB-side atomic LWW RPC (no client read-then-write TOCTOU).
-   * Falls back to conditional upsert only if RPC missing (legacy projects).
+   * skipped_cloud_newer goes to conflicts only — NOT applied (so outbox/concurrent ops stay safe).
    */
   async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
-    const user = await this.requireUser();
+    await this.requireUser();
     const applied: string[] = [];
     const conflicts: PushResult['conflicts'] = [];
 
@@ -144,8 +142,10 @@ export class SupabaseProvider implements CloudProvider {
           p_device_id: this.deviceId,
         });
         if (error) {
-          // RPC not installed — refuse silent TOCTOU path; require schema upgrade
-          if (/function .*car_care_upsert_lww.* does not exist/i.test(error.message) || error.code === 'PGRST202') {
+          if (
+            /function .*car_care_upsert_lww.* does not exist/i.test(error.message) ||
+            error.code === 'PGRST202'
+          ) {
             return {
               applied,
               conflicts,
@@ -156,12 +156,16 @@ export class SupabaseProvider implements CloudProvider {
         }
         const result = typeof data === 'string' ? data : String(data);
         if (result === 'skipped_cloud_newer') {
-          conflicts.push({ opId: op.opId, reason: 'cloud_newer' });
-          applied.push(op.opId); // drop from outbox; pull reconciles
+          conflicts.push({
+            opId: op.opId,
+            reason: 'cloud_newer',
+            entity: op.entity,
+            entityId: op.entityId,
+            attemptedAt: op.mutatedAt,
+          });
         } else {
           applied.push(op.opId);
         }
-        void user;
       } catch (e) {
         return {
           applied,
@@ -173,29 +177,35 @@ export class SupabaseProvider implements CloudProvider {
     return { applied, conflicts };
   }
 
-  /** Bootstrap/first-upload: chunked upsert (caller owns semantics). Incremental sync uses pushOps RPC. */
+  /**
+   * First upload / snapshot: DB-side LWW per row (never unconditional overwrite of cloud-newer).
+   * applied keys are `entity:id` for ackOutboxCoveredByUpload.
+   */
   async pushSnapshot(rows: CloudRow[]): Promise<PushResult> {
-    const user = await this.requireUser();
-    const batch = rows.map((r) => ({
-      user_id: user.id,
+    const ops: SyncOutboxItem[] = rows.map((r) => ({
+      opId: `${r.entity}:${r.id}`,
       entity: r.entity,
-      id: r.id,
+      entityId: r.id,
+      op: r.deletedAt ? 'delete' : 'upsert',
       payload: r.payload,
-      updated_at: r.updatedAt,
-      deleted_at: r.deletedAt ?? null,
-      device_id: r.deviceId ?? this.deviceId,
+      mutatedAt: r.updatedAt,
+      attempts: 0,
+      nextRetryAt: r.updatedAt,
     }));
-    const chunkSize = 100;
+    // Chunk to avoid huge single RPC storms
+    const chunkSize = 50;
     const applied: string[] = [];
-    for (let i = 0; i < batch.length; i += chunkSize) {
-      const chunk = batch.slice(i, i + chunkSize);
-      const { error } = await this.client
-        .from('car_care_rows')
-        .upsert(chunk, { onConflict: 'user_id,entity,id' });
-      if (error) return { applied, conflicts: [], error: error.message };
-      for (const r of chunk) applied.push(`${r.entity}:${r.id}`);
+    const conflicts: PushResult['conflicts'] = [];
+    for (let i = 0; i < ops.length; i += chunkSize) {
+      const chunk = ops.slice(i, i + chunkSize);
+      const one = await this.pushOps(chunk);
+      applied.push(...one.applied);
+      conflicts.push(...one.conflicts);
+      if (one.error) {
+        return { applied, conflicts, error: one.error };
+      }
     }
-    return { applied, conflicts: [] };
+    return { applied, conflicts };
   }
 
   async signOut(): Promise<void> {

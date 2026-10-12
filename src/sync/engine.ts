@@ -1,5 +1,5 @@
 import { getDB } from '../db';
-import { nowISO } from '../lib/constants';
+import { nowISO, uid } from '../lib/constants';
 import type { CareRecord, Media, SettingRow, Station, Vehicle } from '../types';
 import { clearCloudStorageConfig, getCloudStorageConfig } from './config';
 import { mediaToCloudPayload, cloudPayloadToMedia } from './mediaCodec';
@@ -8,13 +8,16 @@ import {
   ackOutboxCoveredByUpload,
   appendConflicts,
   clearOutbox,
+  countOutboxForOwner,
   ensureDeviceId,
   getSyncMeta,
   listOutbox,
   listReadyOutbox,
   markOutboxFailure,
   patchSyncMeta,
+  rebindUnboundOutbox,
   removeOutboxItems,
+  removeStaleConflictOps,
 } from './outbox';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
@@ -27,6 +30,7 @@ import type {
   CloudStorageConfig,
   LocalSnapshot,
   MergeResult,
+  SyncEntity,
   VerifyResult,
 } from './types';
 
@@ -201,18 +205,24 @@ async function applyCloudRows(
   await tx.done;
 }
 
-/** If cloud auth user changes, drop outbox/cursor so we never push another user's ops. */
+/**
+ * Account switch: NEVER wipe unsynced outbox.
+ * Queues are isolated by ownerUserId; only reset cursor for the new account.
+ */
 async function guardUserSwitch(userId: string | undefined): Promise<string | undefined> {
   if (!userId) return undefined;
   const meta = await getSyncMeta();
   if (meta.cloudUserId && meta.cloudUserId !== userId) {
-    await clearOutbox();
+    const parked = await countOutboxForOwner(meta.cloudUserId);
     await patchSyncMeta({
       cloudUserId: userId,
       serverCursor: undefined,
-      lastError: `检测到云端账号切换（${meta.cloudUserId} → ${userId}），已清空同步队列。`,
+      // Do not clear lastError here — verifyConnection may overwrite
     });
-    return `云端账号已切换，队列已重置。`;
+    if (parked > 0) {
+      return `云端账号已切换（${meta.cloudUserId.slice(0, 8)}… → ${userId.slice(0, 8)}…）。原账号仍有 ${parked} 条待同步，已按账号隔离保留，不会推到新账号；切回原账号后可继续同步。`;
+    }
+    return `云端账号已切换。`;
   }
   return undefined;
 }
@@ -225,7 +235,13 @@ export async function verifyConnection(): Promise<SyncActionResult> {
   try {
     const verify = await provider.verify();
     if (verify.ok) {
+      const metaBefore = await getSyncMeta();
+      const prevUser = metaBefore.cloudUserId;
       const switchNote = await guardUserSwitch(verify.userId);
+      // Only bind unbound ops on first connect / same user — never on account switch
+      if (verify.userId && (!prevUser || prevUser === verify.userId)) {
+        await rebindUnboundOutbox(verify.userId);
+      }
       await patchSyncMeta({
         status: 'idle',
         cloudUserId: verify.userId,
@@ -256,24 +272,41 @@ export async function firstUploadToCloud(): Promise<SyncActionResult> {
     const snap = await readLocalSnapshot();
     const rows = await localSnapshotToCloudRows(snap);
     const result = await provider.pushSnapshot(rows);
-    if (result.error) {
+    if (result.error && !result.applied.length && !result.conflicts.length) {
       await patchSyncMeta({ status: 'error', lastError: result.error });
-      return { ok: false, message: `首次上传失败：${result.error}`, pushed: result.applied.length };
+      return { ok: false, message: `首次上传失败：${result.error}`, pushed: 0 };
     }
-    // Only ack ops covered by uploaded snapshot — keep ops enqueued during upload
+    // Ack only rows actually written (LWW may skip cloud-newer — do not ack those)
+    const appliedKeys = new Set(result.applied);
+    const uploadedOk = rows.filter((r) => appliedKeys.has(`${r.entity}:${r.id}`));
     const acked = await ackOutboxCoveredByUpload(
-      rows.map((r) => ({ entity: r.entity, id: r.id, updatedAt: r.updatedAt })),
+      uploadedOk.map((r) => ({ entity: r.entity, id: r.id, updatedAt: r.updatedAt })),
     );
+    if (result.conflicts.length) {
+      await appendConflicts(
+        result.conflicts.map((c) => ({
+          id: uid(),
+          entity: (c.entity as SyncEntity) || 'vehicles',
+          entityId: c.entityId || c.opId,
+          cloudUpdatedAt: c.cloudUpdatedAt,
+          resolution: 'push_skipped_cloud_newer' as const,
+          notedAt: nowISO(),
+        })),
+      );
+      // Drop only the stale conflicted opIds; keep newer mid-upload ops
+      await removeStaleConflictOps(result.conflicts);
+    }
     const ts = nowISO();
+    const skipped = result.conflicts.length;
     await patchSyncMeta({
-      status: 'idle',
+      status: result.error ? 'error' : 'idle',
       lastPushAt: ts,
-      lastSuccessAt: ts,
-      lastError: undefined,
+      lastSuccessAt: result.error ? undefined : ts,
+      lastError: result.error,
     });
     return {
-      ok: true,
-      message: `首次上传完成：${result.applied.length} 行（确认队列 ${acked} 条）。本地数据未改动。`,
+      ok: !result.error,
+      message: `首次上传：写入 ${result.applied.length} 行，跳过云端较新 ${skipped} 行（确认队列 ${acked} 条）。本地数据未改动。${result.error ? ` 部分失败：${result.error}` : ''}`,
       pushed: result.applied.length,
     };
   } catch (e) {
@@ -371,15 +404,31 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     let pushed = 0;
     if (enriched.length) {
       const push = await provider.pushOps(enriched);
-      if (push.error && !push.applied.length) {
+      if (push.error && !push.applied.length && !push.conflicts.length) {
         for (const op of enriched) await markOutboxFailure(op.opId, push.error);
         await patchSyncMeta({ status: 'error', lastError: push.error });
         return { ok: false, message: `推送失败：${push.error}` };
       }
+      // Successfully written — remove those opIds (newer mid-sync ops have different opIds)
       await removeOutboxItems(push.applied);
       pushed = push.applied.length;
+      if (push.conflicts.length) {
+        await appendConflicts(
+          push.conflicts.map((c) => ({
+            id: uid(),
+            entity: (c.entity as SyncEntity) || 'vehicles',
+            entityId: c.entityId || c.opId,
+            cloudUpdatedAt: c.cloudUpdatedAt,
+            resolution: 'push_skipped_cloud_newer' as const,
+            notedAt: nowISO(),
+          })),
+        );
+        // Remove stale conflicted ops only; preserve newer ops for same entity
+        await removeStaleConflictOps(push.conflicts);
+      }
       if (push.error) {
-        const remaining = enriched.filter((o) => !push.applied.includes(o.opId));
+        const done = new Set([...push.applied, ...push.conflicts.map((c) => c.opId)]);
+        const remaining = enriched.filter((o) => !done.has(o.opId));
         for (const op of remaining) await markOutboxFailure(op.opId, push.error);
       }
     }

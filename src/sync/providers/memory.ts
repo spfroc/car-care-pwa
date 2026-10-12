@@ -9,7 +9,6 @@ export class MemoryCloudProvider implements CloudProvider {
   userId = 'test-user';
   failNextPush = false;
   offline = false;
-  /** Simulate PostgREST page size for pullAll integrity tests */
   pageSize = 1000;
   pushCallCount = 0;
 
@@ -27,12 +26,10 @@ export class MemoryCloudProvider implements CloudProvider {
     const all = [...this.rows.values()].sort((a, b) =>
       a.entity === b.entity ? a.id.localeCompare(b.id) : a.entity.localeCompare(b.entity),
     );
-    // Integrity: always return full set (pagination is SupabaseProvider concern);
-    // tests that need page integrity use SupabaseProvider with a mock client.
     return { rows: all, pulledAt: nowISO() };
   }
 
-  /** Atomic LWW — single map write, no TOCTOU window. */
+  /** Atomic LWW — skipped_cloud_newer is conflict-only (not applied). */
   async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
     this.pushCallCount += 1;
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
@@ -46,8 +43,14 @@ export class MemoryCloudProvider implements CloudProvider {
       const k = this.key(op.entity, op.entityId);
       const existing = this.rows.get(k);
       if (existing && existing.updatedAt > op.mutatedAt) {
-        conflicts.push({ opId: op.opId, reason: 'cloud_newer' });
-        applied.push(op.opId);
+        conflicts.push({
+          opId: op.opId,
+          reason: 'cloud_newer',
+          entity: op.entity,
+          entityId: op.entityId,
+          cloudUpdatedAt: existing.updatedAt,
+          attemptedAt: op.mutatedAt,
+        });
         continue;
       }
       this.rows.set(k, {
@@ -62,11 +65,19 @@ export class MemoryCloudProvider implements CloudProvider {
     return { applied, conflicts };
   }
 
+  /** First upload also uses LWW — never unconditional overwrite of cloud-newer. */
   async pushSnapshot(rows: CloudRow[]): Promise<PushResult> {
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
-    for (const row of rows) {
-      this.rows.set(this.key(row.entity, row.id), row);
-    }
-    return { applied: rows.map((r) => `${r.entity}:${r.id}`), conflicts: [] };
+    const ops: SyncOutboxItem[] = rows.map((r) => ({
+      opId: `${r.entity}:${r.id}`,
+      entity: r.entity,
+      entityId: r.id,
+      op: r.deletedAt ? 'delete' : 'upsert',
+      payload: r.payload,
+      mutatedAt: r.updatedAt,
+      attempts: 0,
+      nextRetryAt: r.updatedAt,
+    }));
+    return this.pushOps(ops);
   }
 }

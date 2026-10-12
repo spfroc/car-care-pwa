@@ -15,6 +15,8 @@ import {
 const META_KEY = 'syncMeta';
 const CONFLICTS_KEY = 'syncConflicts';
 
+export const OUTBOX_UNBOUND = 'unbound';
+
 export function nextRetryDelayMs(attempts: number): number {
   const capped = Math.min(2 ** attempts, 64);
   const base = capped * 30_000;
@@ -34,6 +36,7 @@ export function makeOutboxItem(input: {
   op: SyncOpKind;
   payload?: unknown;
   mutatedAt?: string;
+  ownerUserId?: string;
 }): SyncOutboxItem {
   const mutatedAt = input.mutatedAt ?? nowISO();
   return {
@@ -45,12 +48,24 @@ export function makeOutboxItem(input: {
     mutatedAt,
     attempts: 0,
     nextRetryAt: mutatedAt,
+    ownerUserId: input.ownerUserId,
+  };
+}
+
+/** Stamp owner from current sync meta (call before putting into a tx). */
+export async function stampOutboxOwner(item: SyncOutboxItem): Promise<SyncOutboxItem> {
+  if (item.ownerUserId) return item;
+  const meta = await getSyncMeta();
+  return {
+    ...item,
+    ownerUserId: meta.cloudUserId ?? OUTBOX_UNBOUND,
   };
 }
 
 /** Put outbox row inside an existing readwrite transaction (same atomic unit as business write). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function putOutboxInTx(tx: any, item: SyncOutboxItem): Promise<void> {
+  // Caller must stamp BEFORE opening the transaction (no other IDB awaits mid-tx).
   await tx.objectStore('sync_outbox').put(item);
 }
 
@@ -127,16 +142,48 @@ export async function listOutbox(): Promise<SyncOutboxItem[]> {
   return (await db.getAll('sync_outbox')) as SyncOutboxItem[];
 }
 
-export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
+export function outboxBelongsToUser(item: SyncOutboxItem, cloudUserId: string | undefined): boolean {
+  const owner = item.ownerUserId ?? OUTBOX_UNBOUND;
+  if (!cloudUserId) return owner === OUTBOX_UNBOUND;
+  return owner === cloudUserId || owner === OUTBOX_UNBOUND;
+}
+
+export async function listOutboxForUser(cloudUserId: string | undefined): Promise<SyncOutboxItem[]> {
   const all = await listOutbox();
+  return all.filter((o) => outboxBelongsToUser(o, cloudUserId));
+}
+
+export async function countOutboxForOwner(ownerUserId: string): Promise<number> {
+  const all = await listOutbox();
+  return all.filter((o) => (o.ownerUserId ?? OUTBOX_UNBOUND) === ownerUserId).length;
+}
+
+export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
+  const meta = await getSyncMeta();
+  const mine = await listOutboxForUser(meta.cloudUserId);
   return dedupeOutbox(
-    all.filter((o) => o.attempts < MAX_OUTBOX_ATTEMPTS && o.nextRetryAt <= now),
+    mine.filter((o) => o.attempts < MAX_OUTBOX_ATTEMPTS && o.nextRetryAt <= now),
   );
+}
+
+/** Rebind unbound ops to the verified user (does not touch other owners' queues). */
+export async function rebindUnboundOutbox(userId: string): Promise<number> {
+  const all = await listOutbox();
+  let n = 0;
+  for (const item of all) {
+    const owner = item.ownerUserId ?? OUTBOX_UNBOUND;
+    if (owner === OUTBOX_UNBOUND) {
+      await putOutboxItem({ ...item, ownerUserId: userId });
+      n += 1;
+    }
+  }
+  return n;
 }
 
 export async function putOutboxItem(item: SyncOutboxItem): Promise<void> {
   const db = await getDB();
-  await db.put('sync_outbox', item as SyncOutboxItem & { entity: string; op: string });
+  const stamped = await stampOutboxOwner(item);
+  await db.put('sync_outbox', stamped as SyncOutboxItem & { entity: string; op: string });
 }
 
 export async function removeOutboxItems(opIds: string[]): Promise<void> {
@@ -145,6 +192,62 @@ export async function removeOutboxItems(opIds: string[]): Promise<void> {
   const tx = db.transaction('sync_outbox', 'readwrite');
   for (const id of opIds) await tx.store.delete(id);
   await tx.done;
+}
+
+/**
+ * Remove conflicted (stale) outbox ops, but never remove a newer op
+ * for the same entity+id that was enqueued mid-sync.
+ * Matches by opId, or by entity+entityId when snapshot uses composite opIds.
+ */
+export async function removeStaleConflictOps(
+  conflicts: Array<{
+    opId: string;
+    entity?: string;
+    entityId?: string;
+    attemptedAt?: string;
+  }>,
+): Promise<{ removed: string[]; keptNewer: string[] }> {
+  const all = await listOutbox();
+  const removed: string[] = [];
+  const keptNewer: string[] = [];
+  const seen = new Set<string>();
+  for (const c of conflicts) {
+    const ceiling = c.attemptedAt;
+    const candidates = all.filter((o) => {
+      if (o.opId === c.opId) return true;
+      if (c.entity && c.entityId && o.entity === c.entity && o.entityId === c.entityId) {
+        return true;
+      }
+      return false;
+    });
+    for (const item of candidates) {
+      if (seen.has(item.opId)) continue;
+      if (ceiling && item.mutatedAt > ceiling) {
+        keptNewer.push(item.opId);
+        continue;
+      }
+      const hasNewerSibling = all.some(
+        (o) =>
+          o.opId !== item.opId &&
+          o.entity === item.entity &&
+          o.entityId === item.entityId &&
+          o.mutatedAt > item.mutatedAt,
+      );
+      if (hasNewerSibling) {
+        removed.push(item.opId);
+        keptNewer.push(item.opId);
+        seen.add(item.opId);
+        continue;
+      }
+      // Stale intent: cloud won LWW
+      if (!ceiling || item.mutatedAt <= ceiling || item.opId === c.opId) {
+        removed.push(item.opId);
+        seen.add(item.opId);
+      }
+    }
+  }
+  await removeOutboxItems(removed);
+  return { removed, keptNewer };
 }
 
 export async function clearOutbox(): Promise<void> {
@@ -165,7 +268,8 @@ export async function ackOutboxCoveredByUpload(
     const prev = covered.get(key);
     if (!prev || u.updatedAt > prev) covered.set(key, u.updatedAt);
   }
-  const all = await listOutbox();
+  const meta = await getSyncMeta();
+  const all = await listOutboxForUser(meta.cloudUserId);
   const toRemove: string[] = [];
   for (const item of all) {
     const key = `${item.entity}:${item.entityId}`;
@@ -224,4 +328,3 @@ export async function clearConflicts(): Promise<void> {
   const db = await getDB();
   await db.put('sync_meta', { key: CONFLICTS_KEY, value: [] });
 }
-
