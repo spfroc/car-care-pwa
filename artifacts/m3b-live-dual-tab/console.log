@@ -1,0 +1,38 @@
+PASS 0.stamp.git git=d7dd681fc934fa07915ae6cff2434b75122aa4a0 | bundle=index-Cv8wDxDq.js | sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc | builtAt=2026-10-12T16:25:30+0800
+PASS 0.stamp.bundle git=d7dd681fc934fa07915ae6cff2434b75122aa4a0
+bundle=index-Cv8wDxDq.js
+sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc
+builtAt=2026-10-12T16:25:30+0800
+target=car-test.adobesun.com
+
+PASS 0.stamp.target-staging git=d7dd681fc934fa07915ae6cff2434b75122aa4a0
+bundle=index-Cv8wDxDq.js
+sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc
+builtAt=2026-10-12T16:25:30+0800
+target=car-test.adobesun.com
+
+PASS 0.prod.untouched git=6adcd1595313ca8989e62a46bec0a9e8976dc267 | bundle=index-f4r7_DP6.js | sha256=2b4e8506438473c95796a1cd3bd9198152c73725e73cc5e19e5bc1239c53427c
+PASS 0.smoke.url.disposable https://skwoahneuqkqgxzpkkzl.supabase.co
+PASS 1.verify 连接成功（m2smoke@carcare.test）；云端约 17 行。不会自动改动本地数据。
+PASS 1.webLocks.available true
+PASS 1.seed.outbox {"ok":true,"cloudUserId":"dee8546c-3fc8-465b-8e17-66bbff0e9c45","opId":"op-m3b-dt-v-concurrent","metaKeys":["syncMeta"]}
+PASS 1.outbox.before {"count":1,"ids":["m3b-dt-v-concurrent"],"opIds":["op-m3b-dt-v-concurrent"]}
+A clicks bidirectional (delayed)
+B clicks bidirectional while A holds / races lock
+A toast: 另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。
+B toast: 双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。
+PASS 2.A-syncing-B-busy A=另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。 | B=双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。 | mutex={"ok":true,"aBusy":true,"bBusy":false,"aDone":false,"bDone":true}
+PASS 2.mutex.queue-cloud {"q1":{"ok":true,"mode":"acked+cloud"},"cloud1":{"id":"m3b-dt-v-concurrent","payload":{"id":"m3b-dt-v-concurrent","name":"DualTabConcurrent","plate":"DT-TEST","bodyType":"SEDAN","createdAt":"2026-10-12T09:10:58.671Z","updatedAt":"2026-10-12T09:10:58.671Z","energyType":"ICE"},"updated_at":"2026-10-12T09:10:58.671+00:00","deleted_at":null},"out1":{"count":0,"ids":[],"opIds":[]}}
+PASS 1.concurrent.one-busy-or-serialized A=另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。 | B=双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。 | mutex={"ok":true,"aBusy":true,"bBusy":false,"aDone":false,"bDone":true}
+PASS 1.concurrent.no-dangerous-dup {"cloudRace":{"id":"m3b-dt-v-race","payload":{"id":"m3b-dt-v-race","name":"DualTabRace","plate":"DT-TEST","bodyType":"SEDAN","createdAt":"2026-10-12T09:11:55.703Z","updatedAt":"2026-10-12T09:11:55.703Z","energyType":"ICE"},"updated_at":"2026-10-12T09:11:55.703+00:00","deleted_at":null},"outAfterRace":{"count":0,"ids":[],"opIds":[]},"outBeforeRace":{"count":1,"ids":["m3b-dt-v-race"],"opIds":["op-m3b-dt-v-race"]},"qRace":{"ok":true,"mode":"acked+cloud"}}
+PASS 3.A.interrupt-fail Failed to fetch
+PASS 3.outbox.retained {"outBeforeFail":{"count":1,"ids":["m3b-dt-v-interrupt"],"opIds":["op-m3b-dt-v-interrupt"]},"outAfterFail":{"count":1,"ids":["m3b-dt-v-interrupt"],"opIds":["op-m3b-dt-v-interrupt"]}}
+PASS 4.B.retry.toast 双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。
+PASS 4.cloud+local.consistent {"cloud3":{"id":"m3b-dt-v-interrupt","payload":{"id":"m3b-dt-v-interrupt","name":"DualTabInterrupt","plate":"DT-TEST","bodyType":"SEDAN","createdAt":"2026-10-12T09:12:55.240Z","updatedAt":"2026-10-12T09:12:55.240Z","energyType":"ICE"},"updated_at":"2026-10-12T09:12:55.24+00:00","deleted_at":null},"outAfterRetry":{"count":0,"ids":[],"opIds":[]},"localHas":true,"retryToast":"双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。"}
+PASS 5.locks.disabled locksGone=true
+PASS 5.verify 连接成功（m2smoke@carcare.test）；云端约 20 行。不会自动改动本地数据。
+PASS 5.IDB-lease.B-busy A=另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。 | B=双向同步完成：推送 1，拉取应用 3 更新 / 0 删除。 | mutex={"ok":true,"aBusy":true,"bBusy":false,"aDone":false,"bDone":true}
+PASS 5.IDB-lease.A-finished {"aToast":"另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。","bToast":"双向同步完成：推送 1，拉取应用 3 更新 / 0 删除。","cloud5":{"id":"m3b-dt-v-idb-lease","payload":{"id":"m3b-dt-v-idb-lease","name":"IdbLeaseMutex","plate":"DT-TEST","bodyType":"SEDAN","createdAt":"2026-10-12T09:14:12.978Z","updatedAt":"2026-10-12T09:14:12.978Z","energyType":"ICE"},"updated_at":"2026-10-12T09:14:12.978+00:00","deleted_at":null},"out5":{"count":0,"ids":[],"opIds":[]},"q5":{"ok":true,"mode":"acked+cloud"}}
+PASS 5.IDB-lease.meta-evidence {"locksGone":true,"hb":{"lease":null,"heart":null},"mutex":{"ok":true,"aBusy":true,"bBusy":false,"aDone":false,"bDone":true},"note":"post-sync lease cleared; IDB path proven by busy+done mutex with navigator.locks disabled"}
+
+SUMMARY 22 passed, 0 failed

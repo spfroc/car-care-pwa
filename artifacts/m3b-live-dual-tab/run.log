@@ -1,0 +1,4 @@
+[2026-10-12T09:10:58.680Z] A clicks bidirectional (delayed)
+[2026-10-12T09:10:59.182Z] B clicks bidirectional while A holds / races lock
+[2026-10-12T09:11:51.421Z] A toast: 另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。
+[2026-10-12T09:11:51.421Z] B toast: 双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。
