@@ -1,6 +1,12 @@
 import { getDB } from '../db';
 import type { Vehicle } from '../types';
-import { enqueueSyncOp } from '../sync/outbox';
+import {
+  isCloudEnqueueEnabled,
+  makeOutboxItem,
+  putOutboxInTx,
+  settleTx,
+} from '../sync/outbox';
+import { runSyncTxHook } from '../sync/txHooks';
 
 export async function listVehicles(): Promise<Vehicle[]> {
   const db = await getDB();
@@ -13,19 +19,31 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 }
 
 export async function putVehicle(v: Vehicle): Promise<void> {
-  await (await getDB()).put('vehicles', v);
-  await enqueueSyncOp({
-    entity: 'vehicles',
-    entityId: v.id,
-    op: 'upsert',
-    payload: v,
-    mutatedAt: v.updatedAt,
+  const db = await getDB();
+  const sync = await isCloudEnqueueEnabled();
+  const stores = sync ? (['vehicles', 'sync_outbox'] as const) : (['vehicles'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('vehicles').put(v);
+    if (sync) {
+      runSyncTxHook('after_business_before_outbox', { store: 'vehicles' });
+      await putOutboxInTx(
+        tx,
+        makeOutboxItem({
+          entity: 'vehicles',
+          entityId: v.id,
+          op: 'upsert',
+          payload: v,
+          mutatedAt: v.updatedAt,
+        }),
+      );
+    }
   });
 }
 
 /**
- * Atomically delete a vehicle, all its records, and media that are not shared.
- * Also clears coverMediaId blob when unused. Stations are never deleted (data-model §11).
+ * Atomically delete a vehicle, all its records, and media that are not shared,
+ * plus matching sync_outbox tombstones when cloud is enabled.
  */
 export async function deleteVehicle(id: string): Promise<void> {
   const db = await getDB();
@@ -46,7 +64,6 @@ export async function deleteVehicle(id: string): Promise<void> {
         mediaToDelete.delete(mid);
       }
     }
-    // Cover of another vehicle?
     const vehicles = await db.getAll('vehicles');
     for (const v of vehicles) {
       if (v.id === id) continue;
@@ -54,21 +71,38 @@ export async function deleteVehicle(id: string): Promise<void> {
     }
   }
 
-  const tx = db.transaction(['vehicles', 'records', 'media'], 'readwrite');
-  for (const r of rows) {
-    await tx.objectStore('records').delete(r.id);
-  }
-  for (const mid of mediaToDelete) {
-    await tx.objectStore('media').delete(mid);
-  }
-  await tx.objectStore('vehicles').delete(id);
-  await tx.done;
-  const mutatedAt = new Date().toISOString();
-  await enqueueSyncOp({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt });
-  for (const r of rows) {
-    await enqueueSyncOp({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt });
-  }
-  for (const mid of mediaToDelete) {
-    await enqueueSyncOp({ entity: 'media', entityId: mid, op: 'delete', mutatedAt });
-  }
+  const sync = await isCloudEnqueueEnabled();
+  const stores = sync
+    ? (['vehicles', 'records', 'media', 'sync_outbox'] as const)
+    : (['vehicles', 'records', 'media'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    for (const r of rows) {
+      await tx.objectStore('records').delete(r.id);
+    }
+    for (const mid of mediaToDelete) {
+      await tx.objectStore('media').delete(mid);
+    }
+    await tx.objectStore('vehicles').delete(id);
+
+    if (sync) {
+      const mutatedAt = new Date().toISOString();
+      await putOutboxInTx(
+        tx,
+        makeOutboxItem({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt }),
+      );
+      for (const r of rows) {
+        await putOutboxInTx(
+          tx,
+          makeOutboxItem({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt }),
+        );
+      }
+      for (const mid of mediaToDelete) {
+        await putOutboxInTx(
+          tx,
+          makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt }),
+        );
+      }
+    }
+  });
 }

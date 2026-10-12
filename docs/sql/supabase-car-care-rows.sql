@@ -43,5 +43,58 @@ create policy "car_care_rows_delete_own"
   on public.car_care_rows for delete
   using (auth.uid() = user_id);
 
--- Optional: revoke direct access from anon without JWT (RLS still applies when authenticated via anon key + user JWT)
 grant select, insert, update, delete on public.car_care_rows to authenticated;
+
+-- Atomic LWW upsert (eliminates client read-then-write TOCTOU).
+-- Returns 'applied' | 'skipped_cloud_newer'.
+create or replace function public.car_care_upsert_lww(
+  p_entity text,
+  p_id text,
+  p_payload jsonb,
+  p_updated_at timestamptz,
+  p_deleted_at timestamptz,
+  p_device_id text
+) returns text
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  existing_updated timestamptz;
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_entity not in ('vehicles', 'records', 'stations', 'settings', 'media') then
+    raise exception 'invalid entity';
+  end if;
+
+  select updated_at into existing_updated
+  from public.car_care_rows
+  where user_id = uid and entity = p_entity and id = p_id
+  for update;
+
+  if existing_updated is not null and existing_updated > p_updated_at then
+    return 'skipped_cloud_newer';
+  end if;
+
+  insert into public.car_care_rows as t (
+    user_id, entity, id, payload, updated_at, deleted_at, device_id
+  ) values (
+    uid, p_entity, p_id, coalesce(p_payload, '{}'::jsonb), p_updated_at, p_deleted_at, p_device_id
+  )
+  on conflict (user_id, entity, id) do update
+  set
+    payload = excluded.payload,
+    updated_at = excluded.updated_at,
+    deleted_at = excluded.deleted_at,
+    device_id = excluded.device_id
+  where t.updated_at <= excluded.updated_at;
+
+  return 'applied';
+end;
+$$;
+
+revoke all on function public.car_care_upsert_lww(text, text, jsonb, timestamptz, timestamptz, text) from public;
+grant execute on function public.car_care_upsert_lww(text, text, jsonb, timestamptz, timestamptz, text) to authenticated;

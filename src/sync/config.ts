@@ -7,6 +7,21 @@ const KEY = 'cloudStorage';
 
 const DEFAULT: CloudStorageConfig = { provider: 'none' };
 
+function looksLikeServiceRole(key: string): boolean {
+  if (/service_role/i.test(key)) return true;
+  // JWT payload often contains role claim — decode middle segment if present
+  const parts = key.split('.');
+  if (parts.length === 3) {
+    try {
+      const json = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (json?.role === 'service_role') return true;
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
 /** Direct IDB read — avoids circular import with repositories/settings ↔ outbox. */
 export async function getCloudStorageConfig(): Promise<CloudStorageConfig> {
   const row = await (await getDB()).get('settings', KEY);
@@ -22,21 +37,30 @@ export async function getCloudStorageConfig(): Promise<CloudStorageConfig> {
 }
 
 export async function setCloudStorageConfig(cfg: CloudStorageConfig): Promise<void> {
-  if (cfg.supabaseAnonKey && /service_role/i.test(cfg.supabaseAnonKey)) {
+  const anon = cfg.supabaseAnonKey?.trim();
+  if (anon && looksLikeServiceRole(anon)) {
     throw new Error('拒绝保存：检测到 service_role。请只使用 anon / publishable key。');
   }
-  if (cfg.supabaseAnonKey && cfg.supabaseAnonKey.length > 2000) {
+  if (anon && anon.length > 2000) {
     throw new Error('密钥过长，请确认粘贴的是 anon key。');
+  }
+  if (cfg.supabaseUrl) {
+    try {
+      const u = new URL(cfg.supabaseUrl.trim());
+      if (u.protocol !== 'https:') throw new Error('Supabase URL 必须使用 https');
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('https')) throw e;
+      throw new Error('Supabase URL 无效');
+    }
   }
   const value: CloudStorageConfig = {
     provider: cfg.provider,
     supabaseUrl: cfg.supabaseUrl?.trim() || undefined,
-    supabaseAnonKey: cfg.supabaseAnonKey?.trim() || undefined,
+    supabaseAnonKey: anon || undefined,
     notionWorkspaceHint: cfg.notionWorkspaceHint?.trim() || undefined,
   };
   const row: SettingRow = { key: KEY, value, updatedAt: nowISO() };
   await (await getDB()).put('settings', row);
-  // Intentionally do NOT enqueue — cloud credentials stay local-only
 }
 
 export async function clearCloudStorageConfig(): Promise<void> {

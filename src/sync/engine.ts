@@ -5,6 +5,7 @@ import { clearCloudStorageConfig, getCloudStorageConfig } from './config';
 import { mediaToCloudPayload, cloudPayloadToMedia } from './mediaCodec';
 import { mergeCloudIntoPlan } from './merge';
 import {
+  ackOutboxCoveredByUpload,
   appendConflicts,
   clearOutbox,
   ensureDeviceId,
@@ -18,6 +19,8 @@ import {
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
 import { SupabaseProvider } from './providers/supabase';
+import { assertCloudRowsValid } from './validatePayload';
+import { runSyncTxHook } from './txHooks';
 import type {
   CloudMediaPayload,
   CloudRow,
@@ -103,7 +106,6 @@ export async function localSnapshotToCloudRows(snap: LocalSnapshot): Promise<Clo
     });
   }
   for (const s of snap.settings) {
-    // Do not upload cloud credentials back to cloud (avoid echo / leak across devices oddly)
     if (s.key === 'cloudStorage') continue;
     rows.push({
       entity: 'settings',
@@ -128,22 +130,45 @@ export async function localSnapshotToCloudRows(snap: LocalSnapshot): Promise<Clo
   return rows;
 }
 
+/**
+ * Apply cloud rows in ONE IndexedDB transaction.
+ * When replaceLocal=true, clear + apply happen atomically (failure restores nothing / keeps prior).
+ */
+async function applyCloudRows(
+  toUpsert: CloudRow[],
+  toDelete: CloudRow[],
+  opts?: { replaceLocal?: boolean },
+): Promise<void> {
+  assertCloudRowsValid(toUpsert);
 
-async function applyCloudRows(toUpsert: CloudRow[], toDelete: CloudRow[]): Promise<void> {
   const db = await getDB();
-  const stores = ['vehicles', 'records', 'stations', 'settings', 'media'] as const;
+  const stores = opts?.replaceLocal
+    ? (['vehicles', 'records', 'stations', 'settings', 'media', 'sync_outbox'] as const)
+    : (['vehicles', 'records', 'stations', 'settings', 'media'] as const);
   const tx = db.transaction(stores, 'readwrite');
 
-  for (const row of toDelete) {
-    if (row.entity === 'settings') await tx.objectStore('settings').delete(row.id);
-    else if (row.entity === 'vehicles') await tx.objectStore('vehicles').delete(row.id);
-    else if (row.entity === 'records') await tx.objectStore('records').delete(row.id);
-    else if (row.entity === 'stations') await tx.objectStore('stations').delete(row.id);
-    else if (row.entity === 'media') await tx.objectStore('media').delete(row.id);
-  }
+  try {
+    if (opts?.replaceLocal) {
+      for (const store of ['vehicles', 'records', 'stations', 'media'] as const) {
+        await tx.objectStore(store).clear();
+      }
+      const settings = await tx.objectStore('settings').getAll();
+      for (const s of settings) {
+        if (s.key !== 'cloudStorage') await tx.objectStore('settings').delete(s.key);
+      }
+      await tx.objectStore('sync_outbox').clear();
+    }
 
-  for (const row of toUpsert) {
-    try {
+    for (const row of toDelete) {
+      if (row.entity === 'settings') await tx.objectStore('settings').delete(row.id);
+      else if (row.entity === 'vehicles') await tx.objectStore('vehicles').delete(row.id);
+      else if (row.entity === 'records') await tx.objectStore('records').delete(row.id);
+      else if (row.entity === 'stations') await tx.objectStore('stations').delete(row.id);
+      else if (row.entity === 'media') await tx.objectStore('media').delete(row.id);
+    }
+
+    for (const row of toUpsert) {
+      runSyncTxHook('during_restore_apply', { store: row.entity });
       if (row.entity === 'vehicles') {
         await tx.objectStore('vehicles').put(row.payload as Vehicle);
       } else if (row.entity === 'records') {
@@ -156,16 +181,40 @@ async function applyCloudRows(toUpsert: CloudRow[], toDelete: CloudRow[]): Promi
         await tx.objectStore('settings').put(s);
       } else if (row.entity === 'media') {
         const p = row.payload as CloudMediaPayload;
-        if (!p?.base64) continue;
         const media = cloudPayloadToMedia(p);
         await tx.objectStore('media').put(media);
       }
-    } catch (e) {
-      tx.abort();
-      throw e;
     }
+  } catch (e) {
+    try {
+      tx.abort();
+    } catch {
+      /* ignore */
+    }
+    try {
+      await tx.done;
+    } catch {
+      /* expected after abort */
+    }
+    throw e;
   }
   await tx.done;
+}
+
+/** If cloud auth user changes, drop outbox/cursor so we never push another user's ops. */
+async function guardUserSwitch(userId: string | undefined): Promise<string | undefined> {
+  if (!userId) return undefined;
+  const meta = await getSyncMeta();
+  if (meta.cloudUserId && meta.cloudUserId !== userId) {
+    await clearOutbox();
+    await patchSyncMeta({
+      cloudUserId: userId,
+      serverCursor: undefined,
+      lastError: `检测到云端账号切换（${meta.cloudUserId} → ${userId}），已清空同步队列。`,
+    });
+    return `云端账号已切换，队列已重置。`;
+  }
+  return undefined;
 }
 
 export async function verifyConnection(): Promise<SyncActionResult> {
@@ -176,6 +225,7 @@ export async function verifyConnection(): Promise<SyncActionResult> {
   try {
     const verify = await provider.verify();
     if (verify.ok) {
+      const switchNote = await guardUserSwitch(verify.userId);
       await patchSyncMeta({
         status: 'idle',
         cloudUserId: verify.userId,
@@ -184,7 +234,7 @@ export async function verifyConnection(): Promise<SyncActionResult> {
       });
       return {
         ok: true,
-        message: `连接成功${verify.email ? `（${verify.email}）` : ''}；云端约 ${verify.cloudRowCount ?? 0} 行。不会自动改动本地数据。`,
+        message: `连接成功${verify.email ? `（${verify.email}）` : ''}；云端约 ${verify.cloudRowCount ?? 0} 行。不会自动改动本地数据。${switchNote ? ` ${switchNote}` : ''}`,
         verify,
       };
     }
@@ -210,8 +260,11 @@ export async function firstUploadToCloud(): Promise<SyncActionResult> {
       await patchSyncMeta({ status: 'error', lastError: result.error });
       return { ok: false, message: `首次上传失败：${result.error}`, pushed: result.applied.length };
     }
+    // Only ack ops covered by uploaded snapshot — keep ops enqueued during upload
+    const acked = await ackOutboxCoveredByUpload(
+      rows.map((r) => ({ entity: r.entity, id: r.id, updatedAt: r.updatedAt })),
+    );
     const ts = nowISO();
-    await clearOutbox();
     await patchSyncMeta({
       status: 'idle',
       lastPushAt: ts,
@@ -220,7 +273,7 @@ export async function firstUploadToCloud(): Promise<SyncActionResult> {
     });
     return {
       ok: true,
-      message: `首次上传完成：${result.applied.length} 行。本地数据未改动。`,
+      message: `首次上传完成：${result.applied.length} 行（确认队列 ${acked} 条）。本地数据未改动。`,
       pushed: result.applied.length,
     };
   } catch (e) {
@@ -232,8 +285,7 @@ export async function firstUploadToCloud(): Promise<SyncActionResult> {
 
 /**
  * Restore from cloud into local (merge LWW).
- * Requires explicit caller confirmation in UI.
- * Does not clear local first unless replaceLocal=true.
+ * replaceLocal: clear+apply in ONE transaction; failure leaves prior local intact.
  */
 export async function restoreFromCloud(opts?: {
   replaceLocal?: boolean;
@@ -243,38 +295,26 @@ export async function restoreFromCloud(opts?: {
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     const snapshot = await provider.pullAll();
-    if (opts?.replaceLocal) {
-      const db = await getDB();
-      const tx = db.transaction(
-        ['vehicles', 'records', 'stations', 'settings', 'media'],
-        'readwrite',
-      );
-      for (const store of ['vehicles', 'records', 'stations', 'media'] as const) {
-        await tx.objectStore(store).clear();
-      }
-      // settings: clear except cloudStorage
-      const settings = await tx.objectStore('settings').getAll();
-      for (const s of settings) {
-        if (s.key !== 'cloudStorage') await tx.objectStore('settings').delete(s.key);
-      }
-      await tx.done;
-    }
+    // Validate before any local mutation
+    assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
 
-    const pending = await listOutbox();
-    const localIndex = await buildLocalIndex();
+    const pending = opts?.replaceLocal ? [] : await listOutbox();
+    const localIndex = opts?.replaceLocal ? new Map() : await buildLocalIndex();
     const plan = mergeCloudIntoPlan(
       snapshot.rows,
       (entity, id) => localIndex.get(`${entity}:${id}`),
-      opts?.replaceLocal ? [] : pending,
+      pending,
       nowISO(),
     );
 
     try {
-      await applyCloudRows(plan.toUpsert, plan.toDelete);
+      await applyCloudRows(plan.toUpsert, plan.toDelete, {
+        replaceLocal: opts?.replaceLocal,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await patchSyncMeta({ status: 'error', lastError: `恢复写入失败（已中止事务）：${msg}` });
-      return { ok: false, message: `恢复失败，本地未部分写入：${msg}` };
+      await patchSyncMeta({ status: 'error', lastError: `恢复写入失败（事务已中止）：${msg}` });
+      return { ok: false, message: `恢复失败，本地保持原样：${msg}` };
     }
 
     await appendConflicts(plan.conflicts);
@@ -326,7 +366,6 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
 
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
-    // Ensure media payloads for outbox upserts that only stored ids
     const ready = await listReadyOutbox();
     const enriched = await enrichOutboxPayloads(ready);
     let pushed = 0;
@@ -346,6 +385,7 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     }
 
     const snapshot = await provider.pullAll();
+    assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
     const localIndex = await buildLocalIndex();
     const pending = await listOutbox();
     const plan = mergeCloudIntoPlan(
@@ -437,6 +477,7 @@ export async function disconnectCloud(): Promise<SyncActionResult> {
     status: 'disconnected',
     provider: 'none',
     cloudUserId: undefined,
+    serverCursor: undefined,
     lastError: undefined,
   });
   return { ok: true, message: '已断开云存储；本地数据保留。' };
@@ -454,4 +495,3 @@ export async function getSyncStatusSummary(): Promise<{
   ]);
   return { meta, outboxCount: outbox.length, config };
 }
-

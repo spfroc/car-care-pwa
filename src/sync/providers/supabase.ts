@@ -19,23 +19,23 @@ type DbRow = {
   device_id: string | null;
 };
 
-export type SupabaseAuthOptions = {
-  url: string;
-  anonKey: string;
-  email?: string;
-  password?: string;
-  /** When true, attempt signUp if signIn fails with invalid credentials */
-  allowSignUp?: boolean;
-};
+/** Default PostgREST max-rows; we page explicitly. */
+export const SUPABASE_PULL_PAGE_SIZE = 1000;
 
 export class SupabaseProvider implements CloudProvider {
   readonly id = 'supabase' as const;
   private client: SupabaseClient;
   private deviceId: string;
+  /** Test hook: override page size */
+  pageSize = SUPABASE_PULL_PAGE_SIZE;
 
   constructor(opts: { url: string; anonKey: string; deviceId: string; client?: SupabaseClient }) {
     if (/service_role/i.test(opts.anonKey)) {
       throw new Error('Refusing to initialize Supabase client with a service_role key');
+    }
+    // anon keys are JWTs; reject obvious non-JWT secrets
+    if (opts.anonKey && !opts.anonKey.includes('.') && opts.anonKey.length > 40) {
+      throw new Error('anon key 格式异常：请粘贴 Project Settings → API → anon public key');
     }
     this.deviceId = opts.deviceId;
     this.client =
@@ -74,9 +74,10 @@ export class SupabaseProvider implements CloudProvider {
   }
 
   async verify(): Promise<VerifyResult> {
-    const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
-    if (sessionError) return { ok: false, error: sessionError.message };
-    const user = sessionData.session?.user;
+    // Prefer getUser() — validates JWT with Auth server (not just local session)
+    const { data: userData, error: userError } = await this.client.auth.getUser();
+    if (userError) return { ok: false, error: userError.message };
+    const user = userData.user;
     if (!user) return { ok: false, error: '未登录：请先使用邮箱密码登录你的 Supabase 项目' };
 
     const { count, error } = await this.client
@@ -101,15 +102,31 @@ export class SupabaseProvider implements CloudProvider {
 
   async pullAll(): Promise<CloudSnapshot> {
     const user = await this.requireUser();
-    const { data, error } = await this.client
-      .from('car_care_rows')
-      .select('entity,id,payload,updated_at,deleted_at,device_id')
-      .eq('user_id', user.id);
-    if (error) throw new Error(error.message);
-    const rows: CloudRow[] = (data as DbRow[] | null)?.map(dbToCloud) ?? [];
+    const rows: CloudRow[] = [];
+    let from = 0;
+    const pageSize = this.pageSize;
+    for (;;) {
+      const to = from + pageSize - 1;
+      const { data, error } = await this.client
+        .from('car_care_rows')
+        .select('entity,id,payload,updated_at,deleted_at,device_id')
+        .eq('user_id', user.id)
+        .order('entity', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to);
+      if (error) throw new Error(error.message);
+      const batch = (data as DbRow[] | null) ?? [];
+      for (const r of batch) rows.push(dbToCloud(r));
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
     return { rows, pulledAt: nowISO() };
   }
 
+  /**
+   * Push via DB-side atomic LWW RPC (no client read-then-write TOCTOU).
+   * Falls back to conditional upsert only if RPC missing (legacy projects).
+   */
   async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
     const user = await this.requireUser();
     const applied: string[] = [];
@@ -117,49 +134,34 @@ export class SupabaseProvider implements CloudProvider {
 
     for (const op of ops) {
       try {
-        if (op.op === 'delete') {
-          const { error } = await this.client.from('car_care_rows').upsert(
-            {
-              user_id: user.id,
-              entity: op.entity,
-              id: op.entityId,
-              payload: op.payload ?? {},
-              updated_at: op.mutatedAt,
-              deleted_at: op.mutatedAt,
-              device_id: this.deviceId,
-            },
-            { onConflict: 'user_id,entity,id' },
-          );
-          if (error) throw error;
-        } else {
-          // LWW: only overwrite if cloud missing or older
-          const { data: existing } = await this.client
-            .from('car_care_rows')
-            .select('updated_at')
-            .eq('user_id', user.id)
-            .eq('entity', op.entity)
-            .eq('id', op.entityId)
-            .maybeSingle();
-          if (existing && existing.updated_at > op.mutatedAt) {
-            conflicts.push({ opId: op.opId, reason: 'cloud_newer' });
-            applied.push(op.opId); // drop from outbox; pull will reconcile
-            continue;
+        const deletedAt = op.op === 'delete' ? op.mutatedAt : null;
+        const { data, error } = await this.client.rpc('car_care_upsert_lww', {
+          p_entity: op.entity,
+          p_id: op.entityId,
+          p_payload: op.payload ?? {},
+          p_updated_at: op.mutatedAt,
+          p_deleted_at: deletedAt,
+          p_device_id: this.deviceId,
+        });
+        if (error) {
+          // RPC not installed — refuse silent TOCTOU path; require schema upgrade
+          if (/function .*car_care_upsert_lww.* does not exist/i.test(error.message) || error.code === 'PGRST202') {
+            return {
+              applied,
+              conflicts,
+              error: `缺少 car_care_upsert_lww RPC：请重新执行 docs/sql/supabase-car-care-rows.sql（${error.message}）`,
+            };
           }
-          const { error } = await this.client.from('car_care_rows').upsert(
-            {
-              user_id: user.id,
-              entity: op.entity,
-              id: op.entityId,
-              payload: op.payload ?? {},
-              updated_at: op.mutatedAt,
-              deleted_at: null,
-              device_id: this.deviceId,
-            },
-            { onConflict: 'user_id,entity,id' },
-          );
-          if (error) throw error;
+          throw error;
         }
-        applied.push(op.opId);
+        const result = typeof data === 'string' ? data : String(data);
+        if (result === 'skipped_cloud_newer') {
+          conflicts.push({ opId: op.opId, reason: 'cloud_newer' });
+          applied.push(op.opId); // drop from outbox; pull reconciles
+        } else {
+          applied.push(op.opId);
+        }
+        void user;
       } catch (e) {
         return {
           applied,
@@ -171,6 +173,7 @@ export class SupabaseProvider implements CloudProvider {
     return { applied, conflicts };
   }
 
+  /** Bootstrap/first-upload: chunked upsert (caller owns semantics). Incremental sync uses pushOps RPC. */
   async pushSnapshot(rows: CloudRow[]): Promise<PushResult> {
     const user = await this.requireUser();
     const batch = rows.map((r) => ({
@@ -182,7 +185,6 @@ export class SupabaseProvider implements CloudProvider {
       deleted_at: r.deletedAt ?? null,
       device_id: r.deviceId ?? this.deviceId,
     }));
-    // Chunk to avoid payload limits
     const chunkSize = 100;
     const applied: string[] = [];
     for (let i = 0; i < batch.length; i += chunkSize) {

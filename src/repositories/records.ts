@@ -1,6 +1,11 @@
 import { getDB } from '../db';
 import type { CareRecord, RecordType } from '../types';
-import { enqueueSyncOp } from '../sync/outbox';
+import {
+  isCloudEnqueueEnabled,
+  makeOutboxItem,
+  putOutboxInTx,
+  settleTx,
+} from '../sync/outbox';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -26,19 +31,27 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 }
 
 export async function putRecord(r: CareRecord): Promise<void> {
-  await (await getDB()).put('records', r);
-  await enqueueSyncOp({
-    entity: 'records',
-    entityId: r.id,
-    op: 'upsert',
-    payload: r,
-    mutatedAt: r.updatedAt,
+  const db = await getDB();
+  const sync = await isCloudEnqueueEnabled();
+  const stores = sync ? (['records', 'sync_outbox'] as const) : (['records'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    await tx.objectStore('records').put(r);
+    if (sync) {
+      await putOutboxInTx(
+        tx,
+        makeOutboxItem({
+          entity: 'records',
+          entityId: r.id,
+          op: 'upsert',
+          payload: r,
+          mutatedAt: r.updatedAt,
+        }),
+      );
+    }
   });
 }
 
-/**
- * Collect media ids that are still referenced by other records or any vehicle cover.
- */
 async function mediaStillReferenced(
   mediaIds: string[],
   excludeRecordId?: string,
@@ -65,9 +78,7 @@ async function mediaStillReferenced(
 }
 
 /**
- * Delete one record and its media that are not referenced by any other record
- * or by any vehicle's coverMediaId.
- * Single transaction: media + records stay consistent on abort.
+ * Delete one record (+ orphan media) and outbox tombstones in one transaction.
  */
 export async function deleteRecord(id: string): Promise<void> {
   const db = await getDB();
@@ -76,29 +87,36 @@ export async function deleteRecord(id: string): Promise<void> {
 
   const mediaIds = [...(rec.mediaIds ?? [])];
   const stillReferenced = await mediaStillReferenced(mediaIds, id);
-
-  const tx = db.transaction(['records', 'media'], 'readwrite');
-  for (const mid of mediaIds) {
-    if (!stillReferenced.has(mid)) {
-      await tx.objectStore('media').delete(mid);
+  const sync = await isCloudEnqueueEnabled();
+  const stores = sync
+    ? (['records', 'media', 'sync_outbox'] as const)
+    : (['records', 'media'] as const);
+  const tx = db.transaction(stores, 'readwrite');
+  await settleTx(tx, async () => {
+    const orphanMedia: string[] = [];
+    for (const mid of mediaIds) {
+      if (!stillReferenced.has(mid)) {
+        await tx.objectStore('media').delete(mid);
+        orphanMedia.push(mid);
+      }
     }
-  }
-  await tx.objectStore('records').delete(id);
-  await tx.done;
-  const mutatedAt = new Date().toISOString();
-  await enqueueSyncOp({ entity: 'records', entityId: id, op: 'delete', mutatedAt });
-  for (const mid of mediaIds) {
-    if (!stillReferenced.has(mid)) {
-      await enqueueSyncOp({ entity: 'media', entityId: mid, op: 'delete', mutatedAt });
+    await tx.objectStore('records').delete(id);
+    if (sync) {
+      const mutatedAt = new Date().toISOString();
+      await putOutboxInTx(
+        tx,
+        makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt }),
+      );
+      for (const mid of orphanMedia) {
+        await putOutboxInTx(
+          tx,
+          makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt }),
+        );
+      }
     }
-  }
+  });
 }
 
-/**
- * Delete all records for a vehicle (+ orphaned media) inside one transaction.
- * Protects media still used as another vehicle's cover or by other records.
- * Used by deleteVehicle; prefer deleteVehicle for full cascade including the vehicle row.
- */
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {
   const db = await getDB();
   const rows = await db.getAllFromIndex('records', 'byVehicle', vehicleId);
@@ -109,7 +127,6 @@ export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> 
 
   if (mediaToDelete.size) {
     const still = await mediaStillReferenced([...mediaToDelete], undefined, vehicleId);
-    // Also keep this vehicle's own cover while only deleting records (vehicle row stays)
     const self = await db.get('vehicles', vehicleId);
     if (self?.coverMediaId) still.add(self.coverMediaId);
     for (const mid of still) mediaToDelete.delete(mid);

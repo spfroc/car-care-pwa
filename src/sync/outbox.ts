@@ -1,5 +1,6 @@
 import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
+import { getCloudStorageConfig } from './config';
 import { dedupeOutbox } from './merge';
 import {
   MAX_OUTBOX_ATTEMPTS,
@@ -10,7 +11,6 @@ import {
   type SyncOutboxItem,
   type SyncStatus,
 } from './types';
-import { getCloudStorageConfig } from './config';
 
 const META_KEY = 'syncMeta';
 const CONFLICTS_KEY = 'syncConflicts';
@@ -20,6 +20,61 @@ export function nextRetryDelayMs(attempts: number): number {
   const base = capped * 30_000;
   const jitter = Math.floor(Math.random() * 5_000);
   return base + jitter;
+}
+
+export async function isCloudEnqueueEnabled(): Promise<boolean> {
+  const cfg = await getCloudStorageConfig();
+  if (cfg.provider !== 'supabase') return false;
+  return Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
+}
+
+export function makeOutboxItem(input: {
+  entity: SyncEntity;
+  entityId: string;
+  op: SyncOpKind;
+  payload?: unknown;
+  mutatedAt?: string;
+}): SyncOutboxItem {
+  const mutatedAt = input.mutatedAt ?? nowISO();
+  return {
+    opId: uid(),
+    entity: input.entity,
+    entityId: input.entityId,
+    op: input.op,
+    payload: input.payload,
+    mutatedAt,
+    attempts: 0,
+    nextRetryAt: mutatedAt,
+  };
+}
+
+/** Put outbox row inside an existing readwrite transaction (same atomic unit as business write). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function putOutboxInTx(tx: any, item: SyncOutboxItem): Promise<void> {
+  await tx.objectStore('sync_outbox').put(item);
+}
+
+/** Ensure mid-tx throw aborts and rolls back (incl. fake-indexeddb). */
+export async function settleTx(
+  tx: { abort: () => void; done: Promise<void> },
+  work: () => Promise<void>,
+): Promise<void> {
+  try {
+    await work();
+    await tx.done;
+  } catch (e) {
+    try {
+      tx.abort();
+    } catch {
+      /* already aborting */
+    }
+    try {
+      await tx.done;
+    } catch {
+      /* expected after abort */
+    }
+    throw e;
+  }
 }
 
 export async function ensureDeviceId(): Promise<string> {
@@ -97,6 +152,32 @@ export async function clearOutbox(): Promise<void> {
   await db.clear('sync_outbox');
 }
 
+/**
+ * After a successful snapshot upload, remove only outbox ops covered by uploaded rows
+ * (same entity+id and mutatedAt <= uploaded updatedAt). Newer ops enqueued during upload stay.
+ */
+export async function ackOutboxCoveredByUpload(
+  uploaded: Array<{ entity: SyncEntity | string; id: string; updatedAt: string }>,
+): Promise<number> {
+  const covered = new Map<string, string>();
+  for (const u of uploaded) {
+    const key = `${u.entity}:${u.id}`;
+    const prev = covered.get(key);
+    if (!prev || u.updatedAt > prev) covered.set(key, u.updatedAt);
+  }
+  const all = await listOutbox();
+  const toRemove: string[] = [];
+  for (const item of all) {
+    const key = `${item.entity}:${item.entityId}`;
+    const uploadedAt = covered.get(key);
+    if (uploadedAt != null && item.mutatedAt <= uploadedAt) {
+      toRemove.push(item.opId);
+    }
+  }
+  await removeOutboxItems(toRemove);
+  return toRemove.length;
+}
+
 export async function markOutboxFailure(opId: string, error: string): Promise<void> {
   const db = await getDB();
   const raw = await db.get('sync_outbox', opId);
@@ -112,6 +193,7 @@ export async function markOutboxFailure(opId: string, error: string): Promise<vo
   await db.put('sync_outbox', next);
 }
 
+/** Standalone enqueue (prefer transactional putOutboxInTx from repositories). */
 export async function enqueueSyncOp(input: {
   entity: SyncEntity;
   entityId: string;
@@ -119,23 +201,8 @@ export async function enqueueSyncOp(input: {
   payload?: unknown;
   mutatedAt?: string;
 }): Promise<void> {
-  const cfg = await getCloudStorageConfig();
-  if (cfg.provider === 'none' || cfg.provider === 'notion') return;
-  // Only enqueue when supabase is configured (connected or credentials saved)
-  if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) return;
-
-  const mutatedAt = input.mutatedAt ?? nowISO();
-  const item: SyncOutboxItem = {
-    opId: uid(),
-    entity: input.entity,
-    entityId: input.entityId,
-    op: input.op,
-    payload: input.payload,
-    mutatedAt,
-    attempts: 0,
-    nextRetryAt: mutatedAt,
-  };
-  await putOutboxItem(item);
+  if (!(await isCloudEnqueueEnabled())) return;
+  await putOutboxItem(makeOutboxItem(input));
 }
 
 export async function listConflicts(): Promise<SyncConflict[]> {
@@ -157,3 +224,4 @@ export async function clearConflicts(): Promise<void> {
   const db = await getDB();
   await db.put('sync_meta', { key: CONFLICTS_KEY, value: [] });
 }
+

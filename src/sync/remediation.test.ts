@@ -1,0 +1,441 @@
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { closeDBForTests, getDB } from '../db';
+import { nowISO } from '../lib/constants';
+import { putVehicle } from '../repositories/vehicles';
+import type { Vehicle } from '../types';
+import { setCloudStorageConfig } from './config';
+import {
+  bidirectionalSync,
+  firstUploadToCloud,
+  restoreFromCloud,
+  setCloudProviderForTests,
+  verifyConnection,
+} from './engine';
+import {
+  ackOutboxCoveredByUpload,
+  getSyncMeta,
+  listOutbox,
+  patchSyncMeta,
+  putOutboxItem,
+} from './outbox';
+import { MemoryCloudProvider } from './providers/memory';
+import { SupabaseProvider } from './providers/supabase';
+import { setSyncTxHookForTests } from './txHooks';
+import { validateCloudRow } from './validatePayload';
+
+async function reset() {
+  setCloudProviderForTests(null);
+  setSyncTxHookForTests(null);
+  await closeDBForTests();
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase('car-care-db');
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => resolve();
+  });
+}
+
+function vehicle(id: string, name: string, updatedAt: string): Vehicle {
+  return {
+    id,
+    name,
+    energyType: 'ICE',
+    bodyType: 'SEDAN',
+    createdAt: updatedAt,
+    updatedAt,
+  };
+}
+
+describe('P0 atomic business + outbox', () => {
+  beforeEach(async () => {
+    await reset();
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setSyncTxHookForTests(null);
+    await closeDBForTests();
+  });
+
+  it('commits vehicle and outbox together', async () => {
+    await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
+    const v = await (await getDB()).get('vehicles', 'v1');
+    const box = await listOutbox();
+    expect(v?.name).toBe('A');
+    expect(box.some((o) => o.entityId === 'v1' && o.op === 'upsert')).toBe(true);
+  });
+
+  it('rolls back business write if outbox phase throws mid-transaction', async () => {
+    setSyncTxHookForTests(() => {
+      throw new Error('inject-fail-before-outbox');
+    });
+    await expect(
+      putVehicle(vehicle('v-fail', 'X', '2026-01-01T00:00:00.000Z')),
+    ).rejects.toThrow(/inject-fail/);
+    const v = await (await getDB()).get('vehicles', 'v-fail');
+    const box = await listOutbox();
+    expect(v).toBeUndefined();
+    expect(box.some((o) => o.entityId === 'v-fail')).toBe(false);
+  });
+});
+
+describe('P0 restore replaceLocal single transaction', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setSyncTxHookForTests(null);
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+
+  it('keeps original local data if apply fails during replaceLocal', async () => {
+    await putVehicle(vehicle('keep', 'Original', '2026-01-01T00:00:00.000Z'));
+    await (await getDB()).clear('sync_outbox');
+    mem.rows.set('vehicles:cloud1', {
+      entity: 'vehicles',
+      id: 'cloud1',
+      payload: vehicle('cloud1', 'FromCloud', '2026-02-01T00:00:00.000Z'),
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    let calls = 0;
+    setSyncTxHookForTests(() => {
+      calls += 1;
+      if (calls >= 1) throw new Error('inject-restore-fail');
+    });
+    const r = await restoreFromCloud({ replaceLocal: true });
+    expect(r.ok).toBe(false);
+    const local = await (await getDB()).getAll('vehicles');
+    expect(local.map((v) => v.id)).toContain('keep');
+    expect(local.find((v) => v.id === 'keep')?.name).toBe('Original');
+    expect(local.some((v) => v.id === 'cloud1')).toBe(false);
+  });
+});
+
+describe('P0 firstUpload selective outbox ack', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+
+  it('does not wipe ops enqueued during upload (newer mutatedAt)', async () => {
+    await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
+    // Simulate concurrent edit during upload by inserting newer outbox before ack logic
+    const original = await firstUploadToCloud();
+    expect(original.ok).toBe(true);
+
+    // Re-seed: upload then add concurrent op, then ack manually mirrors engine behavior
+    await putOutboxItem({
+      opId: 'concurrent',
+      entity: 'vehicles',
+      entityId: 'v1',
+      op: 'upsert',
+      payload: vehicle('v1', 'Newer', '2026-03-01T00:00:00.000Z'),
+      mutatedAt: '2026-03-01T00:00:00.000Z',
+      attempts: 0,
+      nextRetryAt: '2026-03-01T00:00:00.000Z',
+    });
+    await putOutboxItem({
+      opId: 'old',
+      entity: 'vehicles',
+      entityId: 'v1',
+      op: 'upsert',
+      payload: vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'),
+      mutatedAt: '2026-01-01T00:00:00.000Z',
+      attempts: 0,
+      nextRetryAt: '2026-01-01T00:00:00.000Z',
+    });
+    const n = await ackOutboxCoveredByUpload([
+      { entity: 'vehicles', id: 'v1', updatedAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+    expect(n).toBe(1);
+    const box = await listOutbox();
+    expect(box.some((o) => o.opId === 'concurrent')).toBe(true);
+    expect(box.some((o) => o.opId === 'old')).toBe(false);
+  });
+});
+
+describe('P1 payload validation', () => {
+  it('rejects bad vehicle / media / cloudStorage settings', () => {
+    expect(
+      validateCloudRow({
+        entity: 'vehicles',
+        id: 'v1',
+        payload: { id: 'v1', name: 1 },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ).toMatch(/name/);
+    expect(
+      validateCloudRow({
+        entity: 'settings',
+        id: 'cloudStorage',
+        payload: { key: 'cloudStorage', value: {}, updatedAt: '2026-01-01T00:00:00.000Z' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ).toMatch(/cloudStorage/);
+    expect(
+      validateCloudRow({
+        entity: 'media',
+        id: 'm1',
+        payload: {
+          id: 'm1',
+          mimeType: 'text/plain',
+          byteSize: 1,
+          base64: 'abcd',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ).toMatch(/mimeType/);
+  });
+
+  it('restore rejects invalid cloud payload without mutating local', async () => {
+    await reset();
+    const mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+    await putVehicle(vehicle('safe', 'OK', '2026-01-01T00:00:00.000Z'));
+    await (await getDB()).clear('sync_outbox');
+    mem.rows.set('vehicles:bad', {
+      entity: 'vehicles',
+      id: 'bad',
+      payload: { id: 'bad' },
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const r = await restoreFromCloud();
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/校验/);
+    expect(await (await getDB()).get('vehicles', 'safe')).toBeTruthy();
+    setCloudProviderForTests(null);
+    await closeDBForTests();
+  });
+});
+
+describe('P1 Supabase pull pagination', () => {
+  it('aggregates multiple pages beyond page size', async () => {
+    const pages: unknown[][] = [];
+    // 3 pages: 2, 2, 1 with pageSize=2
+    const all = [
+      { entity: 'vehicles', id: 'a', payload: {}, updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null, device_id: null },
+      { entity: 'vehicles', id: 'b', payload: {}, updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null, device_id: null },
+      { entity: 'vehicles', id: 'c', payload: {}, updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null, device_id: null },
+      { entity: 'vehicles', id: 'd', payload: {}, updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null, device_id: null },
+      { entity: 'vehicles', id: 'e', payload: {}, updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null, device_id: null },
+    ];
+
+    const mockClient = {
+      auth: {
+        getUser: async () => ({ data: { user: { id: 'u1', email: 't@t.com' } }, error: null }),
+      },
+      from() {
+        const state = { from: 0, to: 0 };
+        const api = {
+          select() {
+            return api;
+          },
+          eq() {
+            return api;
+          },
+          order() {
+            return api;
+          },
+          range(from: number, to: number) {
+            state.from = from;
+            state.to = to;
+            return Promise.resolve({
+              data: all.slice(from, to + 1),
+              error: null,
+            });
+          },
+        };
+        return api;
+      },
+    };
+
+    const provider = new SupabaseProvider({
+      url: 'https://example.supabase.co',
+      anonKey: 'eyJhbGciOi.test.anon',
+      deviceId: 'dev',
+      client: mockClient as never,
+    });
+    provider.pageSize = 2;
+    const snap = await provider.pullAll();
+    expect(snap.rows).toHaveLength(5);
+    expect(snap.rows.map((r) => r.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    void pages;
+  });
+});
+
+describe('fault injection / dual-device / offline / repeat / delete-conflict', () => {
+  let mem: MemoryCloudProvider;
+  beforeEach(async () => {
+    await reset();
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOi.test.anon',
+    });
+  });
+  afterEach(async () => {
+    setCloudProviderForTests(null);
+    setSyncTxHookForTests(null);
+    await closeDBForTests();
+  });
+
+  it('offline queues and recovers on next sync', async () => {
+    await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
+    expect((await listOutbox()).length).toBeGreaterThan(0);
+    mem.failNextPush = true;
+    const fail = await bidirectionalSync();
+    expect(fail.ok).toBe(false);
+    expect((await listOutbox()).length).toBeGreaterThan(0);
+    // Make failed ops immediately retryable (backoff would otherwise delay)
+    const db = await getDB();
+    for (const item of await listOutbox()) {
+      await db.put('sync_outbox', { ...item, nextRetryAt: '2020-01-01T00:00:00.000Z' });
+    }
+    const ok = await bidirectionalSync();
+    expect(ok.ok).toBe(true);
+    expect(mem.rows.has('vehicles:v1')).toBe(true);
+  });
+
+  it('repeat sync is idempotent', async () => {
+    await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
+    const a = await bidirectionalSync();
+    const b = await bidirectionalSync();
+    expect(a.ok && b.ok).toBe(true);
+    expect(mem.rows.get('vehicles:v1')?.updatedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('dual-device LWW: newer cloud wins; pending local protected', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-05T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'DeviceB', '2026-01-10T00:00:00.000Z'),
+      updatedAt: '2026-01-10T00:00:00.000Z',
+      deletedAt: null,
+    });
+    // clear outbox so pull can apply
+    await (await getDB()).clear('sync_outbox');
+    const r = await bidirectionalSync();
+    expect(r.ok).toBe(true);
+    expect((await (await getDB()).get('vehicles', 'v1'))?.name).toBe('DeviceB');
+  });
+
+  it('delete vs edit: edit wins over older tombstone', async () => {
+    await putVehicle(vehicle('v1', 'Alive', '2026-01-10T00:00:00.000Z'));
+    await (await getDB()).clear('sync_outbox');
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: {},
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      deletedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const r = await restoreFromCloud();
+    expect(r.ok).toBe(true);
+    expect(await (await getDB()).get('vehicles', 'v1')).toBeTruthy();
+  });
+
+  it('user switch clears outbox', async () => {
+    await putVehicle(vehicle('v1', 'A', '2026-01-01T00:00:00.000Z'));
+    await patchSyncMeta({ cloudUserId: 'old-user' });
+    mem.userId = 'new-user';
+    const r = await verifyConnection();
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/切换|队列/);
+    expect(await listOutbox()).toHaveLength(0);
+    expect((await getSyncMeta()).cloudUserId).toBe('new-user');
+  });
+
+  it('pushOps atomic LWW skips older client without TOCTOU pair', async () => {
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'Cloud', '2026-02-01T00:00:00.000Z'),
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    const push = await mem.pushOps([
+      {
+        opId: 'op1',
+        entity: 'vehicles',
+        entityId: 'v1',
+        op: 'upsert',
+        payload: vehicle('v1', 'Stale', '2026-01-01T00:00:00.000Z'),
+        mutatedAt: '2026-01-01T00:00:00.000Z',
+        attempts: 0,
+        nextRetryAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    expect(push.conflicts[0]?.reason).toBe('cloud_newer');
+    expect(mem.rows.get('vehicles:v1')?.payload).toMatchObject({ name: 'Cloud' });
+  });
+});
+
+describe('config security', () => {
+  beforeEach(reset);
+  afterEach(async () => {
+    await closeDBForTests();
+  });
+
+  it('rejects service_role JWT role claim', async () => {
+    // header.payload.sig — payload {"role":"service_role"}
+    const json = JSON.stringify({ role: 'service_role', ref: 'x' });
+    const payload = Buffer.from(json, 'utf8')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const fakeJwt = `eyJhbGciOiJIUzI1NiJ9.${payload}.sig`;
+    await expect(
+      setCloudStorageConfig({
+        provider: 'supabase',
+        supabaseUrl: 'https://abc.supabase.co',
+        supabaseAnonKey: fakeJwt,
+      }),
+    ).rejects.toThrow(/service_role/);
+  });
+
+  it('rejects non-https URL', async () => {
+    await expect(
+      setCloudStorageConfig({
+        provider: 'supabase',
+        supabaseUrl: 'http://abc.supabase.co',
+        supabaseAnonKey: 'eyJhbGciOi.test.anon',
+      }),
+    ).rejects.toThrow(/https/);
+  });
+});
