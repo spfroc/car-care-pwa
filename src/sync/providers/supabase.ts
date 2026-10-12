@@ -9,7 +9,7 @@ import type {
   VerifyResult,
 } from '../types';
 import { MEDIA_BUCKET } from '../types';
-import type { MediaObjectStore, MediaObjectBytes } from '../mediaStorage';
+import type { MediaObjectStore, MediaObjectBytes, MediaObjectListResult } from '../mediaStorage';
 
 type DbRow = {
   user_id: string;
@@ -279,26 +279,55 @@ export class SupabaseMediaObjectStore implements MediaObjectStore {
     if (error) throw new Error(`storage remove: ${error.message}`);
   }
 
-  async listMediaObjectKeys(userId: string): Promise<string[]> {
+  async listMediaObjectKeys(userId: string): Promise<MediaObjectListResult> {
     const keys: string[] = [];
-    // List media_id folders under userId/
+    const createdAtByKey: Record<string, string> = {};
     const { data: folders, error: folderErr } = await this.client.storage
       .from(MEDIA_BUCKET)
       .list(userId, { limit: 1000 });
-    if (folderErr) throw new Error(`storage list: ${folderErr.message}`);
+    if (folderErr) {
+      return { keys: [], complete: false, error: `storage list: ${folderErr.message}` };
+    }
+    // Truncation signal: hit limit → do not claim completeness
+    if ((folders?.length ?? 0) >= 1000) {
+      return {
+        keys: [],
+        complete: false,
+        error: 'storage list truncated at user folder limit',
+      };
+    }
     for (const entry of folders ?? []) {
       if (!entry.name) continue;
-      // Each entry may be a media_id "folder"
       const prefix = `${userId}/${entry.name}`;
       const { data: files, error: fileErr } = await this.client.storage
         .from(MEDIA_BUCKET)
         .list(prefix, { limit: 100 });
-      if (fileErr) continue;
+      // NEVER skip errored subfolders — that would look like a full empty listing
+      if (fileErr) {
+        return {
+          keys: [],
+          complete: false,
+          error: `storage list ${prefix}: ${fileErr.message}`,
+        };
+      }
+      if ((files?.length ?? 0) >= 100) {
+        return {
+          keys: [],
+          complete: false,
+          error: `storage list truncated under ${prefix}`,
+        };
+      }
       for (const f of files ?? []) {
-        if (f.name) keys.push(`${prefix}/${f.name}`);
+        if (!f.name) continue;
+        const key = `${prefix}/${f.name}`;
+        keys.push(key);
+        const created =
+          (f as { created_at?: string }).created_at ||
+          (f as { updated_at?: string }).updated_at;
+        if (created) createdAtByKey[key] = created;
       }
     }
-    return keys;
+    return { keys, complete: true, createdAtByKey };
   }
 
   async headMediaObject(storageKey: string): Promise<{ exists: boolean; byteSize?: number }> {

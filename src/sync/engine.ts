@@ -43,6 +43,16 @@ import type {
   VerifyResult,
 } from './types';
 
+export type MediaMigrateSummary = {
+  migrated: number;
+  skipped: number;
+  /** Legacy base64 rows that still need migration after this pass. */
+  unmigrated: number;
+  failed: number;
+  errors: string[];
+  ok: boolean;
+};
+
 export type SyncActionResult = {
   ok: boolean;
   message: string;
@@ -50,6 +60,8 @@ export type SyncActionResult = {
   merge?: MergeResult;
   pushed?: number;
   pulled?: number;
+  /** Progressive M2→Storage migration outcome (when Storage available). */
+  mediaMigrate?: MediaMigrateSummary;
 };
 
 let providerOverride: CloudProvider | null = null;
@@ -473,7 +485,8 @@ export async function restoreFromCloud(opts?: {
     }
 
     // Progressive migrate: legacy base64 cloud rows → Storage (idempotent)
-    await migrateCloudLegacyMedia(provider);
+    const mediaMigrate = await migrateCloudLegacyMedia(provider);
+    // NOTE: orphan GC is NOT auto-run here (upload→ref race). Use explicit cleanup.
 
     await appendConflicts(plan.conflicts);
     const ts = nowISO();
@@ -481,18 +494,23 @@ export async function restoreFromCloud(opts?: {
       (acc, r) => (r.updatedAt > acc ? r.updatedAt : acc),
       ts,
     );
+    const migrateNote = formatMediaMigrateNote(mediaMigrate);
+    const migrateErr = mediaMigrate.ok
+      ? undefined
+      : `媒体迁移待重试：未完成 ${mediaMigrate.unmigrated} 张；${mediaMigrate.errors.slice(0, 3).join('；')}`;
     await patchSyncMeta({
-      status: 'idle',
+      status: mediaMigrate.ok ? 'idle' : 'error',
       lastPullAt: ts,
       lastSuccessAt: ts,
       serverCursor: maxUpdated,
-      lastError: undefined,
+      lastError: migrateErr,
     });
     return {
-      ok: true,
-      message: `从云端恢复完成：应用 ${plan.appliedUpserts} 条更新、${plan.appliedDeletes} 条删除；跳过本地待推送 ${plan.skippedPendingLocal}。`,
+      ok: mediaMigrate.ok,
+      message: `从云端恢复完成：应用 ${plan.appliedUpserts} 条更新、${plan.appliedDeletes} 条删除；跳过本地待推送 ${plan.skippedPendingLocal}。${migrateNote}`,
       merge: plan,
       pulled: snapshot.rows.length,
+      mediaMigrate,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -587,28 +605,34 @@ export async function bidirectionalSync(): Promise<SyncActionResult> {
     }
 
     // Best-effort: remove Storage objects for media tombstones just applied
+    // (explicit tombstone — not speculative orphan GC)
     await removeStorageForDeletedMedia(provider, plan.toDelete);
-    // Progressive migrate remaining base64 rows
-    await migrateCloudLegacyMedia(provider);
-    // Orphan cleanup (objects without live refs)
-    await runOrphanMediaCleanup(provider);
+    // Progressive migrate remaining base64 rows — surface errors; do not strip failed base64
+    const mediaMigrate = await migrateCloudLegacyMedia(provider);
+    // P0: do NOT auto-run orphan GC during sync (A upload / B GC before DB ref race).
+    // Use runOrphanMediaCleanup explicitly (grace + recheck).
 
     await appendConflicts(plan.conflicts);
     const ts = nowISO();
+    const migrateNote = formatMediaMigrateNote(mediaMigrate);
+    const migrateErr = mediaMigrate.ok
+      ? undefined
+      : `媒体迁移待重试：未完成 ${mediaMigrate.unmigrated} 张；${mediaMigrate.errors.slice(0, 3).join('；')}`;
     await patchSyncMeta({
-      status: 'idle',
+      status: mediaMigrate.ok ? 'idle' : 'error',
       lastPushAt: ts,
       lastPullAt: ts,
       lastSuccessAt: ts,
-      lastError: undefined,
+      lastError: migrateErr,
       serverCursor: snapshot.rows.reduce((a, r) => (r.updatedAt > a ? r.updatedAt : a), ts),
     });
     return {
-      ok: true,
-      message: `双向同步完成：推送 ${pushed}，拉取应用 ${plan.appliedUpserts} 更新 / ${plan.appliedDeletes} 删除。`,
+      ok: mediaMigrate.ok,
+      message: `双向同步完成：推送 ${pushed}，拉取应用 ${plan.appliedUpserts} 更新 / ${plan.appliedDeletes} 删除。${migrateNote}`,
       pushed,
       pulled: snapshot.rows.length,
       merge: plan,
+      mediaMigrate,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -671,24 +695,34 @@ async function enrichOutboxPayloads(
 }
 
 
+function formatMediaMigrateNote(m: MediaMigrateSummary): string {
+  if (!m.migrated && !m.failed && !m.unmigrated) return '';
+  if (m.ok && m.migrated) return ` 媒体迁移：成功 ${m.migrated} 张。`;
+  if (m.ok) return '';
+  return (
+    ` 媒体迁移：成功 ${m.migrated}，失败 ${m.failed}，仍待迁移 ${m.unmigrated}` +
+    `（失败项保留 M2 base64；请重试同步）。` +
+    (m.errors.length ? ` 详情：${m.errors.slice(0, 3).join('；')}` : '')
+  );
+}
+
 /**
  * Progressive, idempotent migration of M2 base64 media rows → Storage v2.
  * Never strips base64 until upload+verify succeeds and refs are switched via LWW upsert.
+ * Partial success is OK: failed rows keep base64 for retry.
  */
-export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<{
-  migrated: number;
-  skipped: number;
-  errors: string[];
-}> {
+export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<MediaMigrateSummary> {
   const store = provider.getMediaObjectStore?.() ?? null;
   const userId = await provider.getAuthUserId?.();
-  if (!store || !userId) return { migrated: 0, skipped: 0, errors: [] };
+  if (!store || !userId) {
+    return { migrated: 0, skipped: 0, unmigrated: 0, failed: 0, errors: [], ok: true };
+  }
 
   const snapshot = await provider.pullAll();
   let migrated = 0;
   let skipped = 0;
+  let failed = 0;
   const errors: string[] = [];
-  const deviceId = await ensureDeviceId();
 
   for (const row of snapshot.rows) {
     if (row.entity !== 'media' || row.deletedAt) continue;
@@ -722,17 +756,40 @@ export async function migrateCloudLegacyMedia(provider: CloudProvider): Promise<
         },
       ]);
       if (push.error) {
+        failed += 1;
         errors.push(`${row.id}: ${push.error}`);
+        // Keep M2 base64 on cloud — do not strip
         continue;
       }
-      if (push.applied.length) migrated += 1;
-      else skipped += 1;
+      if (push.applied.length) {
+        migrated += 1;
+      } else {
+        // LWW skipped — final unmigrated recount decides retry need
+        errors.push(`${row.id}: push skipped (cloud newer / conflict); will re-check`);
+      }
     } catch (e) {
+      failed += 1;
       errors.push(`${row.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  void deviceId;
-  return { migrated, skipped, errors };
+
+  // Re-count remaining legacy after this pass (source of truth for retry)
+  const after = await provider.pullAll();
+  let unmigrated = 0;
+  for (const row of after.rows) {
+    if (row.entity !== 'media' || row.deletedAt) continue;
+    const p = row.payload as CloudMediaPayload;
+    if (isLegacyBase64MediaPayload(p) && !isStorageMediaPayload(p)) unmigrated += 1;
+  }
+
+  return {
+    migrated,
+    skipped,
+    unmigrated,
+    failed,
+    errors,
+    ok: unmigrated === 0,
+  };
 }
 
 async function removeStorageForDeletedMedia(
@@ -749,26 +806,47 @@ async function removeStorageForDeletedMedia(
     try {
       await store.removeMediaObject(key);
     } catch {
-      /* orphan cleanup later */
+      /* explicit orphan GC later */
     }
   }
 }
 
-export async function runOrphanMediaCleanup(provider: CloudProvider): Promise<{
-  removed: string[];
-  errors: string[];
-}> {
-  const store = provider.getMediaObjectStore?.() ?? null;
-  const userId = await provider.getAuthUserId?.();
-  if (!store || !userId) return { removed: [], errors: [] };
-  const snapshot = await provider.pullAll();
+function collectLiveStorageKeys(rows: CloudRow[]): Set<string> {
   const live = new Set<string>();
-  for (const row of snapshot.rows) {
+  for (const row of rows) {
     if (row.entity !== 'media' || row.deletedAt) continue;
     const p = row.payload as CloudMediaPayload;
     if (p.storageKey) live.add(p.storageKey);
   }
-  return cleanupOrphanMediaObjects({ store, userId, liveStorageKeys: live });
+  return live;
+}
+
+/**
+ * Explicit orphan GC only (not called from sync automatically).
+ * Grace period + live-ref recheck before any delete; aborts on incomplete list.
+ */
+export async function runOrphanMediaCleanup(
+  provider: CloudProvider,
+  opts?: { gracePeriodMs?: number; nowMs?: number },
+): Promise<ReturnType<typeof cleanupOrphanMediaObjects>> {
+  const store = provider.getMediaObjectStore?.() ?? null;
+  const userId = await provider.getAuthUserId?.();
+  if (!store || !userId) {
+    return { removed: [], errors: [], skippedGrace: [], skippedRecheck: [] };
+  }
+  const snapshot = await provider.pullAll();
+  const live = collectLiveStorageKeys(snapshot.rows);
+  return cleanupOrphanMediaObjects({
+    store,
+    userId,
+    liveStorageKeys: live,
+    gracePeriodMs: opts?.gracePeriodMs,
+    nowMs: opts?.nowMs,
+    recheckLiveKeys: async () => {
+      const again = await provider.pullAll();
+      return collectLiveStorageKeys(again.rows);
+    },
+  });
 }
 
 export async function disconnectCloud(): Promise<SyncActionResult> {

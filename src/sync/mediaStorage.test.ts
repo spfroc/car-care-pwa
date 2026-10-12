@@ -4,6 +4,7 @@ import {
   cleanupOrphanMediaObjects,
   mimeToExt,
   needsStorageMigration,
+  ORPHAN_GC_DEFAULT_GRACE_MS,
   sha256Hex,
   uploadAndVerifyMedia,
 } from './mediaStorage';
@@ -67,7 +68,7 @@ describe('mediaStorage helpers', () => {
     const uploadsAfterFirst = store.uploadCount;
     const p2 = await uploadAndVerifyMedia({ store, userId: 'u', media });
     expect(p2.storageKey).toBe(p1.storageKey);
-    expect(store.uploadCount).toBe(uploadsAfterFirst); // no extra upload
+    expect(store.uploadCount).toBe(uploadsAfterFirst);
   });
 
   it('upload failure does not leave verified payload', async () => {
@@ -90,7 +91,7 @@ describe('mediaStorage helpers', () => {
     expect(store.objects.size).toBe(0);
   });
 
-  it('orphan cleanup removes unreferenced keys only under user prefix', async () => {
+  it('orphan cleanup removes aged unreferenced keys only under user prefix', async () => {
     const store = new MemoryMediaObjectStore();
     await store.uploadMediaObject({
       storageKey: 'user-a/m1/aaa.bbb',
@@ -107,15 +108,115 @@ describe('mediaStorage helpers', () => {
       body: new Uint8Array([3]),
       contentType: 'image/jpeg',
     });
+    store.ageObject('user-a/m1/aaa.bbb', ORPHAN_GC_DEFAULT_GRACE_MS + 1000);
+    store.ageObject('user-a/m2/ccc.ddd', ORPHAN_GC_DEFAULT_GRACE_MS + 1000);
     const live = new Set(['user-a/m1/aaa.bbb']);
-    const { removed } = await cleanupOrphanMediaObjects({
+    const { removed, aborted } = await cleanupOrphanMediaObjects({
       store,
       userId: 'user-a',
       liveStorageKeys: live,
+      recheckLiveKeys: async () => live,
     });
+    expect(aborted).toBeUndefined();
     expect(removed).toEqual(['user-a/m2/ccc.ddd']);
     expect(store.objects.has('user-a/m1/aaa.bbb')).toBe(true);
     expect(store.objects.has('user-b/m9/eee.fff')).toBe(true);
+  });
+
+  it('P0: refuses GC without recheckLiveKeys', async () => {
+    const store = new MemoryMediaObjectStore();
+    await store.uploadMediaObject({
+      storageKey: 'user-a/m1/x.jpg',
+      body: new Uint8Array([1]),
+      contentType: 'image/jpeg',
+    });
+    store.ageObject('user-a/m1/x.jpg', ORPHAN_GC_DEFAULT_GRACE_MS + 1);
+    const r = await cleanupOrphanMediaObjects({
+      store,
+      userId: 'user-a',
+      liveStorageKeys: new Set(),
+    });
+    expect(r.aborted).toMatch(/recheckLiveKeys/);
+    expect(r.removed).toEqual([]);
+    expect(store.objects.has('user-a/m1/x.jpg')).toBe(true);
+  });
+
+  it('P0: aborts when list incomplete — never deletes', async () => {
+    const store = new MemoryMediaObjectStore();
+    await store.uploadMediaObject({
+      storageKey: 'user-a/orphan/x.jpg',
+      body: new Uint8Array([1]),
+      contentType: 'image/jpeg',
+    });
+    store.ageObject('user-a/orphan/x.jpg', ORPHAN_GC_DEFAULT_GRACE_MS + 1);
+    store.listIncomplete = true;
+    const r = await cleanupOrphanMediaObjects({
+      store,
+      userId: 'user-a',
+      liveStorageKeys: new Set(),
+      recheckLiveKeys: async () => new Set(),
+    });
+    expect(r.aborted).toMatch(/incomplete/);
+    expect(r.removed).toEqual([]);
+    expect(store.objects.has('user-a/orphan/x.jpg')).toBe(true);
+  });
+
+  it('P0: aborts when list throws network error', async () => {
+    const store = new MemoryMediaObjectStore();
+    await store.uploadMediaObject({
+      storageKey: 'user-a/orphan/y.jpg',
+      body: new Uint8Array([1]),
+      contentType: 'image/jpeg',
+    });
+    store.listThrows = true;
+    const r = await cleanupOrphanMediaObjects({
+      store,
+      userId: 'user-a',
+      liveStorageKeys: new Set(),
+      recheckLiveKeys: async () => new Set(),
+    });
+    expect(r.aborted).toMatch(/list failed/);
+    expect(r.removed).toEqual([]);
+  });
+
+  it('P0: grace period protects upload-not-committed race', async () => {
+    const store = new MemoryMediaObjectStore();
+    // A uploaded object; DB ref not committed yet → appears unreferenced
+    await store.uploadMediaObject({
+      storageKey: 'user-a/pending/fresh.jpg',
+      body: new Uint8Array([9, 9, 9]),
+      contentType: 'image/jpeg',
+    });
+    const r = await cleanupOrphanMediaObjects({
+      store,
+      userId: 'user-a',
+      liveStorageKeys: new Set(), // B sees no ref
+      gracePeriodMs: ORPHAN_GC_DEFAULT_GRACE_MS,
+      recheckLiveKeys: async () => new Set(),
+    });
+    expect(r.removed).toEqual([]);
+    expect(r.skippedGrace).toContain('user-a/pending/fresh.jpg');
+    expect(store.objects.has('user-a/pending/fresh.jpg')).toBe(true);
+  });
+
+  it('P0: recheck skips delete if ref appears before remove', async () => {
+    const store = new MemoryMediaObjectStore();
+    const key = 'user-a/race/old.jpg';
+    await store.uploadMediaObject({
+      storageKey: key,
+      body: new Uint8Array([1]),
+      contentType: 'image/jpeg',
+    });
+    store.ageObject(key, ORPHAN_GC_DEFAULT_GRACE_MS + 5000);
+    const r = await cleanupOrphanMediaObjects({
+      store,
+      userId: 'user-a',
+      liveStorageKeys: new Set(), // first snapshot: no ref
+      recheckLiveKeys: async () => new Set([key]), // ref committed before delete
+    });
+    expect(r.removed).toEqual([]);
+    expect(r.skippedRecheck).toContain(key);
+    expect(store.objects.has(key)).toBe(true);
   });
 
   it('needsStorageMigration detects legacy base64-only', () => {

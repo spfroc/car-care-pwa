@@ -5,10 +5,16 @@ import type { MediaObjectStore, MediaObjectBytes } from '../mediaStorage';
 
 /** In-memory fake Storage for unit tests. */
 export class MemoryMediaObjectStore implements MediaObjectStore {
-  objects = new Map<string, { body: Uint8Array; contentType: string }>();
+  objects = new Map<string, { body: Uint8Array; contentType: string; createdAtMs: number }>();
   failNextUpload = false;
   failNextDownload = false;
+  /** When true, list returns complete=false (simulates truncated/network-partial listing). */
+  listIncomplete = false;
+  /** When true, list throws (network error). */
+  listThrows = false;
   uploadCount = 0;
+  /** Injectable clock for createdAt on upload. */
+  nowMs = () => Date.now();
 
   async uploadMediaObject(opts: {
     storageKey: string;
@@ -28,7 +34,12 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
     } else {
       bytes = opts.body;
     }
-    this.objects.set(opts.storageKey, { body: bytes, contentType: opts.contentType });
+    const prev = this.objects.get(opts.storageKey);
+    this.objects.set(opts.storageKey, {
+      body: bytes,
+      contentType: opts.contentType,
+      createdAtMs: prev?.createdAtMs ?? this.nowMs(),
+    });
   }
 
   async downloadMediaObject(storageKey: string): Promise<Blob> {
@@ -38,7 +49,6 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
     }
     const hit = this.objects.get(storageKey);
     if (!hit) throw new Error(`storage download: not found ${storageKey}`);
-    // Copy buffer to satisfy BlobPart typing
     const copy = new Uint8Array(hit.body);
     return new Blob([copy], { type: hit.contentType });
   }
@@ -47,15 +57,32 @@ export class MemoryMediaObjectStore implements MediaObjectStore {
     this.objects.delete(storageKey);
   }
 
-  async listMediaObjectKeys(userId: string): Promise<string[]> {
+  async listMediaObjectKeys(userId: string) {
+    if (this.listThrows) throw new Error('simulated storage list network error');
+    if (this.listIncomplete) {
+      return { keys: [] as string[], complete: false, error: 'simulated incomplete listing' };
+    }
     const prefix = `${userId}/`;
-    return [...this.objects.keys()].filter((k) => k.startsWith(prefix));
+    const keys = [...this.objects.keys()].filter((k) => k.startsWith(prefix));
+    const createdAtByKey: Record<string, string> = {};
+    for (const k of keys) {
+      const o = this.objects.get(k)!;
+      createdAtByKey[k] = new Date(o.createdAtMs).toISOString();
+    }
+    return { keys, complete: true, createdAtByKey };
   }
 
   async headMediaObject(storageKey: string): Promise<{ exists: boolean; byteSize?: number }> {
     const hit = this.objects.get(storageKey);
     if (!hit) return { exists: false };
     return { exists: true, byteSize: hit.body.byteLength };
+  }
+
+  /** Test helper: age an object so grace period allows GC. */
+  ageObject(storageKey: string, ageMs: number): void {
+    const hit = this.objects.get(storageKey);
+    if (!hit) return;
+    hit.createdAtMs = this.nowMs() - ageMs;
   }
 }
 

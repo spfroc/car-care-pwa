@@ -105,12 +105,14 @@ RLS 策略：`storage.foldername(name)[1] = auth.uid()::text`（select/insert/up
 2. Best-effort `remove` 对象；失败留给 orphan cleanup。  
 3. 本地 IDB 媒体照旧硬删。
 
-#### Orphan cleanup（可选、设置页手动或同步末尾）
+#### Orphan cleanup（**仅显式**；不同步自动跑）
 
-1. List `auth.uid()/` 前缀对象。  
+1. List `auth.uid()/` 前缀对象；`complete=false` / 网络错误 → **整次中止、零删除**。  
 2. 拉非删 media 行的 `storageKey` 集合。  
-3. 对象不在集合 → 候选孤儿；**宽限**（默认立即对明确 tombstone 引用清理；无引用且无对应 media id 的可删）。  
-4. 永不跨用户；永不碰他户前缀。
+3. 对象不在集合 → 候选；须过 **grace（默认 24h）**（防 A 上传未提交 DB ref、B GC 误删）。  
+4. 删除前 **再拉一次** live refs（recheck）；若已出现引用则跳过。  
+5. 明确 tombstone 仍可在同步路径 `removeStorageForDeletedMedia` 尽力删对象。  
+6. 永不跨用户；永不碰他户前缀。详见 `docs/m3a-remediation-orphan-gc-migrate.md`。
 
 ### 2.5 失败语义
 

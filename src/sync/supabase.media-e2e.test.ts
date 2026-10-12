@@ -204,7 +204,9 @@ describe.skipIf(!live)('live M3-A media Storage (disposable)', () => {
         contentType: 'image/jpeg',
       });
       await verifyConnection();
-      const cleaned = await runOrphanMediaCleanup(provider);
+      // Explicit cleanup with gracePeriodMs=0 (intentional orphan we just created)
+      const cleaned = await runOrphanMediaCleanup(provider, { gracePeriodMs: 0 });
+      expect(cleaned.aborted).toBeUndefined();
       expect(cleaned.removed).toContain(key);
     },
     60_000,

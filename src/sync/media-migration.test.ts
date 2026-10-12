@@ -7,6 +7,7 @@ import { clearCloudStorageConfig, setCloudStorageConfig } from './config';
 import {
   bidirectionalSync,
   firstUploadToCloud,
+  getSyncStatusSummary,
   migrateCloudLegacyMedia,
   restoreFromCloud,
   runOrphanMediaCleanup,
@@ -16,7 +17,7 @@ import {
 import { MEDIA_SCHEMA_STORAGE } from './types';
 import { MemoryCloudProvider } from './providers/memory';
 import { patchSyncMeta } from './outbox';
-import { isStorageMediaPayload } from './mediaStorage';
+import { isStorageMediaPayload, ORPHAN_GC_DEFAULT_GRACE_MS } from './mediaStorage';
 
 function tinyJpeg(bytes: number[]): Blob {
   return new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
@@ -137,7 +138,8 @@ describe('M3-A media Storage migration (memory provider)', () => {
     await verifyConnection();
     const first = await migrateCloudLegacyMedia(provider);
     expect(first.migrated).toBe(1);
-    expect(first.errors).toEqual([]);
+    expect(first.unmigrated).toBe(0);
+    expect(first.ok).toBe(true);
 
     const row = provider.rows.get('media:legacy-1')!;
     const p = row.payload as { base64?: string; storageKey?: string };
@@ -147,6 +149,8 @@ describe('M3-A media Storage migration (memory provider)', () => {
 
     const second = await migrateCloudLegacyMedia(provider);
     expect(second.migrated).toBe(0);
+    expect(second.ok).toBe(true);
+    expect(second.unmigrated).toBe(0);
     expect(second.skipped).toBeGreaterThanOrEqual(1);
   });
 
@@ -190,6 +194,7 @@ describe('M3-A media Storage migration (memory provider)', () => {
     await verifyConnection();
     const result = await migrateCloudLegacyMedia(provider);
     expect(result.migrated).toBe(1);
+    expect(result.ok).toBe(true);
     const after = provider.rows.get('media:legacy-2')!.payload as {
       base64?: string;
       storageKey?: string;
@@ -198,7 +203,7 @@ describe('M3-A media Storage migration (memory provider)', () => {
     expect(after.storageKey).toBe(tmp.storageKey);
   });
 
-  it('delete tombstone + orphan cleanup removes storage object', async () => {
+  it('delete tombstone + explicit orphan cleanup removes aged storage object', async () => {
     await putLocalMedia({ id: 'media-del', bytes: enoughBytes(9) });
     await verifyConnection();
     await firstUploadToCloud();
@@ -219,7 +224,10 @@ describe('M3-A media Storage migration (memory provider)', () => {
     ]);
     expect(provider.rows.get('media:media-del')!.deletedAt).toBeTruthy();
 
+    // Explicit cleanup after grace (not auto during sync)
+    provider.mediaStore.ageObject(key, ORPHAN_GC_DEFAULT_GRACE_MS + 1000);
     const cleaned = await runOrphanMediaCleanup(provider);
+    expect(cleaned.aborted).toBeUndefined();
     expect(cleaned.removed).toContain(key);
     expect(provider.mediaStore.objects.has(key)).toBe(false);
   });
@@ -267,4 +275,168 @@ describe('M3-A media Storage migration (memory provider)', () => {
     expect(p.storageKey).toBeTruthy();
     expect(p.base64).toBeUndefined();
   });
+
+  it('P0: A upload-not-committed vs B cleanup — no false delete', async () => {
+    await verifyConnection();
+    // Device A: uploaded Storage object; DB row ref NOT committed yet
+    const key = `${provider.userId}/m3a-race/pending.jpg`;
+    await provider.mediaStore.uploadMediaObject({
+      storageKey: key,
+      body: new Uint8Array(enoughBytes(42)),
+      contentType: 'image/jpeg',
+    });
+    expect(provider.rows.has('media:m3a-race')).toBe(false);
+
+    // Device B: sync must NOT auto-GC; explicit cleanup must spare fresh object
+    const sync = await bidirectionalSync();
+    expect(provider.mediaStore.objects.has(key)).toBe(true);
+
+    const cleaned = await runOrphanMediaCleanup(provider);
+    expect(cleaned.removed).not.toContain(key);
+    expect(cleaned.skippedGrace.length + (cleaned.aborted ? 1 : 0)).toBeGreaterThan(0);
+    expect(provider.mediaStore.objects.has(key)).toBe(true);
+
+    // After grace + still no ref → explicit cleanup may remove
+    provider.mediaStore.ageObject(key, ORPHAN_GC_DEFAULT_GRACE_MS + 2000);
+    const aged = await runOrphanMediaCleanup(provider);
+    expect(aged.removed).toContain(key);
+    void sync;
+  });
+
+  it('P0: sync does not call orphan GC (object without ref survives sync)', async () => {
+    await verifyConnection();
+    const key = `${provider.userId}/no-auto-gc/x.jpg`;
+    await provider.mediaStore.uploadMediaObject({
+      storageKey: key,
+      body: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+      contentType: 'image/jpeg',
+    });
+    // Age past grace — if sync auto-GC'd it would delete; must survive
+    provider.mediaStore.ageObject(key, ORPHAN_GC_DEFAULT_GRACE_MS + 5000);
+    await bidirectionalSync();
+    expect(provider.mediaStore.objects.has(key)).toBe(true);
+  });
+
+  it('P1: partial migrate success/fail among multiple images; base64 kept; sync surfaces error', async () => {
+    const makeLegacy = async (id: string, seed: number) => {
+      const bytes = enoughBytes(seed);
+      const blob = tinyJpeg(bytes);
+      const base64 = await blobToBase64(blob);
+      provider.rows.set(`media:${id}`, {
+        entity: 'media',
+        id,
+        payload: {
+          id,
+          mimeType: 'image/jpeg',
+          byteSize: bytes.length,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          base64,
+          schemaVersion: 1,
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+      });
+    };
+    await makeLegacy('legacy-ok', 10);
+    await makeLegacy('legacy-fail', 20);
+    await makeLegacy('legacy-ok2', 30);
+
+    await verifyConnection();
+    // Fail only the first upload attempt (legacy-fail is processed in map order — control via failNextUpload)
+    // Order of Map iteration is insertion order: legacy-ok, legacy-fail, legacy-ok2
+    // Make upload fail when storageKey contains legacy-fail by wrapping upload
+    const orig = provider.mediaStore.uploadMediaObject.bind(provider.mediaStore);
+    provider.mediaStore.uploadMediaObject = async (opts) => {
+      if (opts.storageKey.includes('/legacy-fail/')) {
+        throw new Error('simulated migrate upload fail for legacy-fail');
+      }
+      return orig(opts);
+    };
+
+    const mig = await migrateCloudLegacyMedia(provider);
+    expect(mig.migrated).toBe(2);
+    expect(mig.failed).toBe(1);
+    expect(mig.unmigrated).toBe(1);
+    expect(mig.ok).toBe(false);
+    expect(mig.errors.some((e) => e.includes('legacy-fail'))).toBe(true);
+
+    // Failed row keeps M2 base64
+    const failedPayload = provider.rows.get('media:legacy-fail')!.payload as {
+      base64?: string;
+      storageKey?: string;
+    };
+    expect(failedPayload.base64).toBeTruthy();
+    expect(failedPayload.storageKey).toBeUndefined();
+
+    // Successful ones switched
+    expect(
+      (provider.rows.get('media:legacy-ok')!.payload as { storageKey?: string }).storageKey,
+    ).toBeTruthy();
+    expect(
+      (provider.rows.get('media:legacy-ok2')!.payload as { base64?: string }).base64,
+    ).toBeUndefined();
+
+    // Sync surfaces migrate failure for retry path
+    provider.mediaStore.uploadMediaObject = orig; // restore — retry should succeed
+    const sync = await bidirectionalSync();
+    expect(sync.mediaMigrate).toBeTruthy();
+    // After retry with working upload, should complete
+    expect(sync.mediaMigrate!.ok).toBe(true);
+    expect(sync.mediaMigrate!.unmigrated).toBe(0);
+    expect(sync.message).not.toMatch(/待重试/);
+    const status = await getSyncStatusSummary();
+    expect(status.meta.status).toBe('idle');
+
+    // Retry preserved data: previously failed now migrated
+    const after = provider.rows.get('media:legacy-fail')!.payload as {
+      base64?: string;
+      storageKey?: string;
+    };
+    expect(after.storageKey).toBeTruthy();
+    expect(after.base64).toBeUndefined();
+  });
+
+  it('P1: sync message reports unmigrated when migrate still failing', async () => {
+    const bytes = enoughBytes(55);
+    const blob = tinyJpeg(bytes);
+    const base64 = await blobToBase64(blob);
+    provider.rows.set('media:legacy-stuck', {
+      entity: 'media',
+      id: 'legacy-stuck',
+      payload: {
+        id: 'legacy-stuck',
+        mimeType: 'image/jpeg',
+        byteSize: bytes.length,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        base64,
+        schemaVersion: 1,
+      },
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await verifyConnection();
+    provider.mediaStore.failNextUpload = true;
+    // Also fail subsequent uploads during sync migrate
+    const orig = provider.mediaStore.uploadMediaObject.bind(provider.mediaStore);
+    let blows = 0;
+    provider.mediaStore.uploadMediaObject = async (opts) => {
+      blows += 1;
+      throw new Error(`persist fail ${blows}`);
+    };
+
+    const sync = await bidirectionalSync();
+    expect(sync.ok).toBe(false);
+    expect(sync.mediaMigrate?.unmigrated).toBe(1);
+    expect(sync.message).toMatch(/媒体迁移/);
+    expect(sync.message).toMatch(/待迁移|失败|重试/);
+    const stuck = provider.rows.get('media:legacy-stuck')!.payload as { base64?: string };
+    expect(stuck.base64).toBeTruthy();
+
+    const status = await getSyncStatusSummary();
+    expect(status.meta.status).toBe('error');
+    expect(status.meta.lastError).toMatch(/媒体迁移待重试/);
+
+    provider.mediaStore.uploadMediaObject = orig;
+  });
+
 });

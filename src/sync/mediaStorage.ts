@@ -8,6 +8,19 @@ import { MEDIA_SCHEMA_STORAGE, MEDIA_BUCKET } from './types';
 
 export type MediaObjectBytes = Blob | ArrayBuffer | Uint8Array;
 
+/** Result of listing Storage objects. Incomplete lists must abort GC. */
+export type MediaObjectListResult = {
+  keys: string[];
+  /** false if truncated, errored mid-walk, or otherwise untrusted — NEVER delete from this. */
+  complete: boolean;
+  /** ISO created/updated times when known (grace-period checks). */
+  createdAtByKey?: Record<string, string>;
+  error?: string;
+};
+
+/** Default grace: protect upload→DB-ref race (device A upload, device B GC). */
+export const ORPHAN_GC_DEFAULT_GRACE_MS = 24 * 60 * 60 * 1000;
+
 export interface MediaObjectStore {
   /** Upload (idempotent overwrite). Returns the storage key used. */
   uploadMediaObject(opts: {
@@ -19,8 +32,11 @@ export interface MediaObjectStore {
   downloadMediaObject(storageKey: string): Promise<Blob>;
   /** Best-effort delete; missing object is OK. */
   removeMediaObject(storageKey: string): Promise<void>;
-  /** List object names under `{userId}/` (relative to bucket). */
-  listMediaObjectKeys(userId: string): Promise<string[]>;
+  /**
+   * List objects under `{userId}/`.
+   * On network/list failure set complete=false (or throw) — never return a partial list as complete.
+   */
+  listMediaObjectKeys(userId: string): Promise<MediaObjectListResult>;
   /** Optional existence + size check without full download. */
   headMediaObject?(storageKey: string): Promise<{ exists: boolean; byteSize?: number }>;
 }
@@ -172,19 +188,118 @@ export async function migrateLegacyPayloadToStorage(opts: {
   return uploadAndVerifyMedia({ store, userId, media });
 }
 
-/** Remove Storage objects for tombstoned / orphaned media keys. */
+export type OrphanCleanupResult = {
+  removed: string[];
+  errors: string[];
+  skippedGrace: string[];
+  skippedRecheck: string[];
+  /** When set, no deletes were performed. */
+  aborted?: string;
+};
+
+/**
+ * Safe orphan GC: never delete from an incomplete list; respect grace period;
+ * re-check live refs immediately before each delete (A upload / B GC race).
+ * Sync must NOT call this automatically — explicit cleanup only.
+ */
 export async function cleanupOrphanMediaObjects(opts: {
   store: MediaObjectStore;
   userId: string;
+  /** First-pass live keys from DB snapshot. */
   liveStorageKeys: Set<string>;
-}): Promise<{ removed: string[]; errors: string[] }> {
-  const { store, userId, liveStorageKeys } = opts;
-  const listed = await store.listMediaObjectKeys(userId);
+  /** Protect recently uploaded objects whose DB ref may not be committed yet. */
+  gracePeriodMs?: number;
+  nowMs?: number;
+  /**
+   * Re-fetch live storage keys immediately before deletes.
+   * Required for race safety; if omitted, cleanup aborts.
+   */
+  recheckLiveKeys?: () => Promise<Set<string>>;
+}): Promise<OrphanCleanupResult> {
+  const {
+    store,
+    userId,
+    liveStorageKeys,
+    gracePeriodMs = ORPHAN_GC_DEFAULT_GRACE_MS,
+    nowMs = Date.now(),
+    recheckLiveKeys,
+  } = opts;
+
+  const empty = (): OrphanCleanupResult => ({
+    removed: [],
+    errors: [],
+    skippedGrace: [],
+    skippedRecheck: [],
+  });
+
+  if (!recheckLiveKeys) {
+    return { ...empty(), aborted: 'recheckLiveKeys required — refusing unsafe orphan GC' };
+  }
+
+  let listed: MediaObjectListResult;
+  try {
+    listed = await store.listMediaObjectKeys(userId);
+  } catch (e) {
+    return {
+      ...empty(),
+      aborted: `list failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  if (!listed.complete) {
+    return {
+      ...empty(),
+      aborted: listed.error
+        ? `incomplete list: ${listed.error}`
+        : 'incomplete list — refusing to treat partial listing as full',
+    };
+  }
+
+  const candidates: string[] = [];
+  const skippedGrace: string[] = [];
+  for (const key of listed.keys) {
+    if (!key.startsWith(`${userId}/`)) continue;
+    if (liveStorageKeys.has(key)) continue;
+    const createdIso = listed.createdAtByKey?.[key];
+    if (createdIso) {
+      const createdMs = Date.parse(createdIso);
+      if (!Number.isNaN(createdMs) && nowMs - createdMs < gracePeriodMs) {
+        skippedGrace.push(key);
+        continue;
+      }
+    } else if (gracePeriodMs > 0) {
+      // Unknown age + nonzero grace → treat as young (safe default for upload race)
+      skippedGrace.push(key);
+      continue;
+    }
+    candidates.push(key);
+  }
+
+  if (!candidates.length) {
+    return { removed: [], errors: [], skippedGrace, skippedRecheck: [] };
+  }
+
+  let liveNow: Set<string>;
+  try {
+    liveNow = await recheckLiveKeys();
+  } catch (e) {
+    return {
+      removed: [],
+      errors: [],
+      skippedGrace,
+      skippedRecheck: [],
+      aborted: `recheck refs failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
   const removed: string[] = [];
   const errors: string[] = [];
-  for (const key of listed) {
-    if (!key.startsWith(`${userId}/`)) continue; // belt-and-suspenders
-    if (liveStorageKeys.has(key)) continue;
+  const skippedRecheck: string[] = [];
+  for (const key of candidates) {
+    if (liveNow.has(key)) {
+      skippedRecheck.push(key);
+      continue;
+    }
     try {
       await store.removeMediaObject(key);
       removed.push(key);
@@ -192,7 +307,7 @@ export async function cleanupOrphanMediaObjects(opts: {
       errors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return { removed, errors };
+  return { removed, errors, skippedGrace, skippedRecheck };
 }
 
 export { MEDIA_BUCKET };
