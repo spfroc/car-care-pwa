@@ -8,11 +8,13 @@
 |------|------|------|------|
 | **M2** | 用户自有云（行同步 + outbox） | ✅ 已上线 | Supabase 行表、LWW、设置 UI、账号切换安全 |
 | **M3-A** | 媒体私有 Storage | ✅ 已上线（生产静态） | base64→Storage、RLS bucket、迁移/孤儿 GC 策略 |
-| **M3-B** | 多标签锁 · BG Sync 增强 · Outbox  Harden | 🚧 本分支 | Web Locks / lease、BG Sync 可选、关页/并发不丢队列 |
-| **M3-C** | 冲突合并 UI + 双端体验 | 📋 后续 | 设置页冲突列表可操作（保留本地/采用云端）；删除恢复可视；双设备交叉编辑验收 |
+| **M3-B** | 多标签锁 · BG Sync 增强 · Outbox  Harden | ✅ 已上线（生产 d7dd681 / car.adobesun.com；car-test 同版本） | Web Locks / lease、BG Sync 可选、关页/并发不丢队列 |
+| **M3-C** | 冲突合并 UI + 双端体验 | 🚧 进行中（设计中） | 设置页冲突列表可操作（保留本地/采用云端）；删除恢复可视；双设备交叉编辑验收 |
 | **M3-D** | Notion（或其它 adapter） | 📋 仅可行性通过后 | 见 `notion-sync-feasibility.md`；安全认证前不接真 API |
 
 ## 明确不在 M3-B
+
+> M3-B 生产报告见 `docs/m3b-prod-deploy-report.md`。
 
 - 冲突可视化合并（→ M3-C）  
 - Notion 真同步（→ M3-D）  
