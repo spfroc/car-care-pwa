@@ -71,7 +71,8 @@ New / extended cases:
 
 ## 4. Commit SHA(s)
 
-`83c4e907bcac4b545aa6622686aff3e56b2c2493` (`83c4e90`)
+- `83c4e907bcac4b545aa6622686aff3e56b2c2493` (`83c4e90`) — main remediation
+- `b8c1edfc9ab013f1ee692d06f19478576bf8be65` (`b8c1edf`) — report SHA note
 
 ---
 
