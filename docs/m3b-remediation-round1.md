@@ -10,7 +10,11 @@
 | renew/release 校验 holder 且条件更新 | `renewIdbLease` / `releaseIdbLease`：同 txn 读后仅当 `holderId === me` 才 put/delete |
 | 双标签独立上下文测试 | `SyncLockSession` 每实例独立 `holderId` + in-process 门闩；测试用 `tab-A` / `tab-B` |
 | TTL 接管后旧持有者不得覆盖/释放新租约 | renew→`lost`；release→`skipped`；断言 lease 仍为新 holder |
-| 同步超过 TTL 的安全行为 | 续租失败 → `SyncLeaseLostError`；中止本次同步；**不** delete 新租约；outbox 保留；文案提示重试 |
+| 同步超过 TTL 的安全行为 | 续租失败 → `AbortSignal.abort` + `SyncLeaseLostError`；**不** delete 新租约 |
+| Promise.race 不取消 fn（剩余 P0） | **已废止 race**：`fn(signal)`；续租 lost → `abort`；云写/合并/outbox ACK 前 `throwIfSyncAborted` |
+| 飞行中网络 | 返回后若已 abort → 结果不确定；**绝不** delete/ACK outbox |
+| 不声称已安全停住 | 文案含「不确定 / 队列未确认删除」 |
+| Web Locks 路径 | 不变（signal 不由锁层 abort） |
 
 ## P1 — BG Sync 路径不完整
 

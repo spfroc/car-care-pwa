@@ -10,6 +10,7 @@ import {
   SyncLeaseLostError,
   SyncLockSession,
   SYNC_LEASE_TTL_MS,
+  throwIfSyncAborted,
   withSyncLock,
   resetTabLockForTests,
 } from './tabLock';
@@ -38,12 +39,12 @@ describe('IDB lease atomicity + two-tab sessions', () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    const first = tab.withSyncLock(async () => {
+    const first = tab.withSyncLock(async (_signal) => {
       await gate;
       return 'a';
     });
     await new Promise((r) => setTimeout(r, 15));
-    const second = await tab.withSyncLock(async () => 'b');
+    const second = await tab.withSyncLock(async (_s) => 'b');
     expect(second.ok).toBe(false);
     if (!second.ok) expect(second.lockMode).toBe('in-process');
     release();
@@ -57,14 +58,14 @@ describe('IDB lease atomicity + two-tab sessions', () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    const first = tabA.withSyncLock(async () => {
+    const first = tabA.withSyncLock(async (_signal) => {
       await gate;
       return 'a';
     });
     await new Promise((r) => setTimeout(r, 20));
     const lease = await readLeaseForTests();
     expect(lease?.holderId).toBe('tab-A');
-    const second = await tabB.withSyncLock(async () => 'b');
+    const second = await tabB.withSyncLock(async (_s) => 'b');
     expect(second.ok).toBe(false);
     if (!second.ok) expect(second.lockMode).toBe('idb-lease');
     release();
@@ -101,27 +102,79 @@ describe('IDB lease atomicity + two-tab sessions', () => {
     expect(holder === 'race-A' || holder === 'race-B').toBe(true);
   });
 
-  it('sync exceeding TTL: renew lost → SyncLeaseLostError; new lease intact', async () => {
-    const tabA = new SyncLockSession('long-A');
+  it('sync exceeding TTL: renew lost → AbortSignal; new lease intact', async () => {
+    const tabA = new SyncLockSession('long-A', { renewMs: 25 });
     const tabB = new SyncLockSession('long-B');
-    let hitLost = false;
-    const run = tabA.withSyncLock(async () => {
-      // Expire A and let B take over, then force A's renew (as the interval would)
-      const db = await getDB();
-      await db.put('sync_meta', {
-        key: 'syncTabLease',
-        value: { holderId: 'long-A', expiresAt: Date.now() - 1 },
-      });
-      expect(await tabB.tryAcquireIdbLease()).toBe(true);
-      expect(await tabA.renewIdbLease()).toBe('lost');
-      hitLost = true;
-      // Simulate the race handler aborting the in-flight sync
-      throw new SyncLeaseLostError();
+    let releaseBlock!: () => void;
+    const blocked = new Promise<void>((r) => {
+      releaseBlock = r;
     });
+    const sideEffects: string[] = [];
+    const run = tabA.withSyncLock(async (signal) => {
+      await blocked;
+      throwIfSyncAborted(signal);
+      sideEffects.push('cloud-write');
+      throwIfSyncAborted(signal);
+      sideEffects.push('outbox-delete');
+      return 'done';
+    });
+    // Let A acquire + start fn
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await readLeaseForTests())?.holderId).toBe('long-A');
+    // Expire A; B takes over
+    const db = await getDB();
+    await db.put('sync_meta', {
+      key: 'syncTabLease',
+      value: { holderId: 'long-A', expiresAt: Date.now() - 1 },
+    });
+    expect(await tabB.tryAcquireIdbLease()).toBe(true);
+    // Wait for A's renew timer to abort the signal
+    await new Promise((r) => setTimeout(r, 80));
+    releaseBlock();
     await expect(run).rejects.toBeInstanceOf(SyncLeaseLostError);
-    expect(hitLost).toBe(true);
+    expect(sideEffects).toEqual([]);
     expect((await readLeaseForTests())?.holderId).toBe('long-B');
     expect(await tabA.releaseIdbLease()).toBe('skipped');
+    await tabB.releaseIdbLease();
+  });
+
+  it('P0: A blocked → B takes lease → A resumes → no unsafe side effects', async () => {
+    const tabA = new SyncLockSession('abort-A', { renewMs: 20 });
+    const tabB = new SyncLockSession('abort-B');
+    let releaseBlock!: () => void;
+    const blocked = new Promise<void>((r) => {
+      releaseBlock = r;
+    });
+    const sideEffects: string[] = [];
+    let sawAbort = false;
+    const run = tabA.withSyncLock(async (signal) => {
+      await blocked;
+      try {
+        throwIfSyncAborted(signal);
+        sideEffects.push('pushOps');
+        throwIfSyncAborted(signal);
+        sideEffects.push('removeOutbox');
+        throwIfSyncAborted(signal);
+        sideEffects.push('applyCloudRows');
+      } catch (e) {
+        if (e instanceof SyncLeaseLostError) sawAbort = true;
+        throw e;
+      }
+      return 'should-not';
+    });
+    await new Promise((r) => setTimeout(r, 15));
+    const db = await getDB();
+    await db.put('sync_meta', {
+      key: 'syncTabLease',
+      value: { holderId: 'abort-A', expiresAt: Date.now() - 1 },
+    });
+    expect(await tabB.tryAcquireIdbLease()).toBe(true);
+    await new Promise((r) => setTimeout(r, 60));
+    releaseBlock();
+    await expect(run).rejects.toBeInstanceOf(SyncLeaseLostError);
+    expect(sawAbort).toBe(true);
+    expect(sideEffects).toEqual([]);
+    expect((await readLeaseForTests())?.holderId).toBe('abort-B');
     await tabB.releaseIdbLease();
   });
 
@@ -137,7 +190,7 @@ describe('IDB lease atomicity + two-tab sessions', () => {
     );
     vi.stubGlobal('navigator', { locks: { request }, onLine: true });
     const tab = new SyncLockSession('wl');
-    const r = await tab.withSyncLock(async () => 'nope');
+    const r = await tab.withSyncLock(async (_signal) => 'nope');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.lockMode).toBe('web-locks');
   });
@@ -203,7 +256,7 @@ describe('default withSyncLock export', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('works via module default session', async () => {
-    const r = await withSyncLock(async () => 1);
+    const r = await withSyncLock(async (_signal) => 1);
     expect(r.ok).toBe(true);
   });
 });

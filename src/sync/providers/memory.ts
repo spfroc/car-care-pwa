@@ -95,6 +95,8 @@ export class MemoryCloudProvider implements CloudProvider {
   offline = false;
   pageSize = 1000;
   pushCallCount = 0;
+  /** Test: resolve before pushOps continues (lease-loss mid-flight). */
+  pushGate: Promise<void> | null = null;
   mediaStore = new MemoryMediaObjectStore();
   /** When false, getMediaObjectStore returns null (legacy M2 behaviour). */
   enableMediaStore = true;
@@ -119,6 +121,7 @@ export class MemoryCloudProvider implements CloudProvider {
   /** Atomic LWW — skipped_cloud_newer is conflict-only (not applied). */
   async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
     this.pushCallCount += 1;
+    if (this.pushGate) await this.pushGate;
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
     if (this.failNextPush) {
       this.failNextPush = false;

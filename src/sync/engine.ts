@@ -33,6 +33,7 @@ import {
   hasFreshHeartbeat,
   isWebSyncLockHeld,
   SyncLeaseLostError,
+  throwIfSyncAborted,
   withSyncLock,
 } from './tabLock';
 import { registerBackgroundOutboxSync } from './backgroundSync';
@@ -95,7 +96,7 @@ export async function recoverStaleSyncingStatus(): Promise<boolean> {
 
 async function runExclusiveSync(
   _label: string,
-  fn: () => Promise<SyncActionResult>,
+  fn: (signal: AbortSignal) => Promise<SyncActionResult>,
 ): Promise<SyncActionResult> {
   await recoverStaleSyncingStatus();
   try {
@@ -441,22 +442,31 @@ export async function verifyConnection(): Promise<SyncActionResult> {
 }
 
 /** First upload: local → cloud. Does not pull/overwrite local. */
-async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
+async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
   const authBlock = await ensureAuthMatchesBoundAccount(provider);
   if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
+    throwIfSyncAborted(signal);
     const snap = await readLocalSnapshot();
     const mediaStore = provider.getMediaObjectStore?.() ?? null;
     const userId = (await provider.getAuthUserId?.()) ?? (await getSyncMeta()).cloudUserId;
     const rows = await localSnapshotToCloudRows(snap, { mediaStore, userId });
+    throwIfSyncAborted(signal);
     const result = await provider.pushSnapshot(rows);
+    // In-flight result is uncertain after lease loss — never ACK/delete outbox.
+    if (signal.aborted) {
+      throw new SyncLeaseLostError(
+        '同步锁已超时并被其他标签页接管；上传结果不确定，队列未确认删除，请重试。',
+      );
+    }
     if (result.error && !result.applied.length && !result.conflicts.length) {
       await patchSyncMeta({ status: 'error', lastError: result.error });
       return { ok: false, message: `首次上传失败：${result.error}`, pushed: 0 };
     }
+    throwIfSyncAborted(signal);
     // Ack only rows actually written (LWW may skip cloud-newer — do not ack those)
     const appliedKeys = new Set(result.applied);
     const uploadedOk = rows.filter((r) => appliedKeys.has(`${r.entity}:${r.id}`));
@@ -464,6 +474,7 @@ async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
       uploadedOk.map((r) => ({ entity: r.entity, id: r.id, updatedAt: r.updatedAt })),
     );
     if (result.conflicts.length) {
+      throwIfSyncAborted(signal);
       await appendConflicts(
         result.conflicts.map((c) => ({
           id: uid(),
@@ -477,6 +488,7 @@ async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
       // Drop only the stale conflicted opIds; keep newer mid-upload ops
       await removeStaleConflictOps(result.conflicts);
     }
+    throwIfSyncAborted(signal);
     const ts = nowISO();
     const skipped = result.conflicts.length;
     await patchSyncMeta({
@@ -491,6 +503,7 @@ async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
       pushed: result.applied.length,
     };
   } catch (e) {
+    if (e instanceof SyncLeaseLostError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     await patchSyncMeta({ status: 'error', lastError: msg });
     return { ok: false, message: msg };
@@ -501,16 +514,25 @@ async function firstUploadToCloudUnlocked(): Promise<SyncActionResult> {
  * Restore from cloud into local (merge LWW).
  * replaceLocal: clear+apply in ONE transaction; failure leaves prior local intact.
  */
-async function restoreFromCloudUnlocked(opts?: {
-  replaceLocal?: boolean;
-}): Promise<SyncActionResult> {
+async function restoreFromCloudUnlocked(
+  signal: AbortSignal,
+  opts?: {
+    replaceLocal?: boolean;
+  },
+): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
   const authBlock = await ensureAuthMatchesBoundAccount(provider);
   if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
+    throwIfSyncAborted(signal);
     const snapshot = await provider.pullAll();
+    if (signal.aborted) {
+      throw new SyncLeaseLostError(
+        '同步锁已超时并被其他标签页接管；拉取结果不确定，未合并本地，请重试。',
+      );
+    }
     // Validate before any local mutation
     assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
 
@@ -526,6 +548,7 @@ async function restoreFromCloudUnlocked(opts?: {
       nowISO(),
     );
 
+    throwIfSyncAborted(signal);
     try {
       await applyCloudRows(plan.toUpsert, plan.toDelete, {
         replaceLocal: opts?.replaceLocal,
@@ -533,15 +556,18 @@ async function restoreFromCloudUnlocked(opts?: {
         mediaStore: provider.getMediaObjectStore?.() ?? null,
       });
     } catch (e) {
+      if (e instanceof SyncLeaseLostError) throw e;
       const msg = e instanceof Error ? e.message : String(e);
       await patchSyncMeta({ status: 'error', lastError: `恢复写入失败（事务已中止）：${msg}` });
       return { ok: false, message: `恢复失败，本地保持原样：${msg}` };
     }
 
     // Progressive migrate: legacy base64 cloud rows → Storage (idempotent)
+    throwIfSyncAborted(signal);
     const mediaMigrate = await migrateCloudLegacyMedia(provider);
     // NOTE: orphan GC is NOT auto-run here (upload→ref race). Use explicit cleanup.
 
+    throwIfSyncAborted(signal);
     await appendConflicts(plan.conflicts);
     const ts = nowISO();
     const maxUpdated = snapshot.rows.reduce(
@@ -559,6 +585,7 @@ async function restoreFromCloudUnlocked(opts?: {
       serverCursor: maxUpdated,
       lastError: migrateErr,
     });
+    throwIfSyncAborted(signal);
     return {
       ok: mediaMigrate.ok,
       message: `从云端恢复完成：应用 ${plan.appliedUpserts} 条更新、${plan.appliedDeletes} 条删除；跳过本地待推送 ${plan.skippedPendingLocal}。${migrateNote}`,
@@ -567,6 +594,7 @@ async function restoreFromCloudUnlocked(opts?: {
       mediaMigrate,
     };
   } catch (e) {
+    if (e instanceof SyncLeaseLostError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     await patchSyncMeta({ status: 'error', lastError: msg });
     return { ok: false, message: msg };
@@ -585,7 +613,7 @@ async function buildLocalIndex(): Promise<Map<string, { updatedAt: string }>> {
 }
 
 /** Bidirectional: push ready outbox, then pull+merge. */
-async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
+async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
 
@@ -599,20 +627,30 @@ async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
 
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
+    throwIfSyncAborted(signal);
     const ready = await listReadyOutbox();
     const enriched = await enrichOutboxPayloads(ready, provider);
     let pushed = 0;
     if (enriched.length) {
+      throwIfSyncAborted(signal);
       const push = await provider.pushOps(enriched);
+      // Lease lost during/after in-flight push: result uncertain — NEVER delete outbox.
+      if (signal.aborted) {
+        throw new SyncLeaseLostError(
+          '同步锁已超时并被其他标签页接管；推送结果不确定，队列未确认删除，请重试。',
+        );
+      }
       if (push.error && !push.applied.length && !push.conflicts.length) {
         for (const op of enriched) await markOutboxFailure(op.opId, push.error);
         await patchSyncMeta({ status: 'error', lastError: push.error });
         return { ok: false, message: `推送失败：${push.error}` };
       }
+      throwIfSyncAborted(signal);
       // Successfully written — remove those opIds (newer mid-sync ops have different opIds)
       await removeOutboxItems(push.applied);
       pushed = push.applied.length;
       if (push.conflicts.length) {
+        throwIfSyncAborted(signal);
         await appendConflicts(
           push.conflicts.map((c) => ({
             id: uid(),
@@ -627,13 +665,20 @@ async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
         await removeStaleConflictOps(push.conflicts);
       }
       if (push.error) {
+        throwIfSyncAborted(signal);
         const done = new Set([...push.applied, ...push.conflicts.map((c) => c.opId)]);
         const remaining = enriched.filter((o) => !done.has(o.opId));
         for (const op of remaining) await markOutboxFailure(op.opId, push.error);
       }
     }
 
+    throwIfSyncAborted(signal);
     const snapshot = await provider.pullAll();
+    if (signal.aborted) {
+      throw new SyncLeaseLostError(
+        '同步锁已超时并被其他标签页接管；拉取结果不确定，未合并本地，请重试。',
+      );
+    }
     assertCloudRowsValid(snapshot.rows.filter((r) => !r.deletedAt));
     const localIndex = await buildLocalIndex();
     const pending = await listOutboxForUser((await getSyncMeta()).cloudUserId);
@@ -644,11 +689,13 @@ async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
       nowISO(),
     );
 
+    throwIfSyncAborted(signal);
     try {
       await applyCloudRows(plan.toUpsert, plan.toDelete, {
         mediaStore: provider.getMediaObjectStore?.() ?? null,
       });
     } catch (e) {
+      if (e instanceof SyncLeaseLostError) throw e;
       const msg = e instanceof Error ? e.message : String(e);
       await patchSyncMeta({ status: 'error', lastError: `拉取合并失败：${msg}` });
       return {
@@ -658,14 +705,17 @@ async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
       };
     }
 
+    throwIfSyncAborted(signal);
     // Best-effort: remove Storage objects for media tombstones just applied
     // (explicit tombstone — not speculative orphan GC)
     await removeStorageForDeletedMedia(provider, plan.toDelete);
     // Progressive migrate remaining base64 rows — surface errors; do not strip failed base64
+    throwIfSyncAborted(signal);
     const mediaMigrate = await migrateCloudLegacyMedia(provider);
     // P0: do NOT auto-run orphan GC during sync (A upload / B GC before DB ref race).
     // Use runOrphanMediaCleanup explicitly (grace + recheck).
 
+    throwIfSyncAborted(signal);
     await appendConflicts(plan.conflicts);
     const ts = nowISO();
     const migrateNote = formatMediaMigrateNote(mediaMigrate);
@@ -689,6 +739,7 @@ async function bidirectionalSyncUnlocked(): Promise<SyncActionResult> {
       mediaMigrate,
     };
   } catch (e) {
+    if (e instanceof SyncLeaseLostError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     await patchSyncMeta({ status: 'error', lastError: msg });
     return { ok: false, message: msg };
@@ -954,17 +1005,17 @@ export async function getSyncStatusSummary(): Promise<{
 
 /** M3-B: exclusive first upload (cross-tab lock). */
 export async function firstUploadToCloud(): Promise<SyncActionResult> {
-  return runExclusiveSync('firstUpload', () => firstUploadToCloudUnlocked());
+  return runExclusiveSync('firstUpload', (signal) => firstUploadToCloudUnlocked(signal));
 }
 
 /** M3-B: exclusive restore (cross-tab lock). */
 export async function restoreFromCloud(opts?: {
   replaceLocal?: boolean;
 }): Promise<SyncActionResult> {
-  return runExclusiveSync('restore', () => restoreFromCloudUnlocked(opts));
+  return runExclusiveSync('restore', (signal) => restoreFromCloudUnlocked(signal, opts));
 }
 
 /** M3-B: exclusive bidirectional sync (cross-tab lock). */
 export async function bidirectionalSync(): Promise<SyncActionResult> {
-  return runExclusiveSync('bidirectional', () => bidirectionalSyncUnlocked());
+  return runExclusiveSync('bidirectional', (signal) => bidirectionalSyncUnlocked(signal));
 }

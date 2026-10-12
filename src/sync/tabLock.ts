@@ -20,10 +20,20 @@ export const SYNC_LEASE_RENEW_MS = 30_000;
  * must abort the sync and must NOT release/overwrite the new lease.
  */
 export class SyncLeaseLostError extends Error {
-  constructor(message = '同步锁已超时并被其他标签页接管；本次同步已中止，队列仍保留，请重试。') {
+  constructor(
+    message = '同步锁已超时并被其他标签页接管；本次同步已中止，队列仍保留（未确认的云端结果视为不确定），请重试。',
+  ) {
     super(message);
     this.name = 'SyncLeaseLostError';
   }
+}
+
+/** Throw SyncLeaseLostError when the sync AbortSignal was aborted (lease lost). */
+export function throwIfSyncAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  const reason = (signal as AbortSignal & { reason?: unknown }).reason;
+  if (reason instanceof SyncLeaseLostError) throw reason;
+  throw new SyncLeaseLostError();
 }
 
 export type SyncLockMode = 'web-locks' | 'idb-lease' | 'in-process';
@@ -84,10 +94,13 @@ function parseHeartbeat(row: { key: string; value: unknown } | undefined): Heart
 /** One logical browser tab / worker context (own holderId + in-process gate). */
 export class SyncLockSession {
   readonly holderId: string;
+  /** Renew / heartbeat interval (overridable in tests). */
+  readonly renewMs: number;
   private inProcessHeld = false;
 
-  constructor(holderId?: string) {
+  constructor(holderId?: string, opts?: { renewMs?: number }) {
     this.holderId = holderId ?? uid();
+    this.renewMs = opts?.renewMs ?? SYNC_LEASE_RENEW_MS;
   }
 
   /** Acquire IDB lease in ONE readwrite txn: read → judge → write. */
@@ -163,7 +176,13 @@ export class SyncLockSession {
     await tx.done;
   }
 
-  async withSyncLock<T>(fn: () => Promise<T>): Promise<SyncLockResult<T>> {
+  /**
+   * Run `fn` under exclusive sync lock.
+   * `fn` receives AbortSignal: on IDB lease loss the signal is aborted; `fn` must
+   * stop before new cloud writes / local merge / outbox ACK. Web Locks path is
+   * unchanged (signal never aborted by the lock layer).
+   */
+  async withSyncLock<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<SyncLockResult<T>> {
     if (this.inProcessHeld) return busy('in-process');
 
     if (hasWebLocks()) {
@@ -175,12 +194,14 @@ export class SyncLockSession {
           return;
         }
         this.inProcessHeld = true;
+        // Web Locks path unchanged: heartbeat only; signal is never aborted here.
+        const ac = new AbortController();
         const renewTimer = setInterval(() => {
           void this.writeHeartbeat('web-locks');
-        }, SYNC_LEASE_RENEW_MS);
+        }, this.renewMs);
         try {
           await this.writeHeartbeat('web-locks');
-          result = { ok: true, value: await fn(), lockMode: 'web-locks' };
+          result = { ok: true, value: await fn(ac.signal), lockMode: 'web-locks' };
         } catch (e) {
           error = e;
         } finally {
@@ -197,26 +218,27 @@ export class SyncLockSession {
     if (!got) return busy('idb-lease');
 
     this.inProcessHeld = true;
-    let lostReject: ((e: Error) => void) | null = null;
-    const lostPromise = new Promise<never>((_, rej) => {
-      lostReject = rej;
-    });
+    const ac = new AbortController();
     const renewTimer = setInterval(() => {
       void (async () => {
         const r = await this.renewIdbLease();
         if (r === 'lost') {
           clearInterval(renewTimer);
-          lostReject?.(new SyncLeaseLostError());
+          // Abort first so in-flight fn checkpoints stop; do NOT release the new lease.
+          if (!ac.signal.aborted) {
+            ac.abort(new SyncLeaseLostError());
+          }
         } else {
           await this.writeHeartbeat('idb-lease');
         }
       })();
-    }, SYNC_LEASE_RENEW_MS);
+    }, this.renewMs);
 
     try {
       await this.writeHeartbeat('idb-lease');
-      // If TTL takeover happens mid-sync, abort promptly; never release the new lease.
-      const value = await Promise.race([fn(), lostPromise]);
+      const value = await fn(ac.signal);
+      // If renew aborted while fn ignored the signal, still fail closed.
+      throwIfSyncAborted(ac.signal);
       return { ok: true, value, lockMode: 'idb-lease' };
     } finally {
       clearInterval(renewTimer);
@@ -234,9 +256,18 @@ export function getDefaultSyncLockSession(): SyncLockSession {
   return defaultSession;
 }
 
-/** Production helper — uses the page's default session. */
-export async function withSyncLock<T>(fn: () => Promise<T>): Promise<SyncLockResult<T>> {
-  return defaultSession.withSyncLock(fn);
+/** Test-only: route withSyncLock through an independent session (multi-tab). */
+let sessionOverrideForTests: SyncLockSession | null = null;
+
+export function setSyncLockSessionForTests(session: SyncLockSession | null): void {
+  sessionOverrideForTests = session;
+}
+
+/** Production helper — uses the page's default session (or test override). */
+export async function withSyncLock<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<SyncLockResult<T>> {
+  return (sessionOverrideForTests ?? defaultSession).withSyncLock(fn);
 }
 
 export async function readLeaseForTests(): Promise<LeasePayload | null> {
@@ -266,6 +297,7 @@ export async function clearLeaseForTests(): Promise<void> {
 }
 
 export function resetTabLockForTests(): void {
+  sessionOverrideForTests = null;
   // Default session in-process flag cannot be fully reset across instances;
   // tests should prefer SyncLockSession. Create fresh sessions for multi-tab.
   (defaultSession as unknown as { inProcessHeld: boolean }).inProcessHeld = false;

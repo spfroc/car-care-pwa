@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { closeDBForTests, getDB } from '../db';
 import { nowISO } from '../lib/constants';
 import type { Vehicle } from '../types';
@@ -14,6 +14,12 @@ import {
 import { getSyncMeta, listOutbox, putOutboxItem } from './outbox';
 import { MemoryCloudProvider } from './providers/memory';
 import { putVehicle } from '../repositories/vehicles';
+import {
+  clearLeaseForTests,
+  resetTabLockForTests,
+  setSyncLockSessionForTests,
+  SyncLockSession,
+} from './tabLock';
 
 async function reset() {
   setCloudProviderForTests(null);
@@ -190,5 +196,68 @@ describe('sync engine with memory provider', () => {
         supabaseAnonKey: 'service_role_secret_key_value',
       }),
     ).rejects.toThrow(/service_role/);
+  });
+});
+
+describe('P0 lease-lost aborts sync side effects', () => {
+  let mem: MemoryCloudProvider;
+
+  beforeEach(async () => {
+    await reset();
+    resetTabLockForTests();
+    await clearLeaseForTests();
+    vi.stubGlobal('navigator', { locks: undefined, onLine: true });
+    mem = new MemoryCloudProvider();
+    setCloudProviderForTests(mem);
+    await setCloudStorageConfig({
+      provider: 'supabase',
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'test-anon-key',
+    });
+  });
+
+  afterEach(() => {
+    setSyncLockSessionForTests(null);
+    resetTabLockForTests();
+    vi.unstubAllGlobals();
+  });
+
+  it('A mid-push lease stolen by B → outbox NOT deleted (uncertain push)', async () => {
+    await putVehicle(vehicle('v-abort', 'AbortMe', '2026-01-10T00:00:00.000Z'));
+    const before = await listOutbox();
+    expect(before.some((o) => o.entityId === 'v-abort')).toBe(true);
+
+    let releasePush!: () => void;
+    mem.pushGate = new Promise<void>((r) => {
+      releasePush = r;
+    });
+
+    setSyncLockSessionForTests(new SyncLockSession('engine-A', { renewMs: 25 }));
+    const syncP = bidirectionalSync();
+
+    // Wait until pushOps entered the gate
+    for (let i = 0; i < 50 && mem.pushCallCount < 1; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(mem.pushCallCount).toBeGreaterThanOrEqual(1);
+
+    const tabB = new SyncLockSession('engine-B');
+    const db = await getDB();
+    await db.put('sync_meta', {
+      key: 'syncTabLease',
+      value: { holderId: 'engine-A', expiresAt: Date.now() - 1 },
+    });
+    expect(await tabB.tryAcquireIdbLease()).toBe(true);
+
+    // Allow renew timer to abort A
+    await new Promise((r) => setTimeout(r, 80));
+    releasePush();
+
+    const r = await syncP;
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/不确定|接管|中止/);
+    const after = await listOutbox();
+    expect(after.some((o) => o.entityId === 'v-abort')).toBe(true);
+    await tabB.releaseIdbLease();
   });
 });
