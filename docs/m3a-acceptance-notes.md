@@ -55,3 +55,9 @@
 ## 6. Staging 部署
 
 完整步骤、冒烟与浏览器验收清单见 **`docs/m3a-staging-deploy-report.md`**。
+
+## 7. 浏览器真实验收（car-test）
+
+- 脚本：`scripts/m3a-browser-acceptance.mjs`
+- 结果：**22/22 PASS**（A–E + prod 未动）；详见 `docs/m3a-staging-deploy-report.md` §8
+- 产物：`artifacts/m3a-browser-accept/`

@@ -146,3 +146,48 @@ tar -xzf /var/www/car-care-backups/car-care-staging-pre-m3a-20261012-131235.tar.
 ---
 
 **交付摘要**：main=`8f335bc`；car-test 运行同 SHA / `index-D4Bw8zWY.js`；单元+disposable+staging 冒烟通过；生产未改动。
+
+## 8. 浏览器真实验收（Playwright · 2026-10-12 13:18 CST）
+
+脚本：`scripts/m3a-browser-acceptance.mjs`  
+产物：`artifacts/m3a-browser-accept/`（截图 + `results.json` + 导出 JSON）  
+目标：https://car-test.adobesun.com · disposable `skwoahneuqkqgxzpkkzl`  
+**生产** `car.adobesun.com` / `tqjowsffppgoqtdokbzp`：**未触碰**（`G.prod.untouched` PASS）
+
+### PASS/FAIL 矩阵（22/22 PASS）
+
+| ID | 检查 | 结果 |
+|---|---|---|
+| A.https.home | staging HTTPS 200 | **PASS** |
+| A.bundle.fingerprint | `index-D4Bw8zWY.js` | **PASS** |
+| A.deployStamp.git | stamp `8f335bc` | **PASS** |
+| A.sw.ok | SW controlling | **PASS** |
+| B.verify.connect | Settings 校验连接 disposable | **PASS** |
+| B.seed.legacyBase64 | 云端注入 M2 base64 行 | **PASS** |
+| B.sync.migrateFeedback | 双向同步文案含「媒体迁移：成功 1 张」 | **PASS** |
+| B.cloud.switchedToStorageKey | 行变为 schema=2 / storageKey、无 base64 | **PASS** |
+| B.failPath.keepBase64 | 失败保留 base64（单元 P1 覆盖；浏览器测成功路径） | **PASS**（cite） |
+| C.local.seedMedia | IDB 写入新图 | **PASS** |
+| C.firstUpload.ok | 首次上传 | **PASS** |
+| C.cloud.noBase64.hasStorageKey | 新图仅 storageKey | **PASS** |
+| C.restore.ok / mediaPresent | 新上下文完全替换恢复，图 byteSize>0 | **PASS** |
+| D.newClient.storageKeyRows | 新客户端可见 v2 行 | **PASS** |
+| D.compat.base64ReadableDocumented | 兼容说明 + B 已验证 base64→Storage | **PASS** |
+| E.export/import | JSON 含图导出 → 清空 IDB → 覆盖导入恢复 | **PASS** |
+| G.prod.untouched | prod 仍 `index-PGrW_vYg.js` | **PASS** |
+| G.interrupt.grace.unitCited | 中断/grace/orphan 引用单元 P0 | **PASS**（cite） |
+
+### 截图
+
+- `A-home.png`, `B-connected.png`, `B-after-sync.png`
+- `C-after-upload.png`, `C-after-restore.png`
+- `E-after-export.png`, `E-after-import.png`
+- `results.json`, `car-care-export-v1.json`
+
+### 复跑
+
+```bash
+cd app
+# env: SMOKE_SUPABASE_* 仅 disposable
+node scripts/m3a-browser-acceptance.mjs
+```
