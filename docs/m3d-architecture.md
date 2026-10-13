@@ -1,7 +1,8 @@
 # M3-D 架构：Notion BYO 同步（单一推荐方案）
 
-> **状态**：设计中（2026-10-13）· docs-only · **第二轮审查裁定已合入**  
+> **状态**：设计通过 · 实现规格已起草（2026-10-13）· docs-only · **第二轮裁定 + 第三轮闭合已合入**  
 > 规格：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · 风险/验收：[`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
+> **实现规格**：[`m3d-implementation-spec.md`](./m3d-implementation-spec.md) · Worker 模板：[`templates/notion-sync-worker/`](./templates/notion-sync-worker/)  
 > **架构师独立稿（交叉阅读）**：[`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md)  
 > 审查纪要：[`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)  
 > 原则对齐：[`own-cloud-sync-architecture.md`](./own-cloud-sync-architecture.md) · 可行性 stub：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)
@@ -487,7 +488,7 @@ Absent ──upsert──► Alive ──delete──► Tombstone ──(过期
 
 - 填实 `src/sync/providers/notion.ts`（仅调用户代理，不直连带 token）  
 - 扩展 `isCloudEnqueueEnabled`；切换路径遵守 §4.8  
-- 可选 `docs/templates/notion-sync-worker/`（O1，无真实 secret）  
+- `docs/templates/notion-sync-worker/`（O1：README + 伪代码已落盘；无真实 secret；**不**进 app 构建）  
 - **禁止**把 Notion SDK 打进生产 PWA 关键路径  
 
 ---

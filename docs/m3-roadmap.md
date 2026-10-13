@@ -10,7 +10,7 @@
 | **M3-A** | 媒体私有 Storage | ✅ 已上线（生产静态） | base64→Storage、RLS bucket、迁移/孤儿 GC 策略 |
 | **M3-B** | 多标签锁 · BG Sync 增强 · Outbox  Harden | ✅ 已上线（生产 d7dd681 / car.adobesun.com；car-test 同版本） | Web Locks / lease、BG Sync 可选、关页/并发不丢队列 |
 | **M3-C** | 冲突合并 UI + 双端体验 | 🚧 feature 实现中（未部署） | 仅 vehicles+records 手动解决；二选一；删改二次确认；30 天回收站 → follow-up。规格：[`m3c-mvp-frozen-spec.md`](./m3c-mvp-frozen-spec.md) · 架构：[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md) · 验收：[`m3c-dual-device-acceptance.md`](./m3c-dual-device-acceptance.md) |
-| **M3-D** | Notion（或其它 adapter） | 📝 设计中（docs-only；PR #8；二轮审查有条件通过裁定已合入） | 规格/架构/风险/BYO/审查：`m3d-mvp-spec.md` · `m3d-architecture.md` · `m3d-notion-byo-architecture.md` · `m3d-risks-and-acceptance.md` · `m3d-architecture-review-round2.md`；可行性 stub：`notion-sync-feasibility.md`；安全认证前不接真 API；本阶段不写业务 src |
+| **M3-D** | Notion（或其它 adapter） | 📝 设计通过 · 实现规格已起草（docs-only；PR #8；三轮闭合通过 `fea4686`；**未 merge**） | 规格/架构/风险/BYO/审查/实现规格：`m3d-mvp-spec.md` · `m3d-architecture.md` · `m3d-notion-byo-architecture.md` · `m3d-risks-and-acceptance.md` · `m3d-architecture-review-round2.md` · `m3d-implementation-spec.md`；模板：`docs/templates/notion-sync-worker/`；可行性 stub：`notion-sync-feasibility.md`；仍禁止业务 src / 真 API / 生产 |
 
 ## 明确不在 M3-B
 

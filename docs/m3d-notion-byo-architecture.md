@@ -5,6 +5,7 @@
 > **未经架构评审通过不写业务代码**；不改生产 / 正式库。  
 > **上游**：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)、[`own-cloud-sync-architecture.md`](./own-cloud-sync-architecture.md)、[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md)。  
 > **审查纪要**：[`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)。  
+> **实现规格**：[`m3d-implementation-spec.md`](./m3d-implementation-spec.md) · 模板：[`templates/notion-sync-worker/`](./templates/notion-sync-worker/)。  
 > **本文给出单一推荐方案 + 明确否决项。** 共识锚点：**BYO Worker Gateway · 双层 LWW · 媒体不同步 · 与 Supabase 互斥**。
 
 ---

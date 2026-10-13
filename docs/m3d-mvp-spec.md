@@ -1,9 +1,10 @@
 # M3-D MVP 规格：Notion BYO 同步（仅设计）
 
-> **状态**：设计中（2026-10-13）· **本里程碑不写业务 `src`、不部署、不碰正式 Supabase/生产**  
+> **状态**：设计通过 · 实现规格已起草（2026-10-13）· **本里程碑不写业务 `src`、不部署、不碰正式 Supabase/生产**  
 > 生产基线：M3-C merge `9b64a2bd204acfb5791f3f6668110e4c00ab3c95`  
 > 配套：[`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md) · [`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
-> 审查纪要：[`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)（有条件通过；本文件已合入裁定）  
+> **实现规格**：[`m3d-implementation-spec.md`](./m3d-implementation-spec.md)（第三轮通过后起草；仍无业务代码）  
+> 审查纪要：[`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)（第三轮闭合：**通过**；本文件已合入裁定）  
 > 既往结论：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)（无安全代理前禁止；个人 token 进前端否决）
 
 ## 0. 已采用默认（2026-10-13）

@@ -1,7 +1,8 @@
 # M3-D 风险清单与分阶段验收矩阵
 
-> **状态**：设计中（2026-10-13）· docs-only · **第二轮裁定已合入**  
-> 配套：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · [`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md) · [`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)
+> **状态**：设计通过 · 实现规格已起草（2026-10-13）· docs-only · **第二轮裁定 + 第三轮闭合已合入**  
+> 配套：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · [`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md) · [`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)  
+> **实现规格**：[`m3d-implementation-spec.md`](./m3d-implementation-spec.md)
 
 ## 1. 风险清单
 
