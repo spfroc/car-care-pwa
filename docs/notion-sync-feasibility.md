@@ -1,7 +1,10 @@
 # Notion 作为可选同步后端 — 可行性说明（stub）
 
 > **状态**：调研 + UI 占位。本里程碑 **不**实现 Notion API 读写。  
-> **优先级**：Supabase 验证通过后再评估是否开工。
+> **优先级**：Supabase 验证通过后再评估是否开工。  
+> **M3-D 设计（2026-10-13）**：规格 / 架构 / 风险验收已起草 — 见  
+> [`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · [`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)。  
+> 下文既往结论仍然有效；实现须遵守 M3-D 文档中的单一推荐方案与否决项。
 
 ## 1. 目标回顾
 
@@ -26,6 +29,8 @@
 3. 映射：一个 parent database / 每实体一 database；媒体走外部对象存储，Notion 只存链接。  
 4. 同步协议仍复用本仓 `CloudProvider` + outbox；Notion 仅是另一 adapter。
 
+> M3-D 将上述路径收敛为：**用户自部署 Worker + Token 仅存 Worker**；MVP 实体仅 vehicles+records；媒体默认不同步。细节以 `m3d-architecture.md` 为准。
+
 ## 4. 本 PR 的 stub 行为
 
 - 设置「数据存储」可选 Notion，但展示「尚未开放」说明与本文档链接。  
@@ -34,7 +39,8 @@
 
 ## 5. 开工门槛（checklist）
 
-- [ ] Supabase 路径在真实自有项目上验证（RLS + 双向同步）  
-- [ ] 确定代理宿主与密钥托管（用户自有，非应用方多租户）  
+- [x] Supabase 路径在真实自有项目上验证（RLS + 双向同步）— M2–M3-C  
+- [ ] 确定代理宿主与密钥托管（用户自有，非应用方多租户）— 见 M3-D 推荐方案，待实现选型确认  
 - [ ] 原型：无媒体文本实体 push/pull  
 - [ ] 安全复审：前端 bundle 扫描零 Notion token  
+- [ ] M3-D 设计文档架构评审通过后再开实现 PR  
