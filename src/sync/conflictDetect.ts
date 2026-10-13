@@ -21,13 +21,13 @@ function pendingFor(
   return pendingOutbox.filter((o) => o.entity === entity && o.entityId === entityId);
 }
 
-function localSnapshotFromPending(ops: SyncOutboxItem[]): ConflictSnapshot {
+export function localSnapshotFromPending(ops: SyncOutboxItem[]): ConflictSnapshot {
   const latest = ops.reduce((a, b) => (a.mutatedAt >= b.mutatedAt ? a : b));
   if (latest.op === 'delete') return { op: 'delete' };
   return { op: 'upsert', payload: latest.payload };
 }
 
-function cloudSnapshotFromRow(cloud: CloudRow): ConflictSnapshot {
+export function cloudSnapshotFromRow(cloud: CloudRow): ConflictSnapshot {
   if (cloud.deletedAt) {
     return { op: 'delete', deletedAt: cloud.deletedAt, payload: cloud.payload };
   }

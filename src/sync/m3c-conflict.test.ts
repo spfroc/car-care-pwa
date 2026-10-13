@@ -234,7 +234,7 @@ describe('M3-C conflict UI engine paths', () => {
     expect(open.some((c) => c.entity === 'stations')).toBe(false);
   });
 
-  it('resolve failure (offline push after keep_local enqueue) keeps recoverable state', async () => {
+  it('resolve failure (cloud read offline) keeps recoverable state', async () => {
     await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
     mem.rows.set('vehicles:v1', {
       entity: 'vehicles',
@@ -246,18 +246,133 @@ describe('M3-C conflict UI engine paths', () => {
     await bidirectionalSync();
     const open = await listOpenConflicts();
     const c = open.find((x) => x.entityId === 'v1')!;
-    // Cloud still newer than bumped? nowISO in 2026-10 should win.
-    // Force re-open path: set cloud extremely far future after we resolve? 
-    // Instead: take_cloud with missing payload should fail and keep open.
-    const broken = {
-      ...c,
-      cloudSnapshot: { op: 'upsert' as const }, // no payload
-    };
-    const { putConflict } = await import('./conflictStore');
-    await putConflict(broken);
+    const beforeLocal = await (await getDB()).get('vehicles', 'v1');
+    const beforeBox = await listOutbox();
+
+    mem.offline = true;
     const result = await resolveConflict(c.id, 'take_cloud');
     expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/读取云端失败|offline/);
+
     const still = await listOpenConflicts();
     expect(still.some((x) => x.id === c.id)).toBe(true);
+    const afterLocal = await (await getDB()).get('vehicles', 'v1');
+    expect(afterLocal?.name).toBe(beforeLocal?.name);
+    const afterBox = await listOutbox();
+    expect(afterBox.map((o) => o.opId).sort()).toEqual(beforeBox.map((o) => o.opId).sort());
+  });
+
+  it('P0 take_cloud after post-conflict local edit re-prompts and keeps new outbox', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudNewer', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await bidirectionalSync();
+    const open = await listOpenConflicts();
+    const c = open.find((x) => x.entityId === 'v1');
+    expect(c).toBeTruthy();
+    const blockedBefore = new Set(c!.blockedOpIds ?? []);
+
+    // User edits again while conflict is still open
+    await putVehicle(vehicle('v1', 'PostConflictEdit', '2026-10-01T00:00:00.000Z'));
+    const midBox = await listOutbox();
+    const postOps = midBox.filter(
+      (o) => o.entityId === 'v1' && !blockedBefore.has(o.opId),
+    );
+    expect(postOps.length).toBeGreaterThan(0);
+
+    const result = await resolveConflict(c!.id, 'take_cloud');
+    expect(result.ok).toBe(false);
+    expect(result.reopened).toBe(true);
+    expect(result.message).toMatch(/新编辑/);
+
+    const local = await (await getDB()).get('vehicles', 'v1');
+    expect(local?.name).toBe('PostConflictEdit'); // must NOT silently take cloud
+    const afterBox = await listOutbox();
+    for (const op of postOps) {
+      expect(afterBox.some((o) => o.opId === op.opId)).toBe(true);
+    }
+    const stillOpen = await listOpenConflicts();
+    const refreshed = stillOpen.find((x) => x.id === c!.id);
+    expect(refreshed).toBeTruthy();
+    expect(refreshed!.status).toBe('open');
+    expect(refreshed!.localSnapshot?.op).toBe('upsert');
+    expect((refreshed!.localSnapshot?.payload as Vehicle).name).toBe('PostConflictEdit');
+    // Post-conflict ops absorbed into blocked set after re-prompt refresh
+    for (const op of postOps) {
+      expect(refreshed!.blockedOpIds ?? []).toContain(op.opId);
+    }
+  });
+
+  it('P1 take_cloud rejects account mismatch and preserves state', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudNewer', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await bidirectionalSync();
+    const open = await listOpenConflicts();
+    const c = open.find((x) => x.entityId === 'v1')!;
+    const beforeLocal = await (await getDB()).get('vehicles', 'v1');
+    const beforeBox = await listOutbox();
+
+    mem.userId = 'other-user';
+    const result = await resolveConflict(c.id, 'take_cloud');
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/账号|绑定|切换/);
+
+    const still = await listOpenConflicts();
+    expect(still.some((x) => x.id === c.id)).toBe(true);
+    const afterLocal = await (await getDB()).get('vehicles', 'v1');
+    expect(afterLocal?.name).toBe(beforeLocal?.name);
+    const afterBox = await listOutbox();
+    expect(afterBox.map((o) => o.opId).sort()).toEqual(beforeBox.map((o) => o.opId).sort());
+  });
+
+  it('P1 take_cloud refreshes when cloud changed again', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudV1', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await bidirectionalSync();
+    const open = await listOpenConflicts();
+    const c = open.find((x) => x.entityId === 'v1')!;
+    expect(c.cloudUpdatedAt).toBe('2026-03-01T00:00:00.000Z');
+    const beforeLocal = await (await getDB()).get('vehicles', 'v1');
+    const beforeBox = await listOutbox();
+
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudV2', '2026-04-01T00:00:00.000Z'),
+      updatedAt: '2026-04-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+
+    const result = await resolveConflict(c.id, 'take_cloud');
+    expect(result.ok).toBe(false);
+    expect(result.reopened).toBe(true);
+    expect(result.message).toMatch(/云端版本已变化/);
+
+    const still = await listOpenConflicts();
+    const refreshed = still.find((x) => x.id === c.id);
+    expect(refreshed).toBeTruthy();
+    expect(refreshed!.cloudUpdatedAt).toBe('2026-04-01T00:00:00.000Z');
+    expect((refreshed!.cloudSnapshot?.payload as Vehicle).name).toBe('CloudV2');
+    const afterLocal = await (await getDB()).get('vehicles', 'v1');
+    expect(afterLocal?.name).toBe(beforeLocal?.name);
+    const afterBox = await listOutbox();
+    expect(afterBox.map((o) => o.opId).sort()).toEqual(beforeBox.map((o) => o.opId).sort());
   });
 });

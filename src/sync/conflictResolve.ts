@@ -1,14 +1,25 @@
 import { getDB } from '../db';
 import { nowISO } from '../lib/constants';
 import type { CareRecord, Vehicle } from '../types';
-import { detectPushRejected, resolutionImpliesDelete } from './conflictDetect';
+import {
+  cloudSnapshotFromRow,
+  detectPushRejected,
+  localSnapshotFromPending,
+  resolutionImpliesDelete,
+} from './conflictDetect';
 import {
   getConflict,
+  listResolvedConflicts,
   markConflictResolved,
   openConflict,
+  putConflict,
   type SyncConflictRecord,
 } from './conflictStore';
-import { isManualConflictEntity } from './conflictTypes';
+import {
+  isManualConflictEntity,
+  MAX_RESOLVED_CONFLICTS,
+  type ConflictKind,
+} from './conflictTypes';
 import {
   clearOutboxConflictBlock,
   listOutbox,
@@ -17,6 +28,7 @@ import {
   putOutboxItem,
   removeOutboxForEntityId,
   removeOutboxItems,
+  settleTx,
   stampOutboxOwner,
 } from './outbox';
 import {
@@ -33,7 +45,7 @@ export type ResolveResult = {
   message: string;
   conflict?: SyncConflictRecord;
   lockBusy?: boolean;
-  /** keep_local may re-open if push still cloud_newer */
+  /** keep_local may re-open if push still cloud_newer; take_cloud may keep open for re-prompt */
   reopened?: boolean;
 };
 
@@ -53,29 +65,241 @@ async function assertAuthOk(): Promise<{ ok: true } | { ok: false; message: stri
   return { ok: true };
 }
 
-async function applyCloudSnapshotLocally(
-  entity: SyncEntity,
-  entityId: string,
-  snapshot: SyncConflictRecord['cloudSnapshot'],
-): Promise<void> {
-  if (!snapshot) throw new Error('缺少云端快照');
-  const db = await getDB();
-  if (snapshot.op === 'delete') {
-    if (entity === 'vehicles') await db.delete('vehicles', entityId);
-    else if (entity === 'records') await db.delete('records', entityId);
-    else throw new Error(`不支持删除实体 ${entity}`);
-    return;
+function cloudIdentityMatches(
+  conflict: SyncConflictRecord,
+  cloudRow: CloudRow | null,
+): boolean {
+  const expectedAt = conflict.cloudUpdatedAt;
+  if (!cloudRow) {
+    // Tombstone may disappear after GC; only treat as match when snapshot was already delete
+    // and we had no concrete updatedAt to compare — otherwise force refresh.
+    return conflict.cloudSnapshot?.op === 'delete' && !expectedAt;
   }
-  if (!snapshot.payload || typeof snapshot.payload !== 'object') {
-    throw new Error('云端快照缺少 payload，无法恢复本地');
-  }
-  if (entity === 'vehicles') {
-    await db.put('vehicles', snapshot.payload as Vehicle);
-  } else if (entity === 'records') {
-    await db.put('records', snapshot.payload as CareRecord);
+  if (expectedAt && cloudRow.updatedAt !== expectedAt) return false;
+  const snapDeleted = conflict.cloudSnapshot?.op === 'delete';
+  const rowDeleted = Boolean(cloudRow.deletedAt);
+  if (snapDeleted !== rowDeleted) return false;
+  // When conflict lacked cloudUpdatedAt, still require snap op agreement (above) and accept row.
+  return true;
+}
+
+function conflictKindForSides(
+  localOp: 'upsert' | 'delete' | undefined,
+  cloudOp: 'upsert' | 'delete' | undefined,
+  fallback: ConflictKind,
+): ConflictKind {
+  if (localOp === 'delete' || cloudOp === 'delete') return 'edit_vs_delete';
+  if (fallback === 'push_rejected') return 'push_rejected';
+  return 'edit_edit';
+}
+
+async function refreshConflictCloudChanged(
+  conflict: SyncConflictRecord,
+  cloudRow: CloudRow | null,
+): Promise<SyncConflictRecord> {
+  const now = nowISO();
+  let cloudSnapshot = conflict.cloudSnapshot;
+  let cloudUpdatedAt = conflict.cloudUpdatedAt;
+  if (cloudRow) {
+    cloudSnapshot = cloudSnapshotFromRow(cloudRow);
+    cloudUpdatedAt = cloudRow.updatedAt;
   } else {
-    throw new Error(`不支持采用云端实体 ${entity}`);
+    cloudSnapshot = { op: 'delete' };
+    cloudUpdatedAt = undefined;
   }
+  const next: SyncConflictRecord = {
+    ...conflict,
+    kind: conflictKindForSides(conflict.localSnapshot?.op, cloudSnapshot?.op, conflict.kind),
+    cloudSnapshot,
+    cloudUpdatedAt,
+    notedAt: now,
+    status: 'open',
+  };
+  await putConflict(next);
+  return next;
+}
+
+async function refreshConflictPostLocalEdits(
+  conflict: SyncConflictRecord,
+  entityOps: SyncOutboxItem[],
+): Promise<SyncConflictRecord> {
+  const now = nowISO();
+  const localSnapshot = localSnapshotFromPending(entityOps);
+  const latest = entityOps.reduce((a, b) => (a.mutatedAt >= b.mutatedAt ? a : b));
+  const blocked = new Set([...(conflict.blockedOpIds ?? []), ...entityOps.map((o) => o.opId)]);
+  const next: SyncConflictRecord = {
+    ...conflict,
+    kind: conflictKindForSides(localSnapshot.op, conflict.cloudSnapshot?.op, conflict.kind),
+    localSnapshot,
+    localUpdatedAt: latest.mutatedAt,
+    blockedOpIds: [...blocked],
+    notedAt: now,
+    status: 'open',
+  };
+  await putConflict(next);
+  await markOutboxBlockedByConflict(
+    entityOps.map((o) => o.opId),
+    conflict.id,
+  );
+  return next;
+}
+
+/**
+ * Apply verified cloud row + clear only conflict-related outbox + mark resolved
+ * in one IndexedDB transaction (vehicles|records + sync_outbox + sync_conflicts).
+ */
+async function applyTakeCloudInTx(
+  conflict: SyncConflictRecord,
+  cloudRow: CloudRow | null,
+  outboxOpIdsToRemove: string[],
+): Promise<SyncConflictRecord> {
+  const db = await getDB();
+  const entityStore = conflict.entity === 'vehicles' ? 'vehicles' : 'records';
+  if (conflict.entity !== 'vehicles' && conflict.entity !== 'records') {
+    throw new Error(`不支持采用云端实体 ${conflict.entity}`);
+  }
+  const now = nowISO();
+  const resolved: SyncConflictRecord = {
+    ...conflict,
+    status: 'resolved',
+    resolution: 'take_cloud',
+    resolvedAt: now,
+    notedAt: now,
+  };
+
+  const tx = db.transaction([entityStore, 'sync_outbox', 'sync_conflicts'], 'readwrite');
+  await settleTx(tx, async () => {
+    const snapOp =
+      cloudRow != null
+        ? cloudRow.deletedAt
+          ? 'delete'
+          : 'upsert'
+        : conflict.cloudSnapshot?.op ?? 'upsert';
+
+    if (snapOp === 'delete') {
+      await tx.objectStore(entityStore).delete(conflict.entityId);
+    } else {
+      const payload = cloudRow?.payload ?? conflict.cloudSnapshot?.payload;
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('云端快照缺少 payload，无法恢复本地');
+      }
+      if (entityStore === 'vehicles') {
+        await tx.objectStore('vehicles').put(payload as Vehicle);
+      } else {
+        await tx.objectStore('records').put(payload as CareRecord);
+      }
+    }
+
+    for (const opId of outboxOpIdsToRemove) {
+      await tx.objectStore('sync_outbox').delete(opId);
+    }
+
+    await tx.objectStore('sync_conflicts').put(resolved);
+  });
+
+  // Cap resolved history outside the atomic resolve txn (same as markConflictResolved).
+  await pruneResolvedConflictsBestEffort();
+
+  return resolved;
+}
+
+async function takeCloudUnlocked(
+  signal: AbortSignal,
+  conflict: SyncConflictRecord,
+): Promise<ResolveResult> {
+  throwIfSyncAborted(signal);
+
+  // P1: account / auth guard (align with keep_local) — no local mutation on failure
+  const auth = await assertAuthOk();
+  if (!auth.ok) return { ok: false, message: auth.message };
+
+  throwIfSyncAborted(signal);
+  const { resolveProvider } = await import('./engine');
+  const provider = await resolveProvider();
+  if (!provider) return { ok: false, message: '未配置云存储' };
+
+  // P1: re-read cloud and verify LWW identity vs conflict snapshot
+  let cloudRow: CloudRow | null = null;
+  try {
+    const snap = await provider.pullAll();
+    cloudRow =
+      snap.rows.find((r) => r.entity === conflict.entity && r.id === conflict.entityId) ?? null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `读取云端失败（已保留本地数据、待同步队列与冲突）：${msg}`,
+    };
+  }
+
+  throwIfSyncAborted(signal);
+
+  if (!cloudIdentityMatches(conflict, cloudRow)) {
+    const refreshed = await refreshConflictCloudChanged(conflict, cloudRow);
+    return {
+      ok: false,
+      message: '云端版本已变化，冲突快照已刷新，请重新选择。',
+      conflict: refreshed,
+      reopened: true,
+    };
+  }
+
+  // P0: distinguish blocked-at-conflict ops vs post-conflict local edits
+  const allOutbox = await listOutbox();
+  const entityOps = allOutbox.filter(
+    (o) => o.entity === conflict.entity && o.entityId === conflict.entityId,
+  );
+  const blockedSet = new Set(conflict.blockedOpIds ?? []);
+  const postConflictOps = entityOps.filter((o) => !blockedSet.has(o.opId));
+
+  if (postConflictOps.length > 0) {
+    const refreshed = await refreshConflictPostLocalEdits(conflict, entityOps);
+    return {
+      ok: false,
+      message:
+        '冲突发生后本地又有新编辑；已保留本地数据与待同步队列，请重新确认后再选择采用云端或保留本地。',
+      conflict: refreshed,
+      reopened: true,
+    };
+  }
+
+  throwIfSyncAborted(signal);
+
+  // Only clear ops that belong to this conflict (blocked set). With P0 gate above,
+  // entityOps should be a subset of blocked; still never wipe unrelated newer ids.
+  const toRemove = entityOps
+    .filter((o) => blockedSet.has(o.opId))
+    .map((o) => o.opId);
+  // Also remove any blockedOpIds that may already be gone from outbox (no-op deletes).
+  for (const id of conflict.blockedOpIds ?? []) {
+    if (!toRemove.includes(id)) toRemove.push(id);
+  }
+
+  try {
+    const resolved = await applyTakeCloudInTx(conflict, cloudRow, toRemove);
+    return {
+      ok: true,
+      message: '已采用云端版本；本地已恢复，冲突相关待同步队列已清除。',
+      conflict: resolved,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `采用云端失败（冲突保持待处理）：${msg}`,
+    };
+  }
+}
+
+
+async function pruneResolvedConflictsBestEffort(): Promise<void> {
+  const resolvedRows = await listResolvedConflicts(MAX_RESOLVED_CONFLICTS + 20);
+  if (resolvedRows.length <= MAX_RESOLVED_CONFLICTS) return;
+  const db = await getDB();
+  const drop = resolvedRows.slice(MAX_RESOLVED_CONFLICTS);
+  const pruneTx = db.transaction('sync_conflicts', 'readwrite');
+  for (const r of drop) await pruneTx.store.delete(r.id);
+  await pruneTx.done;
 }
 
 async function applyLocalSnapshot(
@@ -140,45 +364,6 @@ async function applyLocalSnapshot(
     return item;
   }
   throw new Error(`不支持保留本地实体 ${entity}`);
-}
-
-async function takeCloudUnlocked(
-  signal: AbortSignal,
-  conflict: SyncConflictRecord,
-): Promise<ResolveResult> {
-  throwIfSyncAborted(signal);
-  // 1) Apply cloud to local FIRST
-  await applyCloudSnapshotLocally(conflict.entity, conflict.entityId, conflict.cloudSnapshot);
-  throwIfSyncAborted(signal);
-
-  // 2) Verify local matches cloud intent
-  const db = await getDB();
-  if (conflict.cloudSnapshot?.op === 'delete') {
-    const gone =
-      conflict.entity === 'vehicles'
-        ? !(await db.get('vehicles', conflict.entityId))
-        : !(await db.get('records', conflict.entityId));
-    if (!gone) throw new Error('采用云端删除失败：本地行仍存在');
-  } else {
-    const row =
-      conflict.entity === 'vehicles'
-        ? await db.get('vehicles', conflict.entityId)
-        : await db.get('records', conflict.entityId);
-    if (!row) throw new Error('采用云端失败：本地未写入云端快照');
-  }
-
-  throwIfSyncAborted(signal);
-  // 3) Only then clear blocked + same entity+id outbox
-  const blocked = conflict.blockedOpIds ?? [];
-  if (blocked.length) await removeOutboxItems(blocked);
-  await removeOutboxForEntityId(conflict.entity, conflict.entityId);
-
-  const resolved = await markConflictResolved(conflict.id, 'take_cloud');
-  return {
-    ok: true,
-    message: '已采用云端版本；本地已恢复，待同步队列已清除。',
-    conflict: resolved,
-  };
 }
 
 async function keepLocalUnlocked(
