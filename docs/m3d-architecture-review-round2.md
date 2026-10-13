@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |----|------|
 | PR | https://github.com/spfroc/car-care-pwa/pull/8 |
-| Head | `a955490` · `docs/m3d-notion-design` |
+| Head | `fea4686082b8f170e873b2aafe0665ca2fa12b55` · `docs/m3d-notion-design` |
 | 基线 | 文档相对 `main`@`74fb33d`；生产叙事仍指向 M3-C（本 PR **无 src**） |
 | 审查范围 | 仅文档：`m3d-mvp-spec` · `m3d-architecture` · `m3d-notion-byo-architecture` · `m3d-risks-and-acceptance` · `notion-sync-feasibility` · roadmap 一行 |
 | 审查角色 | 架构师独立审查（相对主 Bot 成稿） |
@@ -134,3 +134,46 @@ architecture 文首已写「客户端 LWW + Gateway best-effort」——**可接
 ## 总评（一行）
 
 **有条件通过** — BYO 方案与硬约束站住了；把命名、Gateway 会话、双层 LWW 与 O1–O6 写死进规格后，即可开实现规格起草，仍禁止业务代码。
+
+---
+
+## 附录 · 第三轮闭合复审（`fea4686`）
+
+| 项 | 内容 |
+|----|------|
+| 复审 SHA | `fea4686082b8f170e873b2aafe0665ca2fa12b55` |
+| PR | #8 仍 OPEN，未 merge |
+| Diff 范围 | 仅 `docs/*`（7 文件，无 src） |
+| 日期 | 2026-10-13 |
+
+### 条件清单核对
+
+| # | 第二轮必须改 | 结果 |
+|---|--------------|------|
+| 1 | 属性名统一 PascalCase | ✅ byo / architecture / mvp / risks 一致；无业务文档残留 `app_id` |
+| 2 | MVP 会话 = Gateway API Key；JWT=D4 | ✅ mvp §0.1 S1；architecture §2.2–2.5 |
+| 3 | 双层 LWW 小节 | ✅ architecture §4.0 |
+| 4 | O1–O6 写入裁定节 | ✅ mvp §0.1 |
+| 5 | Payload 失败闭合 | ✅ §3.5 / R7 / D1.8 |
+| 6 | 删除双轨 in_trash+AppDeletedAt | ✅ §4.7 状态机 |
+| 7 | feasibility refresh→用户自有 Worker | ✅ §3.2 |
+| 8 | 审查纪要入库 | ✅ 本文在 PR |
+
+| # | 用户第一轮六项 | 结果 |
+|--|----------------|------|
+| U1 | 会话协议 | ✅ §2.3–2.5；密钥不进 IDB/JSON |
+| U2 | 并发 / 不承诺强一致 | ✅ §4.2.1；O5 DO 非 MVP |
+| U3 | 删除协议 | ✅ §4.7 |
+| U4 | Payload 无损 | ✅ §3.5 失败闭合 |
+| U5 | 媒体文案 | ✅ 禁「完整图文云备份」 |
+| U6 | 断开保留 Outbox | ✅ §4.8 / S3 |
+
+P1–P4：维持确认，不回滚。
+
+### 闭合结论：**通过**
+
+第二轮「有条件通过」之条件已全部满足。  
+**授权**：可起草 **实现规格**（Worker 契约 / 配置字段 / 验收用例细化）。  
+**仍禁止**：业务 `src`、接真 Notion API、合并后生产部署、改正式 Supabase、集中托管 Token。
+
+无新的阻塞性文档分歧。标题区 Head 已更新为 `fea4686`；roadmap / 实现规格见本轮 docs 补丁（仍 OPEN，未 merge）。
