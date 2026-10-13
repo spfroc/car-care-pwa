@@ -1,11 +1,12 @@
 # M3-D 架构：Notion BYO 同步（单一推荐方案）
 
-> **状态**：设计中（2026-10-13）· docs-only  
+> **状态**：设计中（2026-10-13）· docs-only · **第二轮审查裁定已合入**  
 > 规格：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · 风险/验收：[`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
 > **架构师独立稿（交叉阅读）**：[`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md)  
+> 审查纪要：[`m3d-architecture-review-round2.md`](./m3d-architecture-review-round2.md)  
 > 原则对齐：[`own-cloud-sync-architecture.md`](./own-cloud-sync-architecture.md) · 可行性 stub：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)
 >
-> **文档优先级（若与独立稿表述冲突，以下列为准）**：BYO Cloudflare Worker Gateway · **客户端 LWW**（`merge.ts`）+ Gateway 尽力先读后写 · **媒体不同步** · 与 Supabase **互斥**。详见 [`m3d-mvp-spec.md` §0 已采用默认](./m3d-mvp-spec.md)。独立稿中的 Gateway API 草图、映射表与否决表仍有效；属性命名等细则以评审终选为准。
+> **文档优先级（权威冻结）**：BYO Cloudflare Worker Gateway · **双层 LWW**（客户端 pull `merge.ts` + Gateway push 尽力先读后写）· **媒体不同步** · 与 Supabase **互斥** · 属性名 PascalCase（`AppEntityId` 等）· MVP 会话 = Gateway API Key Bearer（密钥不进 IDB/JSON 备份）· 删除双轨 · Payload 失败闭合 · 切换默认保留 Outbox。细则见 [`m3d-mvp-spec.md` §0 / §0.1](./m3d-mvp-spec.md)。
 
 ---
 
@@ -18,10 +19,10 @@
 | 路径 | 现状 | M3-D 含义 |
 |------|------|-----------|
 | `src/sync/providers/notion.ts` | `NotionProvider` 实现 `CloudProvider`；`verify` 返回未开放；`pullAll`/`pushOps`/`pushSnapshot` 抛 `NotionNotImplementedError`；**无网络、无密钥** | **实现时填真逻辑**；接口形状可复用 |
-| `src/sync/types.ts` | `CloudProviderId` 含 `'notion'`；`CloudStorageConfig.notionWorkspaceHint?` 注释「Phase D」 | 扩展配置字段（代理 URL、会话提示等），**禁止**加 token 字段到前端 config |
-| `src/sync/engine.ts` `resolveProvider()` | `cfg.provider === 'notion'` → `new NotionProvider()` | 保持解析入口；构造参数改为代理 endpoint + 短命会话 |
+| `src/sync/types.ts` | `CloudProviderId` 含 `'notion'`；`CloudStorageConfig.notionWorkspaceHint?` 注释「Phase D」 | 扩展配置字段（代理 URL、workspace 提示等），**禁止**加 Notion token / Gateway 长期密钥字段到**可导出**前端 config |
+| `src/sync/engine.ts` `resolveProvider()` | `cfg.provider === 'notion'` → `new NotionProvider()` | 保持解析入口；构造参数改为代理 endpoint + 运行时会话 |
 | `src/components/DataStorageSettings.tsx` | 可选 Notion，展示 stub 文案 + 文档链 | UI 升级为代理配置向导（实现阶段） |
-| `src/i18n/messages.ts` | `storage.providerNotion` / `notionStub` | 文案随实现更新 |
+| `src/i18n/messages.ts` | `storage.providerNotion` / `notionStub` | 文案须体现「不同步图片 / 非完整图文云备份」 |
 
 ### 0.2 CloudProvider 契约（可复用）
 
@@ -51,9 +52,9 @@ interface CloudProvider {
 
 | 路径 | 可复用 | 必须分叉 / 注意 |
 |------|--------|-----------------|
-| `src/sync/outbox.ts` | `makeOutboxItem`、`nextRetryDelayMs`、`ownerUserId` / `OUTBOX_UNBOUND`、`blockedByConflictId`、`ackOutboxCoveredByUpload`、`clearOutboxForUser` | **`isCloudEnqueueEnabled()` 今日仅 `provider === 'supabase'`**（约 L28–32）。Notion 真同步前必须扩展，否则业务写不会入队 |
+| `src/sync/outbox.ts` | `makeOutboxItem`、`nextRetryDelayMs`、`ownerUserId` / `OUTBOX_UNBOUND`、`blockedByConflictId`、`ackOutboxCoveredByUpload`、`clearOutboxForUser` | **`isCloudEnqueueEnabled()` 今日仅 `provider === 'supabase'`**（约 L28–32）。Notion 真同步前必须扩展。**切换/断开默认不得调用 `clearOutboxForUser`**（见 §4.8） |
 | `src/sync/types.ts` `SyncOutboxItem` | 实体/op/重试字段齐全 | — |
-| `src/db/index.ts` | `sync_outbox` + `sync_meta` + `sync_conflicts`（IDB v4） | 不因 Notion 改 schema 版本亦可起步；若存代理会话指纹可放 `sync_meta` 或设置 store |
+| `src/db/index.ts` | `sync_outbox` + `sync_meta` + `sync_conflicts`（IDB v4） | 不因 Notion 改 schema 版本亦可起步；`workspaceKey` 可放 `sync_meta` |
 
 ### 0.4 LWW 与 Supabase RPC 依赖（必须分叉）
 
@@ -63,7 +64,7 @@ interface CloudProvider {
 | `SupabaseProvider.pushOps` | 逐 op 调该 RPC |
 | `src/sync/merge.ts` `shouldApplyCloudRow` | 客户端 pull 合并：pending outbox 跳过、LWW by `updatedAt`、改胜于删 |
 
-**Notion 无同等事务/RPC**：不能复用 SQL；须在 **用户代理内**实现「读当前页 AppUpdatedAt → 比较 → 写」的**尽力 LWW**，并文档化竞态窗口。Engine 侧仍消费同一 `PushResult`。
+**Notion 无同等事务/RPC**：不能复用 SQL；须在 **用户代理内**实现「读当前页 `AppUpdatedAt` → 比较 → 写」的**尽力 LWW**，并文档化竞态窗口（§4.0 / §4.2）。Engine 侧仍消费同一 `PushResult`。
 
 ### 0.5 M3-C 冲突机制（可复用）
 
@@ -90,18 +91,18 @@ Notion MVP 实体集合与 M3-C 手动实体**对齐**，可直接复用 UI 与 
 | 能力 | 复用 | 分叉 |
 |------|------|------|
 | `CloudProvider` 接口 + engine 编排 | ✅ | Notion 实现类 |
-| Outbox 队列 / 重试 / owner 隔离 | ✅ | `isCloudEnqueueEnabled` 扩 notion |
+| Outbox 队列 / 重试 / owner 隔离 | ✅ | `isCloudEnqueueEnabled` 扩 notion；切换默认保留队列 |
 | Merge + M3-C 冲突 UI | ✅ | 无（若 `PushResult` 对齐） |
-| 原子 LWW RPC | ❌ | Worker 内比较写 + 可选乐观锁字段 |
-| RLS / Auth（Supabase） | ❌ | 代理会话 + Notion 页分享权限 |
-| MediaObjectStore | ❌ MVP | 外链或不同步媒体 |
+| 原子 LWW RPC | ❌ | Worker 内比较写 + 可选 DO（非 MVP 必做） |
+| RLS / Auth（Supabase） | ❌ | Gateway API Key 会话 + Notion 页分享权限 |
+| MediaObjectStore | ❌ MVP | 不同步媒体二进制 |
 | 集中多租户 Token 库 | ❌ 否决 | 用户自有代理 |
 
 ---
 
 ## 1. 单一推荐方案（一句话）
 
-**每个需要 Notion 的用户自部署一台 Cloudflare Worker（或同等边缘代理），Worker Secret/KV 持有该用户的 Notion Internal Integration Token（或 OAuth access/refresh）；PWA 只配置「代理 Base URL + 用户自签发的短命会话」并调用现有 `CloudProvider` 形状；车辆/养护映射为用户 workspace 内两个 Data Source 的 Page 行，应用侧 LWW 用属性 `AppUpdatedAt`，媒体 MVP 不同步二进制。**
+**每个需要 Notion 的用户自部署一台 Cloudflare Worker（或同等边缘代理），Worker Secret/KV 持有该用户的 Notion Internal Integration Token；PWA 只持久化「代理 Base URL + workspace 提示」并在运行时持有用户自设的 Gateway API Key（Bearer）；车辆/养护映射为用户 workspace 内两个 Data Source 的 Page 行，双层 LWW 用属性 `AppUpdatedAt`，媒体 MVP 不同步二进制。**
 
 ### 1.1 为何选它
 
@@ -121,15 +122,16 @@ Notion MVP 实体集合与 M3-C 手动实体**对齐**，可直接复用 UI 与 
 | B. 应用方多租户代管所有用户 Notion Token | **否决** | 违反「用户拥有 / 不建集中托管」；密钥与合规成本高 |
 | C. 仅 Contabo 主机上 per-user env、无 Worker | **备选** | 可行但运维重于 CF；若用户已有 Contabo 可等同「自有代理」 |
 | D. OAuth Public Integration + Token 存**应用方** DB | **否决作默认** | 应用方仍集中持有 refresh |
-| E. OAuth Public + Token 存**用户自有** Worker KV | **可采纳变体** | 适合「一键授权」；仍须用户侧有换票终点；实现复杂度高于 Internal+Secret |
+| E. OAuth Public + Token 存**用户自有** Worker KV | **可采纳变体（非 MVP）** | 适合「一键授权」；MVP 不做共享 Public OAuth（O2） |
 | F. 直接浏览器调 `api.notion.com` | **否决** | CORS/密钥暴露；Notion 不面向纯前端持有 secret |
+| G. 把 `GATEWAY_API_KEY` 换名写入 IDB / JSON 备份 | **否决** | 长期共享密钥不得进浏览器持久化或导出文件（§2.4） |
 
-**推荐默认落地路径**：Internal Integration + 用户把 Token 粘贴到**自己的** Worker Secret（一次配置）→ PWA 填 Worker URL。  
-**增强路径（同一架构）**：Public OAuth，但 `client_secret` 与 refresh **只在用户 Worker**；应用官网只提供可 fork 的 Worker 模板与 `client_id`（若用共享 public app，须另开评审，见开放问题）。
+**推荐默认落地路径**：Internal Integration + 用户把 Token 粘贴到**自己的** Worker Secret（一次配置）→ PWA 填 Worker URL → 每次会话输入 Gateway API Key。  
+**增强路径（D4）**：`POST /auth/session` 用 API Key 换短命 JWT，减少冷启动重输。
 
 ---
 
-## 2. 认证与代理
+## 2. 认证与代理（会话状态机 · 凭据存储）
 
 ### 2.1 Notion 侧（官方，2026）
 
@@ -139,43 +141,105 @@ Notion MVP 实体集合与 M3-C 手动实体**对齐**，可直接复用 UI 与 
 - Create token：https://developers.notion.com/reference/create-a-token  
 - 最新 `Notion-Version`：`2026-03-11`（https://developers.notion.com/guides/get-started/upgrade-guide-2026-03-11）
 
-类型：
-
 | 类型 | 用途 | MVP 推荐 |
 |------|------|----------|
-| Internal connection token | 单 workspace；页需手动分享给 connection | **默认** |
+| Internal connection token | 单 workspace；页需手动分享给 connection | **默认**（只进 Worker Secret） |
 | Personal Access Token (PAT) | 用户态脚本；管理员可管控 | 允许等价于 Internal，仍**只进 Worker** |
-| Public OAuth | `authorize` → `code` → `POST /v1/oauth/token`；有 `refresh_token` | 增强变体 |
+| Public OAuth | `authorize` → `code` → `POST /v1/oauth/token`；有 `refresh_token` | **MVP 不做**（O2）；若未来做，refresh **只存用户自有 Worker** |
 
 ### 2.2 代理 API 草图（用户 Worker）
 
 ```
-PWA ──Bearer <session>──► User Worker ──Bearer <notion_token>──► api.notion.com
+PWA ──Bearer <GatewayApiKey|短命JWT>──► User Worker ──Bearer <NOTION_TOKEN>──► api.notion.com
 ```
 
-建议最小路由（实现阶段）：
-
-| Worker 路由 | 对应 CloudProvider |
-|-------------|-------------------|
-| `GET /health` + `GET /verify` | `verify()` — 调 Notion `users/me` 或探测 Data Source |
-| `GET /sync/pull` | `pullAll()` — 分页 query 两 Data Source，映射 `CloudRow[]` |
-| `POST /sync/push` | `pushOps` — 逐 op LWW upsert/trash |
-| `POST /sync/snapshot` | `pushSnapshot` — 分块调用 push |
-| `POST /auth/session`（可选） | 用用户配置的 `PROXY_SHARED_SECRET` 换短命 JWT |
+| Worker 路由 | 对应 CloudProvider | 备注 |
+|-------------|-------------------|------|
+| `GET /health` + `GET /verify` | `verify()` | 校验 Bearer；调 Notion `users/me` 或探测 Data Source；返回 `workspaceKey` |
+| `GET /sync/pull` | `pullAll()` | 分页 query 两 Data Source（含 tombstone 策略 §4.7） |
+| `POST /sync/push` | `pushOps` | 逐 op 尽力 LWW upsert/trash |
+| `POST /sync/snapshot` | `pushSnapshot` | 分块调用 push |
+| `POST /auth/session` | （D4 可选） | 校验 `GATEWAY_API_KEY` → 签发短命 JWT |
+| `POST /auth/refresh` | （D4 可选） | 未过期 refresh 窗口内换新 JWT；**不**接受「仅持旧 JWT 无限续」而不绑定密钥轮换 |
+| `POST /auth/revoke` | （D4 可选） | 吊销当前 jti / 设备会话（KV denylist） |
 
 安全要求：
 
 - Notion Token **仅** `NOTION_TOKEN` env；永不写入响应体或日志明文  
-- PWA↔Worker：TLS + 共享密钥派生的短命 JWT（或 CF Access）；禁止「无认证开放代理」  
-- CORS 仅允许用户 PWA Origin（可配置）
+- PWA↔Worker：TLS + **MVP：Bearer Gateway API Key**；禁止「无认证开放代理」  
+- CORS 仅允许用户配置的 PWA Origin  
+- D4：JWT 由 Worker 用独立 `SESSION_SIGNING_SECRET` 签发；TTL 建议 ≤ 1h；签名密钥永不下发客户端
 
-### 2.3 前端配置（允许）
+### 2.3 会话状态机（可执行）
 
-`CloudStorageConfig` 扩展方向（设计）：
+```
+                    ┌─────────────────────────────────────────┐
+                    │              Unauthenticated            │
+                    └───────────────┬─────────────────────────┘
+                         用户输入 API Key + gatewayUrl
+                                    │
+                                    ▼
+                         POST /verify（或 /auth/session）
+                    ┌───────────────┴───────────────┐
+                    │ 失败：保持未认证；可重试      │
+                    │ 成功：→ Authenticated         │
+                    └───────────────┬───────────────┘
+                                    ▼
+              ┌──────────── Authenticated ────────────┐
+              │ MVP：内存持有 API Key，请求带 Bearer  │
+              │ D4：内存持有 short JWT；到期 → Renew  │
+              └─────┬─────────────┬─────────────┬─────┘
+                    │             │             │
+          续期成功(D4)      用户断开/登出    密钥轮换或 revoke
+                    │             │             │
+                    ▼             ▼             ▼
+              Authenticated   Unauthenticated  Unauthenticated
+              （新 JWT）      （清内存会话）   （全部设备失效）
+```
 
-- `notionProxyUrl`（https）  
-- `notionSessionHint` / 不持久化 secret（会话放 memory 或 WebCrypto 包装的非导出密钥，实现评审）  
-- **禁止** `notionToken` / `notionOauthRefresh` 字段进入前端类型与设置导出
+| 事件 | 行为 | 持久化影响 |
+|------|------|------------|
+| **初始认证** | 用户填 `gatewayUrl` + 输入 `GATEWAY_API_KEY` → `verify` | 仅允许持久化 URL / hint / `workspaceKey` |
+| **短期会话签发（D4）** | `POST /auth/session` → JWT（含 `workspaceKey`、`exp`、`jti`） | JWT **不**写入 JSON 备份；实现可选 `sessionStorage`（关页即失） |
+| **续期（D4）** | `exp` 前 `POST /auth/refresh`；失败则回退要求重输 API Key | 同左 |
+| **跨设备登录** | 每设备各自输入同一 `GATEWAY_API_KEY`；**无**共享服务端设备会话表（MVP） | 各设备独立内存会话 |
+| **撤销** | 用户在 Worker 轮换 `GATEWAY_API_KEY` Secret → 旧 Key 立即失效；D4 另可 `revoke` jti | 客户端下次请求 401 → 清内存会话并提示重输 |
+| **断开** | `signOut`：清内存会话；**默认保留**该 `ownerUserId` 的 Outbox（§4.8） | 不清业务 IDB；不清 Notion 页 |
+
+### 2.4 凭据存储：PWA 可存 / 绝不可存
+
+| 类别 | 项 | 允许？ | 说明 |
+|------|-----|--------|------|
+| **可持久化**（IDB 设置 / `sync_meta`） | `provider: 'notion'` | ✅ | |
+| | `notionGatewayUrl` | ✅ | HTTPS URL |
+| | `notionWorkspaceHint` | ✅ | 展示用 |
+| | `workspaceKey`（verify 返回的稳定 id） | ✅ | 防串租户；非密钥 |
+| **仅运行时**（内存；可选 `sessionStorage` 作 tab 级，**禁止**进 export） | `GATEWAY_API_KEY` | ⚠️ 运行时持有 | **禁止**写入 IDB `CloudStorageConfig`、`localStorage`、`car-care-export` JSON |
+| | 短命 JWT（D4） | ⚠️ 运行时持有 | 同上；过期即废 |
+| **绝不可出现在 PWA** | `NOTION_TOKEN` / Internal / PAT / OAuth access / refresh | ❌ | 只在 Worker Secret/KV |
+| | `SESSION_SIGNING_SECRET` / `PROXY_SHARED_SECRET` | ❌ | 只在 Worker |
+| | 任何把上述密钥**换名**后的字段（如 `notionToken`→`syncSecret`） | ❌ | 类型层 + CI 扫描禁止 |
+
+**JSON 备份（`car-care-export-v1`）**：导出过滤必须剥离一切会话/密钥字段；导入不得要求或写回密钥。
+
+### 2.5 前端配置（允许的类型方向）
+
+```ts
+// 可持久化（设计方向；实现阶段）
+CloudStorageConfig {
+  provider: 'notion'
+  notionGatewayUrl: string
+  notionWorkspaceHint?: string
+  // 禁止：notionToken / notionGatewayKey / notionOauthRefresh / 任何 secret
+}
+
+// 运行时会话（非 export、非长期 IDB 设置）
+NotionRuntimeSession {
+  bearer: string          // API Key 或短命 JWT
+  workspaceKey: string
+  expiresAt?: number      // D4 JWT
+}
+```
 
 ---
 
@@ -197,30 +261,24 @@ PWA ──Bearer <session>──► User Worker ──Bearer <notion_token>─�
 2. Database「车辆」→ Data Source `vehicles`  
 3. Database「养护记录」→ Data Source `records`
 
-### 3.3 属性映射（MVP）
+### 3.3 属性映射（MVP · 权威命名）
 
-**公共列（两表）：**
+**公共列（两表）——与独立稿同名，一律 PascalCase：**
 
 | Notion 属性 | 类型 | 含义 |
 |-------------|------|------|
 | `Name` | title | 展示名（车名 / 记录摘要） |
-| `AppEntityId` | rich_text 或 title 旁 unique 用 rich_text + 查询 filter | 本地 UUID；幂等键 |
-| `AppUpdatedAt` | rich_text（ISO）或 date | **应用 LWW 戳**（优先于粗粒度 `last_edited_time`） |
-| `AppDeletedAt` | rich_text / date | 软删戳；与 trash 策略配合 |
-| `DeviceId` | rich_text | 可选 |
-| `PayloadJson` | rich_text（≤2000 字/段；超长则多块或外部） | 完整实体 JSON；**注意 2000 char/段限制** |
+| `AppEntityId` | rich_text | 本地 UUID；幂等键；query filter |
+| `AppUpdatedAt` | rich_text（ISO-8601） | **应用 LWW 戳**（权威；勿依赖 `last_edited_time`） |
+| `AppDeletedAt` | rich_text（ISO）/ 空 | 软删戳；与 `in_trash` 双轨（§4.7） |
+| `DeviceId` | rich_text | 可选；回声抑制 |
+| `PayloadJson` | rich_text | 瘦实体 JSON；编码规则 §3.5 |
 
-**vehicles 额外（便于 Notion UI）：** `Plate`、`EnergyType`、`Archived` 等可冗余标量；权威仍在 `PayloadJson`。
+**vehicles 额外（便于 Notion UI，权威仍在 `PayloadJson`）：** `Plate`、`EnergyType`、`Archived`。
 
-**records 额外：** `VehicleAppId`（relation 或 rich_text）、`RecordType`、`RecordDate`、`AmountPaid`。
+**records 额外：** `VehicleAppId`（rich_text）、`RecordType`、`RecordDate`、`AmountPaid`。
 
-联合类型 `CareRecord`：不在 Notion 拆多表；用 `RecordType` + 完整 JSON。
-
-**超长 JSON**：单 rich_text 2000 字符上限（官方 Request limits）。对策（按序）：
-
-1. MVP 接受「瘦 payload」+ 必要标量列；或  
-2. Payload 拆多个 `PayloadJson_N`；或  
-3. 仅存 Notion 外（用户 R2）链接 — 增加依赖，非默认。
+联合类型 `CareRecord`：不在 Notion 拆多表；用 `RecordType` + 瘦 JSON。`mediaIds` 可保留 ID 数组，**不含** base64 / 二进制。
 
 ### 3.4 与 `CloudRow` 对齐
 
@@ -228,33 +286,85 @@ PWA ──Bearer <session>──► User Worker ──Bearer <notion_token>─�
 CloudRow { entity, id, payload, updatedAt, deletedAt?, deviceId? }
 ```
 
-映射：`id` ← `AppEntityId`；`updatedAt` ← `AppUpdatedAt`；`deletedAt` ← `AppDeletedAt` 或页 `in_trash`。
+映射：`id` ← `AppEntityId`；`updatedAt` ← `AppUpdatedAt`；`deletedAt` ← `AppDeletedAt`（优先）或由 `in_trash` 推导。
+
+### 3.5 PayloadJson 无损编码（冻结方案 · O3）
+
+**目标**：业务 JSON 在 Notion 往返后语义无损，或**显式失败**；**禁止静默截断**。
+
+#### 3.5.1 编码规则（MVP）
+
+1. **瘦 payload**：从实体 JSON 剥离已冗余到标量列的字段（如 `name`→`Name`、`plate`→`Plate`）；剥离一切媒体二进制 / data-URL；保留 `mediaIds: string[]`（仅 ID）。  
+2. **序列化**：`JSON.stringify` → UTF-16 长度（Notion rich_text 以字符计）**必须 ≤ 2000**。  
+3. **超限**：**失败闭合**——该 outbox op 标记失败；UI 可读错误（如「该条记录过大，无法同步到 Notion；请缩短备注或改用 JSON 导出 / Supabase」）；**不得**截断后写入。  
+4. **单段**：MVP **只**使用单一属性 `PayloadJson`；**不**自动拆 `PayloadJson_N`（拆分属 D4）。  
+5. **往返校验（Gateway 写后读或本地预检）**：  
+   - 写前：`encode(payload).length <= 2000`  
+   - 写后（D1 建议）：retrieve 拼回字符串 → `JSON.parse` → 与规范化瘦对象 deep-equal；失败则该 op **不** ACK，返回可诊断错误（视为未应用）。  
+6. **异常恢复**：解码失败（手改损坏、半截属性）→ 该行 skip + 计数；**不**用残缺 JSON 覆盖本地权威行；必要时开 M3-C 或「云端损坏」提示。  
+7. **分页**：与 Payload 无关的 query 分页 `page_size≤100`；单行属性不跨 page。
+
+#### 3.5.2 非 MVP（D4 候选，未冻结为默认）
+
+| 方案 | 说明 | 状态 |
+|------|------|------|
+| `PayloadJson_1`…`N` 拼接 | 须定义分隔与校验和；实现与验收成本高 | D4 可选 |
+| 用户 R2 外链存全文 | 增加依赖与权限面 | D4 可选 |
+| 静默截断 / 丢字段 | — | **永久否决** |
 
 ---
 
 ## 4. 同步协议
 
+### 4.0 双层 LWW（必须并存 · 审查裁定）
+
+| 路径 | 权威组件 | 职责 |
+|------|----------|------|
+| **Pull**（云→本地） | 客户端 `merge.ts` + M3-C | 是否应用云行、open 冲突、回声抑制、改胜于删 |
+| **Push**（本地→云） | Gateway 先读 `AppUpdatedAt` 再写 | 产出与 Supabase 同形的 `PushResult`（含 `cloud_newer`）；**无**第二套冲突模型 |
+
+客户端不能替代 Gateway 的 push 比较（否则 TOCTOU 全在浏览器）；Gateway 不能替代客户端 pull/M3-C。  
+**不得承诺**与 Postgres `FOR UPDATE` 同等的跨实例强一致。
+
 ### 4.1 仍复用本地协议
 
 见 `own-cloud-sync-architecture.md` §5：`sync_meta` + `sync_outbox`；业务写后入队；`runSync` push→pull。
 
-### 4.2 Push（Worker LWW）
+### 4.2 Push（Gateway 尽力 LWW）与并发
 
 对每个 op：
 
-1. 按 `AppEntityId` query Data Source（filter equals）；`page_size=1`  
+1. 按 `AppEntityId` query Data Source（filter equals）；**查询策略须能看见 tombstone 页**（§4.7），`page_size` 足够覆盖重复页异常  
 2. 无行 → create page（`parent.data_source_id`）  
-3. 有行 → 读 `AppUpdatedAt`：若云端 > `op.mutatedAt` → 返回 `skipped_cloud_newer`（**不写**）  
-4. 否则 PATCH properties；`delete` op → `in_trash: true`（`Notion-Version: 2026-03-11`，**勿用已移除的 `archived` 请求字段**）  
+3. 有行且已删（`AppDeletedAt` 或 `in_trash`）→ 见 §4.7 表（默认拒绝「旧 upsert 复活」，除非本地 op 为显式恢复且戳更新）  
+4. 有存活行 → 读 `AppUpdatedAt`：若云端 > `op.mutatedAt` → 返回 `skipped_cloud_newer`（**不写**）  
+5. 否则 PATCH properties；`delete` op → 双轨删除（§4.7）  
    - 文档：https://developers.notion.com/reference/trash-page  
 
-**竞态**：两设备近同时 push 无 DB 锁时可能双写覆盖。缓解：Worker 对同 `AppEntityId` 串行化（Durable Object / 单飞锁）；仍弱于 Postgres `FOR UPDATE`。接受为 Notion 路径已知差距，冲突靠 M3-C + 时间戳。
+#### 4.2.1 无原子 LWW 的并发（跨 Worker 实例）
 
-**幂等**：create 前必须 query；禁止无查直 insert。
+| 层级 | MVP | 说明 |
+|------|-----|------|
+| 同 isolate / 同请求批内 | **要** | 对同一 `AppEntityId` 串行处理 push 批次 |
+| Cloudflare Durable Object | **非必做（O5）** | D4 加固：每 `AppEntityId`（或每 workspace）一个 DO 队列，把「读戳→写」放进单线程 actor |
+| 跨独立 Worker 实例无 DO | **存在竞态窗** | 两设备近同时 create/update 仍可能双页或后写覆盖 |
+
+**若采用 DO（D4）——一致性边界与成本（不得夸大）：**
+
+| 项 | 陈述 |
+|----|------|
+| 一致性边界 | **仅**保证进入同一 DO 的同一实体操作串行；**不是**全局快照隔离，**不是**跨实体事务 |
+| 仍可能发生 | 客户端已基于过期快照决策；Notion API 503 后的不确定提交；DO 外的直连/手动 UI 编辑 |
+| 成本 | 每活跃实体或每 workspace 的 DO 时长/请求计入 CF 账单；个人量级通常可忽略，大库高频同步需评估 |
+| 产品承诺 | 文档与 UI **不得**写「强一致 / 零丢失」；应写「尽力 LWW + 冲突 UI」 |
+
+**与客户端 LWW / M3-C 的分工**：Gateway 负责 push 比较并返回 `cloud_newer`；客户端负责 pull 合并与 open 冲突；用户在 M3-C 选择 keep_local / take_cloud。竞态残余靠时间戳 + 冲突 UI，**接受**弱于 Supabase RPC。
+
+**幂等**：create 前必须 query（含 trash）；禁止无查直 insert。
 
 ### 4.3 Pull
 
-- 分页 query 两 Data Source（含 `is_archived` 策略：默认非归档页；trash 行为见风险文档）  
+- 分页 query 两 Data Source；**须包含 tombstone 行**（见 §4.7：`AppDeletedAt` 非空的页仍在可 query 的 Data Source 内，直到 grace 后策略另议）  
 - 映射为 `CloudSnapshot` → 现有 `merge` / M3-C detect  
 - `serverCursor`：可用 max(`AppUpdatedAt`)；Notion 无等价 WAL cursor
 
@@ -262,7 +372,8 @@ CloudRow { entity, id, payload, updatedAt, deletedAt?, deviceId? }
 
 1. `verify` 探测 Data Source ID（存 Worker KV 或返回给客户端 meta）  
 2. 若云空 → `pushSnapshot` 仅 vehicles+records  
-3. 若云非空且本地非空 → **禁止静默覆盖**；UI 选「以本地为准上传 / 以云为准拉取 / 取消」（实现阶段；对齐 Supabase 首次上云谨慎原则）
+3. 若云非空且本地非空 → **禁止静默覆盖**；UI 选「以本地为准上传 / 以云为准拉取 / 取消」  
+4. 向导文案：**明确不同步照片**
 
 ### 4.5 重试与限流
 
@@ -272,23 +383,82 @@ CloudRow { entity, id, payload, updatedAt, deletedAt?, deviceId? }
   - 写入 503 可能已提交：按 `retry_guidance` **先读后判**，避免双建页  
 - 队列化出站，避免 burst 打满预算
 
-### 4.6 账号切换 / 断开
+### 4.7 删除同步协议（可执行 · O4）
 
-- 复用 `ownerUserId`：Notion 的「用户」键用 Worker 返回的 `bot_id`/`workspace_id` 哈希或代理签发的 `proxyUserId`  
-- 断开：`signOut` 清本地会话；`clearOutboxForUser`；**不**自动清空 Notion 页  
-- 切换 workspace：视为新云用户；禁止旧 outbox 推新库
+#### 4.7.1 不变式
+
+1. **双轨**：应用内删除 → Gateway 同时（同一逻辑操作内）设置 `in_trash: true` **且**写入 `AppDeletedAt`（ISO）。  
+2. **Tombstone 仍可 query**：在 grace 窗口内，带 `AppDeletedAt` 的页**必须仍能**被 Data Source query 按 `AppEntityId` 命中（即便 `in_trash`；若 Notion query 默认排除 trash，Worker 须用可返回 trash 的检索方式或依赖本地 `sync_notion_map` + retrieve）。**实现验收**：删后立刻用同一 `AppEntityId` 仍能读到 tombstone 元数据。  
+3. **Pull `deletedAt`**：优先 `AppDeletedAt`；若空但 `in_trash===true` → 用页 `last_edited_time` 或 push 时写入的戳推导。  
+4. **恢复**：须 `in_trash: false` **且**清空 `AppDeletedAt`，并 bump `AppUpdatedAt`。  
+5. **防旧设备复活**：create 前 query 若命中 tombstone，**禁止**再 create 第二页；对过期 upsert（`mutatedAt` < `AppDeletedAt`）返回冲突或 no-op deleted；仅当本地为显式「恢复/新编辑」且 `mutatedAt` > `AppDeletedAt` 时才允许 untrash+patch。
+
+#### 4.7.2 状态转换表
+
+| 当前云状态 | 事件 | 下一云状态 | Gateway / 客户端 |
+|------------|------|------------|------------------|
+| Absent（无 page） | push upsert | Alive | create + 写属性 |
+| Absent | push delete | Absent | no-op applied |
+| Alive | push upsert（本地戳 ≥ 云戳） | Alive | patch |
+| Alive | push upsert（本地戳 < 云戳） | Alive | `cloud_newer` → M3-C |
+| Alive | push delete | Tombstone（`in_trash` + `AppDeletedAt`） | 双轨写 |
+| Tombstone | push upsert（戳 ≤ `AppDeletedAt`） | Tombstone | **拒绝复活**；可返回 conflict / skipped_deleted |
+| Tombstone | push upsert（戳 > `AppDeletedAt`，显式恢复/新编辑） | Alive | untrash + 清 `AppDeletedAt` + patch |
+| Tombstone | push delete | Tombstone | 幂等；可刷新 `AppDeletedAt` |
+| Alive / Tombstone | 用户在 Notion UI 硬删 page | Absent（映射残留） | 下次 push：query 无行 → **先查 map**；若 map 曾标记 deleted 则 **禁止**盲目 create；清 map 或标 orphan（验收：不因旧 outbox upsert 重建已删实体） |
+| Tombstone | pull | 本地 merge 见删 | `deletedAt` 非空 → 现有 merge / M3-C `edit_vs_delete` |
+| Tombstone | 用户 Notion UI restore | 可能 Alive 但属性脏 | 下次 pull 以属性为准；若缺 `AppDeletedAt` 仅靠 `in_trash` 推导 |
+
+```
+Absent ──upsert──► Alive ──delete──► Tombstone ──(过期 upsert)──► Tombstone（拒绝）
+                      ▲                  │
+                      └──upsert(新戳)────┘
+```
+
+### 4.8 断开 / 切换工作区（安全走廊 · S3）
+
+#### 4.8.1 默认行为（冻结）
+
+| 动作 | Outbox | 业务 IDB | Notion 云端 | 内存会话 |
+|------|--------|----------|-------------|----------|
+| 断开 Notion（signOut） | **保留**该 `ownerUserId` 队列 | 保留 | 不动 | 清除 |
+| 切换 Gateway URL / `workspaceKey` | **保留**旧 owner 队列；**绑定新 owner** 的新队列为空 | 保留（除非用户确认清空业务数据） | 不动旧库 | 清除后按新 URL 认证 |
+| 切换 Notion ↔ Supabase | 同上：旧 provider 队列保留；禁止跨 provider 误推 | 保留 | 各云不动 | 按目标 provider 会话 |
+
+**禁止默认调用** `clearOutboxForUser` 作为断开/切换的唯一路径。显式「丢弃未推送变更」须独立确认文案。
+
+#### 4.8.2 安全走廊（实现须遵守）
+
+1. 每个 outbox 项带 `ownerUserId`（= `workspaceKey` 或代理 subject）。  
+2. `runSync` / `pushOps` **只**推送 `ownerUserId === 当前 verify 的 workspaceKey` 的项。  
+3. 切换后旧队列可见于设置页「未推送（旧工作区）」；提供：  
+   - **返回旧工作区并推送**（改回 URL/密钥后 flush）  
+   - **导出 JSON 后丢弃**  
+   - **显式丢弃**（二次确认）  
+4. 新工作区首次同步仍走 §4.4 非空确认。
+
+#### 4.8.3 验收用例（摘要；完整矩阵见 risks）
+
+| ID | 场景 | 期望 |
+|----|------|------|
+| SW1 | 有未推送 outbox 时断开 | 队列仍在；会话清除；云端不变 |
+| SW2 | 切换到另一 workspaceKey | 旧队列仍在且 **不**被 push；新库无旧数据写入 |
+| SW3 | 用户显式丢弃旧队列 | 仅在确认后清除；需可测 |
+| SW4 | 切回旧 workspace 后 flush | 旧队列成功推到原库（LWW 仍适用） |
 
 ---
 
-## 5. 图片 / 媒体
+## 5. 图片 / 媒体（产品文案）
 
 | 选项 | 结论 |
 |------|------|
-| Notion File Upload 作主媒体库 | **不推荐作 MVP 主路径**：附件下载 URL **1 小时过期**须反复 retrieve；Free 单文件 5 MiB；上传后须 1 小时内 attach（https://developers.notion.com/guides/data-apis/working-with-files-and-media） |
-| Payload 内嵌 base64 | **否决**：块配额 + 2000 字限制 + rate |
-| **MVP：不同步 media 实体**；记录上 `mediaIds` 可保留 ID，二进制仍仅本地 IDB | **推荐** |
-| 后续：Notion 属性存**用户自有** HTTPS 外链（R2/Supabase Storage） | 可选 Phase D.1 |
-| 有 Supabase 时媒体继续走 M3-A | 见混合策略 |
+| Notion File Upload 作主媒体库 | **不推荐作 MVP 主路径**：附件下载 URL **1 小时过期**；Free 单文件 5 MiB（https://developers.notion.com/guides/data-apis/working-with-files-and-media） |
+| Payload 内嵌 base64 | **否决** |
+| **MVP：不同步 media 实体与图片二进制**；记录上 `mediaIds` 可保留 ID | **推荐** |
+| 后续：用户自有 HTTPS 外链 | 可选 Phase D.1 |
+| 有 Supabase 时媒体继续走 M3-A | 互斥 provider 下自然分离 |
+
+**文案冻结**：Notion 模式 =「车辆与养护**结构化数据**的可读备份 + 轻同步」。**禁止**：「完整图文云备份」「照片已同步到 Notion」「全量图文上云」。设置页常驻：「照片仅保存在本机；需要云端存图请用 Supabase 或 JSON 导出」。
 
 ---
 
@@ -296,11 +466,9 @@ CloudRow { entity, id, payload, updatedAt, deletedAt?, deviceId? }
 
 | 策略 | 说明 | MVP |
 |------|------|-----|
-| **互斥** | `CloudProviderId` 同时只能启用一个；切换需确认清空/保留 outbox | **推荐默认** |
-| 双写 | 同一 outbox 扇出两个 provider | 否决（冲突与幂等爆炸） |
+| **互斥** | `CloudProviderId` 同时只能启用一个；切换走 §4.8 | **推荐默认** |
+| 双写 | 同一 outbox 扇出两个 provider | 否决 |
 | Supabase 主 + Notion 只读导出 | 定时 dump | 非 MVP |
-
-设置页文案明确：Notion 与自有 Supabase 二选一；切换向导警告未推送队列。
 
 ---
 
@@ -308,22 +476,22 @@ CloudRow { entity, id, payload, updatedAt, deletedAt?, deviceId? }
 
 | 项 | 预估 |
 |----|------|
-| Cloudflare Worker | 个人量级通常免费档；注意 CPU/请求配额 |
-| Notion Free | 单人 Free workspace 块通常充足；**多人 Free** 有 **1000 lifetime blocks** API 强制（约 2026-09 起）：https://developers.notion.com/reference/workspace-block-limits — 每养护行≈1 page block，超量 403 `restricted_resource` |
-| 应用方 | 只维护开源 Worker 模板 + 文档；不代付用户 Notion |
-| 维护 | Notion-Version 升级（`2026-03-11` 已改 `in_trash`）；Data Source API 与旧 `databases.query` 迁移 |
+| Cloudflare Worker | 个人量级通常免费档；DO（若 D4 启用）另计 |
+| Notion Free | 单人 Free 通常够用；**多人 Free** 有 **1000 lifetime blocks** API 强制：https://developers.notion.com/reference/workspace-block-limits |
+| 应用方 | 开源 Worker **参考模板**（O1）+ 文档；不代付用户 Notion；不托管 Token |
+| 维护 | Notion-Version 钉 `2026-03-11`；Data Source API |
 
 ---
 
 ## 8. 实现阶段文件预期（本 PR 不创建）
 
 - 填实 `src/sync/providers/notion.ts`（仅调用户代理，不直连带 token）  
-- 扩展 `isCloudEnqueueEnabled`  
-- 可选 `docs/templates/notion-sync-worker/`（示例，无真实 secret）  
-- **禁止**把 Notion SDK 打进生产 PWA 关键路径（若示例需要，限于 templates/scripts）
+- 扩展 `isCloudEnqueueEnabled`；切换路径遵守 §4.8  
+- 可选 `docs/templates/notion-sync-worker/`（O1，无真实 secret）  
+- **禁止**把 Notion SDK 打进生产 PWA 关键路径  
 
 ---
 
-## 9. 开放问题（交独立架构评审）
+## 9. 开放问题
 
-见成功回报；摘要：共享 Public OAuth client 是否可接受、Payload 超长策略终选、trash vs `AppDeletedAt` 双轨、Worker 参考实现宿主是否官方维护。
+第二轮已裁 O1–O6 / S1–S3，见 [`m3d-mvp-spec.md` §0.1](./m3d-mvp-spec.md)。实现规格阶段仅允许在**不推翻冻结**的前提下细化接口字段与测试夹具。
