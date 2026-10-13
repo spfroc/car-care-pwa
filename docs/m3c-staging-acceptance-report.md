@@ -1,6 +1,6 @@
 # M3-C Staging 部署与验收报告
 
-> **时间**：2026-10-13 ~09:48–10:00 Asia/Shanghai (CST)  
+> **时间**：2026-10-13 ~09:48–10:00 Asia/Shanghai (CST)；**D5/D8 补强重跑** ~10:15–10:22 CST  
 > **执行**：Grok Bot executor（`/workspace/car-care-pwa/app`）  
 > **硬约束**：仅部署 https://car-test.adobesun.com；**未**部署 https://car.adobesun.com；**未**改正式 Supabase `tqjowsffppgoqtdokbzp`；**未**碰 Notion；**未**做 M3-C.1 30 天恢复。
 
@@ -66,16 +66,61 @@
 | D2 | 并发编辑 → open | **PASS** | `edit_edit` open；本地仍 `D2-Local`（无静默 LWW） |
 | D3 | 「保留本地」 | **PASS** | 冲突关闭；本地+云端均为 `D3-KeepLocal` |
 | D4 | 「采用云端」 | **PASS** | 本地 `D4-CloudWin`；对应 outbox 清空；冲突关闭 |
-| D5 | 删除与修改 + 二次确认路径 | **PASS** | `kind=edit_vs_delete`；UI 有「采用云端」按钮（confirm 由 handler 接受） |
+| D5 | 删除与修改 + **真点击**二次确认 | **PASS** | 见 §5.1：取消无变 → 确认后云端删生效 |
 | D6 | 离线后同步遇对端已改 | **PASS** | open + 本地名保留 |
 | D7 | 解决失败重试 | **PASS** | abort REST 时保持 open/本地/outbox；恢复后 take_cloud 成功 |
-| D8 | 同步中第二标签 | **PASS** | Web Locks 互斥；持锁时对侧同步可完成/串行 |
+| D8 | 持锁期间另一标签**真点击**同步 | **PASS** | 见 §5.2：持锁中 busy；未 await 完整持锁；释放后同步 OK |
 | D9 | 非 vehicles/records | **PASS** | stations 冲突 **不**进入 open 队列 |
 | TOCTOU | 后续新编辑保护 | **PASS** | post-conflict 编辑后 take_cloud 不覆盖 `TOC-NewEdit`；冲突保持 open |
 
-**脚本合计：38 / 38 PASS**（含指纹、unit、回归探针）。
+**脚本合计：49 / 49 PASS**（含指纹、unit、D5/D8 补强断言、回归探针）。
+
+## 5.1 D5 补强：删除冲突二次确认（真点击）
+
+**审查缺口**：旧脚本仅断言 `edit_vs_delete` +「采用云端」按钮存在 / dialog handler 已注册。  
+**补强后**（`scripts/m3c-staging-acceptance.mjs`）：
+
+1. 造 local upsert vs cloud tombstone → `kind=edit_vs_delete`  
+2. 定位「删除与修改冲突」行，**实际 click**「采用云端」  
+3. **第一次 dismiss** 原生 confirm（文案含「确定采用云端删除？」）  
+4. 断言：冲突仍 `open`；本地 record `note=keep-me`；outbox opIds **未变**  
+5. **第二次 accept** 同一确认  
+6. 断言：冲突关闭；本地 record 删除；outbox 清空（采用云端删）
+
+| 断言 | 结果 |
+|------|------|
+| `D5.edit_vs_delete` | PASS |
+| `D5.cancel.dialog-delete-confirm` | PASS（真 dialog message） |
+| `D5.cancel.no-mutation` | PASS |
+| `D5.accept.dialog-delete-confirm` | PASS |
+| `D5.accept.take-cloud-delete` | PASS |
+
+**证据**：`artifacts/m3c-staging-accept/d5-confirm-cancel-dialog.txt`、`d5-confirm-accept-dialog.txt`、`d5-after-cancel.png`、`d5-after-accept.png`
+
+## 5.2 D8 补强：持锁期间另一标签同步（禁止 await 完整持锁）
+
+**审查缺口**：旧脚本 `await pageA.evaluate(…hold 4s…)` 后再点 B，等于持锁已结束才同步。  
+**补强后**：
+
+1. 同 context 双 page（共享 Web Locks + IDB）  
+2. 种子 pending outbox（`D8-HoldLock-Pending`）  
+3. Tab A：`navigator.locks.request('car-care-sync')` 取得锁后 **立即返回**；用 `waitForFunction` 确认 `held===true`  
+4. **在 A 仍持锁时** Tab B 点击「双向同步」（**未** await A 的完整持锁 Promise）  
+5. B 收到 busy toast：`另一标签页或任务正在同步，请稍候再试（队列已保留，不会丢数据）。`  
+6. 断言 outbox 未变、无 mutating REST；`heldDuring===true`  
+7. 释放 A 后 B 再同步 → 推送成功、outbox 清空
+
+| 断言 | 结果 |
+|------|------|
+| `D8.A.holding` / `D8.pre-click-B.A-still-held` | PASS |
+| `D8.B.busy-toast` / `D8.B.during-A-held` | PASS |
+| `D8.B.no-protected-outbox-write` | PASS（mutatingRest=[]） |
+| `D8.after-release.sync-ok` | PASS |
+
+**证据**：`artifacts/m3c-staging-accept/d8-busy-evidence.json`、`d8-busy.png`、`d8-after-release.png`、`run-d5d8.log`
 
 ## 6. 回归（M2 / M3-A / M3-B）
+
 
 | 套件 | 结果 |
 |------|------|
@@ -86,8 +131,7 @@
 ## 7. 残留风险 / 边界
 
 - 真人双端（手机+桌面）未跑；以双 context + IDB/云种子 + 单测矩阵等价覆盖，已在报告标注。  
-- D5 二次确认对话框由 Playwright 自动 accept；文案路径有 UI 按钮证据，未人工点「取消」。  
-- D8 在持锁窗口内对侧 toast 可能显示「完成」（无待推送时）；锁互斥原语已单独断言。  
+- D5/D8 已按独立审查补强为真点击路径（见 §5.1 / §5.2）；不再仅以按钮存在或 await 完整持锁作为 PASS。  
 - SW 缓存：已在验收中 unregister/清缓存；用户旧 tab 可能需硬刷新。  
 - M3-C.1「最近删除 30 天」明确未做。
 
@@ -106,10 +150,12 @@ nginx -t
 - `docs/m3c-dual-device-acceptance.md` — D1–D9 矩阵  
 - `docs/m3c-conflict-ui-architecture.md` — 架构  
 - `scripts/m3c-staging-acceptance.mjs` — 本轮验收脚本  
-- `artifacts/m3c-staging-accept/results.json` — 全量断言  
+- `artifacts/m3c-staging-accept/results.json` — 全量断言（本轮 **49 PASS**）  
+- `artifacts/m3c-staging-accept/run-d5d8.log` — D5/D8 补强 Playwright 日志  
 
 ## 10. 明确声明
 
+- **未改业务源码**（仅更新 `scripts/m3c-staging-acceptance.mjs` + 本报告）  
 - **未**部署生产 `car.adobesun.com`  
 - **未**修改正式 Supabase `tqjowsffppgoqtdokbzp` 数据或配置  
 - **未**碰 Notion；**未**实现 M3-C.1  

@@ -379,6 +379,42 @@ async function getLocalVehicle(page, id) {
   }, id);
 }
 
+
+async function getLocalRecord(page, id) {
+  return page.evaluate(async (rid) => {
+    const db = await new Promise((resolve, reject) => {
+      const r = indexedDB.open('car-care-db');
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    const row = await new Promise((resolve, reject) => {
+      const tx = db.transaction('records', 'readonly');
+      const g = tx.objectStore('records').get(rid);
+      g.onsuccess = () => resolve(g.result || null);
+      g.onerror = () => reject(g.error);
+    });
+    db.close();
+    return row;
+  }, id);
+}
+
+/** Drop auto-accept so tests can dismiss/accept explicitly. */
+function clearDialogHandlers(page) {
+  page.removeAllListeners('dialog');
+}
+
+/** Restore auto-accept for later cases that expect confirm to proceed. */
+function attachAcceptDialog(page) {
+  page.removeAllListeners('dialog');
+  page.on('dialog', async (d) => {
+    try {
+      await d.accept();
+    } catch {
+      /* */
+    }
+  });
+}
+
 async function countOutboxFor(page, entityId) {
   return page.evaluate(async (eid) => {
     const db = await new Promise((resolve, reject) => {
@@ -642,11 +678,10 @@ async function main() {
       await pageA.screenshot({ path: path.join(OUT, 'd4-take-cloud.png'), fullPage: true });
     }
 
-    // ---- D5: edit_vs_delete + confirm path ----
+    // ---- D5: edit_vs_delete + REAL confirm cancel then accept ----
     const vidD5 = `${PREFIX}d5-v`;
     const ridD5 = `${PREFIX}d5-r`;
     {
-      // Ensure parent vehicle exists on cloud
       const vTs = '2026-01-01T00:00:00.000Z';
       await cloudUpsert(
         'vehicles',
@@ -663,7 +698,7 @@ async function main() {
         vTs,
       );
       await seedVehicleLocal(pageA, vidD5, 'D5-Car', vTs);
-      // Local pending edit on record; cloud tombstone newer
+      // Local pending edit on record; cloud tombstone newer → edit_vs_delete
       const localTs = '2026-01-15T00:00:00.000Z';
       const cloudTs = '2026-02-15T00:00:00.000Z';
       await seedRecordLocal(pageA, ridD5, vidD5, 'keep-me', localTs);
@@ -681,10 +716,105 @@ async function main() {
         /删除与修改冲突|Edit vs delete/.test(ui) || hit?.kind === 'edit_vs_delete',
         ui.match(/删除与修改|Edit vs delete|双边编辑|待处理/)?.[0] || 'no-ui-match',
       );
-      // Confirm dialog path: clicking take_cloud should trigger confirm (auto-accepted by handler)
-      // Evidence: dialog handler registered + button present
-      const takeCount = await pageA.getByRole('button', { name: /采用云端|Take cloud/ }).count();
-      record('D5.confirm-path-ready', takeCount > 0 && !!hit, `takeButtons=${takeCount}`);
+
+      const d5Row = pageA.locator('li').filter({ hasText: /删除与修改冲突|Edit vs delete/ }).first();
+      const takeBtn = d5Row.getByRole('button', { name: /采用云端|Take cloud/ });
+      const takeVisible = (await takeBtn.count()) > 0;
+      record('D5.take-btn-present', takeVisible && !!hit, `takeVisible=${takeVisible}`);
+
+      // Snapshot before any resolve click
+      const beforeRec = await getLocalRecord(pageA, ridD5);
+      const beforeBox = await countOutboxFor(pageA, ridD5);
+      const beforeOpen = await listOpenConflictsIdb(pageA);
+      const beforeOpenHit = beforeOpen.open.find((c) => c.entityId === ridD5);
+
+      // --- Cancel path: real dismiss of delete confirm ---
+      // click() waits until dialog handled — await dialog first, dismiss, then await click
+      clearDialogHandlers(pageA);
+      const cancelDialogP = pageA.waitForEvent('dialog', { timeout: 15000 });
+      const cancelClickP = takeBtn.click({ timeout: 20000 });
+      const cancelDialog = await cancelDialogP;
+      const cancelMsg = cancelDialog.message();
+      fs.writeFileSync(
+        path.join(OUT, 'd5-confirm-cancel-dialog.txt'),
+        `type=${cancelDialog.type()}\nmessage=${cancelMsg}\n`,
+      );
+      record(
+        'D5.cancel.dialog-delete-confirm',
+        /采用云端删除|Take cloud delete|按云端删除|delete the local row/i.test(cancelMsg),
+        cancelMsg.slice(0, 300),
+      );
+      await cancelDialog.dismiss();
+      await cancelClickP;
+      await pageA.waitForTimeout(1200);
+
+      const afterCancelRec = await getLocalRecord(pageA, ridD5);
+      const afterCancelBox = await countOutboxFor(pageA, ridD5);
+      const afterCancelOpen = await listOpenConflictsIdb(pageA);
+      const afterCancelHit = afterCancelOpen.open.find((c) => c.entityId === ridD5);
+      const cancelUnchanged =
+        !!afterCancelHit &&
+        afterCancelHit.status === 'open' &&
+        afterCancelRec?.note === beforeRec?.note &&
+        afterCancelRec?.note === 'keep-me' &&
+        afterCancelBox.count === beforeBox.count &&
+        JSON.stringify(afterCancelBox.opIds) === JSON.stringify(beforeBox.opIds);
+      record(
+        'D5.cancel.no-mutation',
+        cancelUnchanged,
+        JSON.stringify({
+          stillOpen: !!afterCancelHit,
+          note: afterCancelRec?.note,
+          outbox: afterCancelBox,
+          beforeOutbox: beforeBox,
+        }),
+      );
+      await pageA.screenshot({ path: path.join(OUT, 'd5-after-cancel.png'), fullPage: true });
+
+      // --- Accept path: real accept of delete confirm → take cloud delete ---
+      clearDialogHandlers(pageA);
+      const takeBtn2 = pageA
+        .locator('li')
+        .filter({ hasText: /删除与修改冲突|Edit vs delete/ })
+        .first()
+        .getByRole('button', { name: /采用云端|Take cloud/ });
+      const acceptDialogP = pageA.waitForEvent('dialog', { timeout: 15000 });
+      const acceptClickP = takeBtn2.click({ timeout: 20000 });
+      const acceptDialog = await acceptDialogP;
+      const acceptMsg = acceptDialog.message();
+      fs.writeFileSync(
+        path.join(OUT, 'd5-confirm-accept-dialog.txt'),
+        `type=${acceptDialog.type()}\nmessage=${acceptMsg}\n`,
+      );
+      record(
+        'D5.accept.dialog-delete-confirm',
+        /采用云端删除|Take cloud delete|按云端删除|delete the local row/i.test(acceptMsg),
+        acceptMsg.slice(0, 300),
+      );
+      await acceptDialog.accept();
+      await acceptClickP;
+      await pageA.waitForTimeout(3500);
+
+      const afterAcceptRec = await getLocalRecord(pageA, ridD5);
+      const afterAcceptBox = await countOutboxFor(pageA, ridD5);
+      const afterAcceptOpen = await listOpenConflictsIdb(pageA);
+      const afterAcceptHit = afterAcceptOpen.open.find((c) => c.entityId === ridD5);
+      // Product: take_cloud on cloud-tombstone → local row gone, outbox cleared, conflict closed
+      const acceptOk =
+        !afterAcceptHit && afterAcceptRec == null && afterAcceptBox.count === 0;
+      record(
+        'D5.accept.take-cloud-delete',
+        acceptOk,
+        JSON.stringify({
+          stillOpen: !!afterAcceptHit,
+          local: afterAcceptRec,
+          outbox: afterAcceptBox,
+        }),
+      );
+      await pageA.screenshot({ path: path.join(OUT, 'd5-after-accept.png'), fullPage: true });
+
+      // Restore auto-accept for D7 / later clicks
+      attachAcceptDialog(pageA);
       await pageA.screenshot({ path: path.join(OUT, 'd5-edit-vs-delete.png'), fullPage: true });
     }
 
@@ -785,17 +915,20 @@ async function main() {
       );
     }
 
-    // ---- D8: second tab resolve while sync lock busy ----
+    // ---- D8: hold lock on tab A; click sync on tab B WHILE still held (no await of full hold) ----
     {
       const pageA2 = await ctxA.newPage();
-      pageA2.on('dialog', async (d) => {
-        try {
-          await d.accept();
-        } catch {
-          /* */
-        }
-      });
+      attachAcceptDialog(pageA2);
       await pageA2.goto(BASE + '/settings', { waitUntil: 'networkidle', timeout: 60000 });
+
+      // Seed pending outbox shared by same-context tabs (protected write must NOT run while busy)
+      const vidD8 = `${PREFIX}d8-v`;
+      const seedTs = new Date().toISOString();
+      const seed = await seedVehicleLocal(pageA2, vidD8, 'D8-HoldLock-Pending', seedTs);
+      const boxBefore = await countOutboxFor(pageA2, vidD8);
+      record('D8.seed-outbox', !!seed.ok && boxBefore.count >= 1, JSON.stringify({ seed, boxBefore }));
+
+      // Mutex probe (sanity)
       const lockProbe = await pageA.evaluate(async () => {
         const name = 'car-care-sync';
         if (typeof navigator.locks?.request !== 'function') return { mode: 'no-locks' };
@@ -823,38 +956,133 @@ async function main() {
         lockProbe.mode === 'web-locks' ? lockProbe.otherBusy === true : lockProbe.mode === 'no-locks',
         JSON.stringify(lockProbe),
       );
-      // Holding lock: attempt sync on other tab should busy (click 双向同步 while holding)
-      const holdResult = await pageA.evaluate(async () => {
+
+      // Start hold on A and RETURN IMMEDIATELY after acquire signal — do NOT await full hold here
+      await pageA.evaluate(() => {
         const name = 'car-care-sync';
-        if (typeof navigator.locks?.request !== 'function') return { skipped: true };
-        return new Promise((resolve) => {
-          navigator.locks.request(name, async (lock) => {
-            if (!lock) {
-              resolve({ held: false });
-              return;
-            }
-            // signal ready
-            window.__m3cLockHeld = true;
-            await new Promise((r) => setTimeout(r, 4000));
-            window.__m3cLockHeld = false;
-            resolve({ held: true });
-          });
+        window.__m3cD8 = {
+          held: false,
+          gotLock: false,
+          releaseGate: null,
+          resolveFinished: null,
+          finished: null,
+          gate: null,
+        };
+        window.__m3cD8.gate = new Promise((r) => {
+          window.__m3cD8.releaseGate = r;
+        });
+        window.__m3cD8.finished = new Promise((r) => {
+          window.__m3cD8.resolveFinished = r;
+        });
+        if (typeof navigator.locks?.request !== 'function') {
+          window.__m3cD8.resolveFinished({ skipped: true });
+          return;
+        }
+        // Fire-and-forget: evaluate returns without waiting for release
+        void navigator.locks.request(name, { ifAvailable: true }, async (lock) => {
+          if (!lock) {
+            window.__m3cD8.gotLock = false;
+            window.__m3cD8.held = false;
+            window.__m3cD8.resolveFinished({ gotLock: false });
+            return;
+          }
+          window.__m3cD8.gotLock = true;
+          window.__m3cD8.held = true;
+          await window.__m3cD8.gate;
+          window.__m3cD8.held = false;
+          window.__m3cD8.resolveFinished({ gotLock: true, released: true });
         });
       });
-      // Parallel: click sync on pageA2 while A holds
-      await pageA2.waitForTimeout(200);
-      const baseline = await beginToastEpoch(pageA2).then((x) => x.baseline);
-      await pageA2.getByRole('button', { name: '双向同步' }).click();
-      const toast = await waitToastMatch(pageA2, /另一标签|请稍候|队列已保留|完成|成功|失败/, {
-        timeoutMs: 15000,
-        baseline,
+
+      await pageA.waitForFunction(() => window.__m3cD8 && (window.__m3cD8.held === true || window.__m3cD8.gotLock === false), {
+        timeout: 10000,
       });
-      await holdResult;
-      record(
-        'D8.busy-or-serialized',
-        /另一标签|请稍候|队列已保留|完成|成功/.test(toast),
-        toast || JSON.stringify(holdResult),
+      const holdState = await pageA.evaluate(() => ({
+        held: window.__m3cD8?.held,
+        gotLock: window.__m3cD8?.gotLock,
+      }));
+      record('D8.A.holding', holdState.held === true && holdState.gotLock === true, JSON.stringify(holdState));
+
+      // Track mutating REST while B syncs under A's hold
+      const mutating = [];
+      const onReq = (req) => {
+        const m = req.method();
+        const u = req.url();
+        if (!u.includes('/rest/v1/')) return;
+        if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return;
+        mutating.push({ method: m, url: u.slice(0, 180), t: Date.now() });
+      };
+      pageA2.on('request', onReq);
+
+      // CRITICAL: click B WHILE A still holds — must not have awaited A's full hold task
+      const stillHeld = await pageA.evaluate(() => window.__m3cD8?.held === true);
+      record('D8.pre-click-B.A-still-held', stillHeld === true, `stillHeld=${stillHeld}`);
+
+      const { baseline } = await beginToastEpoch(pageA2);
+      await pageA2.getByRole('button', { name: '双向同步' }).click();
+      const busyToast = await waitToastMatch(
+        pageA2,
+        /另一标签|请稍候|队列已保留|正在同步/,
+        { timeoutMs: 20000, baseline },
       );
+      // Confirm A was STILL holding when/after B got busy (not released early)
+      const heldDuring = await pageA.evaluate(() => window.__m3cD8?.held === true);
+      record(
+        'D8.B.busy-toast',
+        /另一标签|请稍候|队列已保留/.test(busyToast),
+        busyToast || '(empty toast)',
+      );
+      record('D8.B.during-A-held', heldDuring === true, `heldDuring=${heldDuring}`);
+
+      await pageA2.waitForTimeout(800);
+      const boxDuring = await countOutboxFor(pageA2, vidD8);
+      const noProtectedWrite =
+        boxDuring.count === boxBefore.count &&
+        JSON.stringify(boxDuring.opIds) === JSON.stringify(boxBefore.opIds);
+      record(
+        'D8.B.no-protected-outbox-write',
+        noProtectedWrite,
+        JSON.stringify({ boxBefore, boxDuring, mutatingRest: mutating.slice(0, 8) }),
+      );
+      fs.writeFileSync(
+        path.join(OUT, 'd8-busy-evidence.json'),
+        JSON.stringify(
+          {
+            busyToast,
+            holdState,
+            heldDuring,
+            boxBefore,
+            boxDuring,
+            mutatingRest: mutating,
+          },
+          null,
+          2,
+        ),
+      );
+      await pageA2.screenshot({ path: path.join(OUT, 'd8-busy.png'), fullPage: true });
+      pageA2.off('request', onReq);
+
+      // Release A, then B sync should complete normally
+      await pageA.evaluate(() => {
+        if (typeof window.__m3cD8?.releaseGate === 'function') window.__m3cD8.releaseGate();
+      });
+      const finished = await pageA.evaluate(() => window.__m3cD8.finished);
+      record('D8.A.released', finished?.released === true || finished?.gotLock === true, JSON.stringify(finished));
+
+      const { baseline: baseline2 } = await beginToastEpoch(pageA2);
+      await pageA2.getByRole('button', { name: '双向同步' }).click();
+      const afterToast = await waitToastMatch(pageA2, /完成|成功|推送|失败|错误|冲突/, {
+        timeoutMs: 45000,
+        baseline: baseline2,
+      });
+      const boxAfter = await countOutboxFor(pageA2, vidD8);
+      const cloudD8 = await cloudGet('vehicles', vidD8);
+      record(
+        'D8.after-release.sync-ok',
+        /完成|成功|推送/.test(afterToast) && (boxAfter.count === 0 || !!cloudD8),
+        JSON.stringify({ afterToast, boxAfter, cloudName: cloudD8?.payload?.name }),
+      );
+      await pageA2.screenshot({ path: path.join(OUT, 'd8-after-release.png'), fullPage: true });
       await pageA2.close();
     }
 
