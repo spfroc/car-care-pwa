@@ -1,0 +1,131 @@
+{
+  "at": "2026-10-13T02:47:38.981Z",
+  "expect_bundle": "index-TdTLY2U-.js",
+  "expect_git": "9b64a2b",
+  "note": "Fresh browser context cannot read real-user IndexedDB. Static deploy does not touch client IDB; script never called deleteDatabase/clear.",
+  "results": [
+    {
+      "name": "prod.https.home",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "prod.bundle",
+      "ok": true,
+      "detail": "index-TdTLY2U-.js"
+    },
+    {
+      "name": "prod.stamp",
+      "ok": true,
+      "detail": "git=9b64a2bd204acfb5791f3f6668110e4c00ab3c95 | bundle=index-TdTLY2U-.js | sha256=6eb256e40f233cae892b6b07cc9e368f71d504a3aa3656287509e436ce66c3cb | builtAt=2026-10-13T10:46:41+08:00"
+    },
+    {
+      "name": "prod.sw",
+      "ok": true,
+      "detail": "{\"controlling\":true,\"scriptURL\":\"https://car.adobesun.com/sw.js\"}"
+    },
+    {
+      "name": "prod.route/home",
+      "ok": true,
+      "detail": "https://car.adobesun.com/"
+    },
+    {
+      "name": "prod.route/stats",
+      "ok": true,
+      "detail": "https://car.adobesun.com/stats"
+    },
+    {
+      "name": "prod.route/settings",
+      "ok": true,
+      "detail": "https://car.adobesun.com/settings"
+    },
+    {
+      "name": "prod.settings.storageUI",
+      "ok": true,
+      "detail": "storage section visible"
+    },
+    {
+      "name": "prod.settings.importExport",
+      "ok": true,
+      "detail": "import/export visible"
+    },
+    {
+      "name": "prod.noCloudWrite",
+      "ok": true,
+      "detail": "skipped connect/upload/sync by design"
+    },
+    {
+      "name": "prod.idb",
+      "ok": true,
+      "detail": "{\"stores\":[\"learning\",\"media\",\"meta\",\"records\",\"settings\",\"stations\",\"sync_conflicts\",\"sync_meta\",\"sync_outbox\",\"vehicles\"],\"has_sync_conflicts\":true}"
+    },
+    {
+      "name": "prod.console",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "stage.https.home",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "stage.bundle",
+      "ok": true,
+      "detail": "index-TdTLY2U-.js"
+    },
+    {
+      "name": "stage.stamp",
+      "ok": true,
+      "detail": "git=9b64a2bd204acfb5791f3f6668110e4c00ab3c95 | bundle=index-TdTLY2U-.js | sha256=6eb256e40f233cae892b6b07cc9e368f71d504a3aa3656287509e436ce66c3cb | builtAt=2026-10-13T09:49:18+08:00"
+    },
+    {
+      "name": "stage.sw",
+      "ok": true,
+      "detail": "{\"controlling\":true,\"scriptURL\":\"https://car-test.adobesun.com/sw.js\"}"
+    },
+    {
+      "name": "stage.route/home",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/"
+    },
+    {
+      "name": "stage.route/stats",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/stats"
+    },
+    {
+      "name": "stage.route/settings",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/settings"
+    },
+    {
+      "name": "stage.settings.storageUI",
+      "ok": true,
+      "detail": "storage section visible"
+    },
+    {
+      "name": "stage.settings.importExport",
+      "ok": true,
+      "detail": "import/export visible"
+    },
+    {
+      "name": "stage.noCloudWrite",
+      "ok": true,
+      "detail": "skipped connect/upload/sync by design"
+    },
+    {
+      "name": "stage.idb",
+      "ok": true,
+      "detail": "{\"stores\":[\"learning\",\"media\",\"meta\",\"records\",\"settings\",\"stations\",\"sync_conflicts\",\"sync_meta\",\"sync_outbox\",\"vehicles\"],\"has_sync_conflicts\":true}"
+    },
+    {
+      "name": "stage.console",
+      "ok": true,
+      "detail": "clean"
+    }
+  ],
+  "passed": 24,
+  "failed": 0,
+  "failedNames": []
+}
