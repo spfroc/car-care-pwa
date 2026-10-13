@@ -1,3 +1,4 @@
+// SUPERSEDED by runnable *.ts in this directory (D1). Kept for design diff.
 /**
  * PSEUDOCODE ONLY — not imported by the PWA build.
  * Notion Sync Worker route sketch (O1 template).

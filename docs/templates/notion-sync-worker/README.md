@@ -1,37 +1,98 @@
-# Notion Sync Worker 参考模板（O1）· 伪代码 / 接口说明
+# Notion Sync Worker · 用户自有 Gateway 参考实现（M3-D D1）
 
-> **状态**：docs-only · 无真实 secret · **不可**当作已发布的可运行生产包  
-> **权威契约**：[`../../m3d-implementation-spec.md`](../../m3d-implementation-spec.md) §3 · [`../../m3d-architecture.md`](../../m3d-architecture.md) §2  
-> **目的**：用户自建 Cloudflare Worker 时的目录与职责说明；应用方**不**托管运行时、**不**集中持有 Token。
+> **状态**：可部署参考实现（D1 原型）· **非**应用方集中托管服务 · **禁止**把 Token 写入 Git / PWA  
+> **权威契约**：[`../../m3d-implementation-spec.md`](../../m3d-implementation-spec.md) §3 · [`CONTRACT.md`](./CONTRACT.md)  
+> **冻结设计**：[`../../m3d-architecture.md`](../../m3d-architecture.md) · [`../../m3d-mvp-spec.md`](../../m3d-mvp-spec.md)
 
-## 目录与职责
+本目录是 **用户 fork / 复制后自部署** 的 Cloudflare Worker Gateway。车护 PWA **不**把本包打进生产 bundle；应用方 **不**为全体用户运行「正式 Gateway」。
 
-| 路径 | 职责 |
-|------|------|
-| `README.md` | 本文件：部署概念步骤与 Secret 清单 |
-| `CONTRACT.md` | HTTP 契约摘要 |
-| `src/routes.pseudo.ts` | 路由 / 鉴权伪代码 |
-| `src/lww.pseudo.ts` | Push 先读后写 + 删除双轨 |
-| `src/payload.pseudo.ts` | PayloadJson ≤2000 失败闭合 |
+伪代码文件 `src/*.pseudo.ts` 保留作设计对照；可运行实现为 `src/*.ts`（`index.ts` 为入口）。
 
-## Secret 清单（仅用户 Worker 环境）
+## 你需要准备什么
 
-| 名 | 说明 |
+| 项 | 说明 |
 |----|------|
-| `NOTION_TOKEN` | Internal Connection / PAT · **永不**下发客户端 |
-| `GATEWAY_API_KEY` | 用户自设 · PWA 运行时 Bearer |
-| `ALLOWED_ORIGIN` | PWA Origin（CORS） |
-| `SESSION_SIGNING_SECRET` | **仅 D4** JWT |
+| Cloudflare 账号 | 免费档通常足够个人同步 |
+| Notion Internal Integration | [my-integrations](https://www.notion.so/my-integrations) → Token **仅** `wrangler secret put NOTION_TOKEN` |
+| 两个 Database | 车辆 / 养护，属性 PascalCase（见下），Share 给该 Integration |
+| Gateway API Key | 自设长随机串 → `wrangler secret put GATEWAY_API_KEY`；PWA 每次会话 Bearer 输入 |
+| Workers KV | 绑定 `TOMBSTONE_KV`（删除墓碑映射，用户侧持久化） |
 
-## 概念部署步骤（实现阶段完善；此处不承诺 30min 可跑通）
+## 属性（PascalCase）
 
-1. 在 Notion 创建 Internal Connection，将「车辆」「养护」两 Database Share 给该 Connection。  
-2. 复制本模板到自有仓库 / 目录；用 wrangler 配置上述 Secret（**不要**把实值 commit）。  
-3. 实现（或后续替换伪代码为）`/verify` `/sync/pull` `/sync/push`。  
-4. 在车护设置（实验）填 Gateway URL；每次会话输入 API Key。
+`Name` · `AppEntityId` · `AppUpdatedAt` · `AppDeletedAt` · `DeviceId` · `PayloadJson`  
+vehicles 额外：`Plate` `EnergyType` `Archived`  
+records 额外：`VehicleAppId` `RecordType` `RecordDate` `AmountPaid`
+
+## 端点（MVP Bearer）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 探活（需 Bearer） |
+| GET | `/verify` | 连接验证 → `workspaceKey` + dataSources |
+| GET | `/sync/pull` | `?entities=vehicles,records` → CloudRow[]（含 KV tombstone） |
+| POST | `/sync/push` | 尽力 LWW upsert/delete → PushResult |
+| POST | `/sync/snapshot` | 分块 push |
+| POST | `/auth/*` | D4 · 501 |
+
+无/错 Key → **401**。CORS 仅 `ALLOWED_ORIGIN`。超长 `PayloadJson` → **失败闭合**（不截断）。429/5xx/写不确定 → **不 ACK**（`errors[].retryable`）。
+
+## Fork / Deploy（约 15–30 分钟）
+
+```bash
+# 1) 复制本目录到自有仓库，或在本 monorepo 内仅本地部署
+cd docs/templates/notion-sync-worker
+npm install
+
+# 2) 创建 KV
+npx wrangler kv namespace create car-care-notion-tombstone
+# 把返回的 id 写入 wrangler.toml [[kv_namespaces]] id=
+
+# 3) 配置非密 vars（Origin、Data Source ID）
+#    编辑 wrangler.toml [vars] ALLOWED_ORIGIN / VEHICLES_DATA_SOURCE_ID / RECORDS_DATA_SOURCE_ID
+
+# 4) Secrets（永不 commit）
+cp .dev.vars.example .dev.vars   # 仅本地 wrangler dev
+npx wrangler secret put NOTION_TOKEN
+npx wrangler secret put GATEWAY_API_KEY
+
+# 5) 部署到你自己的账号
+npx wrangler deploy
+
+# 6) 验证
+curl -H "Authorization: Bearer $GATEWAY_API_KEY" https://<your-worker>.workers.dev/verify
+```
+
+Node.js **≥ 22**（当前 wrangler 要求）。
+
+## 本地单测（无需 Notion）
+
+```bash
+npm test
+```
+
+覆盖：API Key 401、LWW / 防复活 / ambiguous_race、Payload 失败闭合。
+
+## 真 Notion 集成测试（需 Token）
+
+1. 准备测试 workspace + Integration Token（**不要**用生产车数据库）。  
+2. `.dev.vars` 填 Token / Key / Data Source ID。  
+3. `npx wrangler dev` 后对 `/sync/push` `/sync/pull` 跑夹具；或部署测试 Worker 后 curl。  
+4. **Trash 夹具**：push delete → 确认 DS query 是否仍可见；不可见时确认 `TOMBSTONE_KV` 有映射且 retrieve(pageId) 可读；过期 upsert 必须 `skipped_deleted`。  
+5. **并发夹具**：两客户端近同时 create 同 `AppEntityId` → 不得静默双页成功；Gateway 对已存在多页返回 `ambiguous_race`。
+
+若环境无 Token：见仓库 `artifacts/m3d-d1-notion-gateway/trash-tombstone-evidence.json` 阻断说明。
 
 ## 明确不做
 
-- 不把本目录链进 `app` Vite 生产构建  
-- 不提交真实 token  
-- MVP 不做共享 Public OAuth、不做 Durable Object 必选  
+- 不把本目录链进 app Vite 生产构建  
+- 不提交真实 token / Gateway Key  
+- 不做共享 Public OAuth、不做 Durable Object 必选（O5）  
+- 不部署「正式」多租户 Gateway 给全体用户  
+- 不改正式 Supabase / PWA NotionProvider 业务接入（属后续切片）
+
+## D1 测试部署（本仓库作者账号 · 仅原型）
+
+- Worker：`car-care-notion-sync-d1-test` · `https://car-care-notion-sync-d1-test.spf-roc.workers.dev`  
+- **非**正式服务；未经独立审查不得当生产使用  
+- `NOTION_TOKEN` 在完成手工 Integration 前为缺失态（`/verify` → 503）

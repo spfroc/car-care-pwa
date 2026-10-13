@@ -1,0 +1,10 @@
+{
+  "note": "Page created with AppDeletedAt set while still alive in DS (property tombstone). Gateway treats appDeletedAt as tombstone even before in_trash.",
+  "page": {
+    "url": "https://app.notion.com/p/3f8620fbd01f81f4b63bf0d9c7fa4e39",
+    "AppEntityId": "veh-tombstone-001",
+    "AppUpdatedAt": "2026-10-13T04:00:00.000Z",
+    "AppDeletedAt": "2026-10-13T04:30:00.000Z"
+  },
+  "gatewayRule": "presenceFrom: appDeletedAt set → kind tombstone; stale upsert → skipped_deleted"
+}

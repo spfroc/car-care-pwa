@@ -1,0 +1,33 @@
+{
+  "worker_url": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "tests": {
+    "no_auth": {
+      "ok": false,
+      "code": "unauthorized",
+      "message": "unauthorized"
+    },
+    "wrong_key": {
+      "ok": false,
+      "code": "unauthorized",
+      "message": "unauthorized"
+    },
+    "good_key_health": {
+      "ok": true,
+      "version": "m3d-d1-0.1.0"
+    },
+    "cors_bad_origin": {
+      "ok": false,
+      "code": "forbidden",
+      "message": "Origin not allowed"
+    },
+    "cors_good_origin": {
+      "ok": true,
+      "version": "m3d-d1-0.1.0"
+    },
+    "verify_no_notion_token": {
+      "ok": false,
+      "code": "notion_unavailable",
+      "message": "NOTION_TOKEN secret missing"
+    }
+  }
+}

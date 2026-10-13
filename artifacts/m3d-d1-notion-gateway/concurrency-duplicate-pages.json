@@ -1,0 +1,27 @@
+{
+  "testedAt": "2026-10-13T13:12:00+08:00",
+  "workspace": "鹏飞 孙's Notion",
+  "dataSource": "collection://68e70331-99b5-47b2-bdb7-718963029c62",
+  "databaseTitle": "M3D D1 Vehicles",
+  "labPage": "https://app.notion.com/p/3f8620fbd01f8115afc3d105198d0000",
+  "method": "Notion MCP create_pages twice with identical AppEntityId, then SQL query_data_sources",
+  "appEntityId": "veh-concurrent-001",
+  "pages": [
+    {
+      "url": "https://app.notion.com/3f8620fbd01f81259110f330c960d7ae",
+      "Name": "Concurrent A",
+      "AppUpdatedAt": "2026-10-13T05:00:00.000Z",
+      "DeviceId": "device-A",
+      "Plate": "TEST-A"
+    },
+    {
+      "url": "https://app.notion.com/3f8620fbd01f81e1b750e5c5ae22c7a3",
+      "Name": "Concurrent B newer",
+      "AppUpdatedAt": "2026-10-13T05:10:00.000Z",
+      "DeviceId": "device-B",
+      "Plate": "TEST-B"
+    }
+  ],
+  "conclusion": "Notion Data Source accepts multiple pages with the same AppEntityId. Without Gateway LWW (query-before-create + ambiguous_race refuse), concurrent creates produce duplicate pages. MVP guarantee: best-effort LWW within one Worker request; duplicateCount>1 returns conflict reason=ambiguous_race and does NOT silently create/overwrite. Strong consistency across isolates is NOT promised (O5).",
+  "gatewayBehavior": "decidePushOp duplicateCount>1 → conflict ambiguous_race; unit test tests/lww.test.ts covers this"
+}

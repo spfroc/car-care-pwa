@@ -1,0 +1,22 @@
+# User-owned Notion Sync Gateway (M3-D D1 reference).
+# Fork/copy this directory; set secrets locally; deploy to YOUR Cloudflare account.
+# Do NOT put real secrets in this file. Do NOT deploy as a shared multi-tenant service.
+
+name = "car-care-notion-sync-d1-test"
+main = "src/index.ts"
+compatibility_date = "2026-10-13"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+NOTION_VERSION = "2026-03-11"
+GATEWAY_VERSION = "m3d-d1-0.1.0"
+ALLOWED_ORIGIN = "http://localhost:5173"
+VEHICLES_DATA_SOURCE_ID = "68e70331-99b5-47b2-bdb7-718963029c62"
+RECORDS_DATA_SOURCE_ID = "dee1f83b-e9ec-4276-a68d-ffc9310473df"
+
+[[kv_namespaces]]
+binding = "TOMBSTONE_KV"
+id = "6ae5cb6d1309453db197b6ce8217e419"
+
+# Secrets (wrangler secret put): NOTION_TOKEN, GATEWAY_API_KEY

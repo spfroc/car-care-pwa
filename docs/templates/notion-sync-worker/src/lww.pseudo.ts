@@ -1,3 +1,4 @@
+// SUPERSEDED by runnable *.ts in this directory (D1). Kept for design diff.
 /**
  * PSEUDOCODE — Gateway push-side LWW + delete dual-track (architecture §4.0 / §4.7).
  * Client pull LWW stays in PWA merge.ts + M3-C; do not replace it here.

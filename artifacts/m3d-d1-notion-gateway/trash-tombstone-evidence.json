@@ -1,0 +1,30 @@
+{
+  "testedAt": "2026-10-13T13:13:00+08:00",
+  "sources": [
+    "https://developers.notion.com/reference/query-a-data-source",
+    "https://developers.notion.com/reference/post-search",
+    "https://developers.notion.com/guides/get-started/upgrade-guide-2026-03-11"
+  ],
+  "docFindings": {
+    "dataSourceQueryDefault": "Returns non-archived pages; is_archived selects archive partition. in_trash is NOT a supported query body parameter on data source query.",
+    "searchInTrash": "POST /v1/search supports filter.in_trash=true to list trashed pages shared with the connection.",
+    "trashMutation": "PATCH /v1/pages/{id} with in_trash:true (Notion-Version 2026-03-11).",
+    "retrieveTrashed": "Retrieve a page by id can return in_trash:true when the integration still has access."
+  },
+  "liveFixtureStatus": "BLOCKED for Integration-token path: environment has Notion MCP (user OAuth) and Cloudflare account, but NO Notion Internal Integration Token (ntn_/secret_) available to put in Worker Secret or call PATCH in_trash / DS query as the bot.",
+  "mcpLimitation": "Notion MCP exposes restore_pages but no trash/delete page tool; cannot move fixture to Trash via MCP alone.",
+  "designImplemented": {
+    "dualTrack": "delete → in_trash:true AND AppDeletedAt rich_text",
+    "userOwnedTombstoneMap": "Workers KV binding TOMBSTONE_KV stores AppEntityId→pageId+deletedAt on user account (not app-central). put on delete; merge into pull; retrieve by pageId when DS query misses trash rows.",
+    "antiResurrection": "tombstone presence + mutatedAt <= deletedAt → conflict skipped_deleted; never create second page",
+    "kvNamespaceCreated": "6ae5cb6d1309453db197b6ce8217e419 (car-care-notion-tombstone-test)"
+  },
+  "minimalManualStepsToUnblockLiveTrashTest": [
+    "1. Open https://www.notion.so/my-integrations → New integration in workspace 鹏飞 孙's Notion",
+    "2. Copy Internal Integration Token",
+    "3. Share databases M3D D1 Vehicles + M3D D1 Records with that integration",
+    "4. wrangler secret put NOTION_TOKEN  (or CF dashboard Secrets) on car-care-notion-sync-d1-test — DO NOT commit",
+    "5. curl -X POST Gateway /sync/push delete op for veh-tombstone-001; then query AppEntityId; confirm KV map + retrieve still see tombstone; confirm stale upsert returns skipped_deleted"
+  ],
+  "conclusionPendingToken": "Per official docs, DS query alone is insufficient for trash rows → user-owned KV tombstone map is REQUIRED for MVP anti-resurrection. Live PATCH confirmation awaits Integration Token."
+}
