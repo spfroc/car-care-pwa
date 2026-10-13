@@ -15,6 +15,7 @@ import {
 } from '../sync/engine';
 import { SupabaseProvider } from '../sync/providers/supabase';
 import { listConflicts } from '../sync/outbox';
+import { ConflictList } from './ConflictList';
 import type { CloudProviderId, CloudStorageConfig, SyncConflict } from '../sync/types';
 import type { MessageKey } from '../i18n/messages';
 
@@ -31,6 +32,7 @@ export function DataStorageSettings() {
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [outboxCount, setOutboxCount] = useState(0);
   const [outboxReadyCount, setOutboxReadyCount] = useState(0);
+  const [openConflictCount, setOpenConflictCount] = useState(0);
 
   const refreshStatus = useCallback(async () => {
     const summary = await getSyncStatusSummary();
@@ -39,6 +41,7 @@ export function DataStorageSettings() {
     setAnon(summary.config.supabaseAnonKey ?? '');
     setOutboxCount(summary.outboxCount);
     setOutboxReadyCount(summary.outboxReadyCount);
+    setOpenConflictCount(summary.openConflictCount ?? 0);
     setConflicts(await listConflicts());
     const m = summary.meta;
     const parts = [
@@ -270,6 +273,14 @@ export function DataStorageSettings() {
 
       {cfg.provider === 'none' && (
         <p className="muted small">{t('storage.localOnly')}</p>
+      )}
+
+      <ConflictList onResolved={() => void refreshStatus()} />
+
+      {openConflictCount > 0 && (
+        <p className="muted small" style={{ marginTop: 6 }}>
+          <strong>{t('conflict.badge', { n: openConflictCount })}</strong>
+        </p>
       )}
 
       {conflicts.length > 0 && (

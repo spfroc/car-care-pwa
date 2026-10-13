@@ -1,6 +1,7 @@
 import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
 import { getCloudStorageConfig } from './config';
+import { listOpenConflictKeys } from './conflictStore';
 import { dedupeOutbox } from './merge';
 import {
   MAX_OUTBOX_ATTEMPTS,
@@ -161,9 +162,60 @@ export async function countOutboxForOwner(ownerUserId: string): Promise<number> 
 export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
   const meta = await getSyncMeta();
   const mine = await listOutboxForUser(meta.cloudUserId);
+  const openKeys = await listOpenConflictKeys();
   return dedupeOutbox(
-    mine.filter((o) => o.attempts < MAX_OUTBOX_ATTEMPTS && o.nextRetryAt <= now),
+    mine.filter(
+      (o) =>
+        o.attempts < MAX_OUTBOX_ATTEMPTS &&
+        o.nextRetryAt <= now &&
+        !o.blockedByConflictId &&
+        !openKeys.has(`${o.entity}:${o.entityId}`),
+    ),
   );
+}
+
+/** Mark outbox ops as blocked by an open conflict (also filters listReadyOutbox). */
+export async function markOutboxBlockedByConflict(
+  opIds: string[],
+  conflictId: string,
+): Promise<void> {
+  if (!opIds.length) return;
+  const db = await getDB();
+  const tx = db.transaction('sync_outbox', 'readwrite');
+  for (const id of opIds) {
+    const raw = await tx.store.get(id);
+    if (!raw) continue;
+    const item = raw as SyncOutboxItem;
+    await tx.store.put({ ...item, blockedByConflictId: conflictId });
+  }
+  await tx.done;
+}
+
+/** Clear blockedByConflictId for ops (after resolve). */
+export async function clearOutboxConflictBlock(opIds: string[]): Promise<void> {
+  if (!opIds.length) return;
+  const db = await getDB();
+  const tx = db.transaction('sync_outbox', 'readwrite');
+  for (const id of opIds) {
+    const raw = await tx.store.get(id);
+    if (!raw) continue;
+    const item = raw as SyncOutboxItem;
+    if (!item.blockedByConflictId) continue;
+    const { blockedByConflictId: _drop, ...rest } = item;
+    await tx.store.put(rest);
+  }
+  await tx.done;
+}
+
+/** Remove all outbox ops for entity+id (used after take_cloud succeeds). */
+export async function removeOutboxForEntityId(
+  entity: string,
+  entityId: string,
+): Promise<string[]> {
+  const all = await listOutbox();
+  const ids = all.filter((o) => o.entity === entity && o.entityId === entityId).map((o) => o.opId);
+  await removeOutboxItems(ids);
+  return ids;
 }
 
 /** Rebind unbound ops to the verified user (does not touch other owners' queues). */

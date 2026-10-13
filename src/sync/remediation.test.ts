@@ -454,8 +454,13 @@ describe('round-3: LWW first upload + conflict recovery + mid-sync concurrency',
     expect(r.ok).toBe(true);
     expect(r.message).toMatch(/跳过/);
     expect(mem.rows.get('vehicles:v1')?.payload).toMatchObject({ name: 'CloudNewer' });
-    const conflicts = await listConflicts();
-    expect(conflicts.some((c) => c.resolution === 'push_skipped_cloud_newer')).toBe(true);
+    // M3-C: vehicles escalate to open conflict instead of silent drop + audit-only
+    const { listOpenConflicts } = await import('./conflictStore');
+    const open = await listOpenConflicts();
+    expect(open.some((c) => c.entity === 'vehicles' && c.entityId === 'v1')).toBe(true);
+    const box = await listOutbox();
+    // firstUpload path may not have outbox ops (snapshot push); open must still exist
+    expect(open[0]?.status).toBe('open');
   });
 
   it('firstUpload writes when local is newer or equal cloud missing', async () => {

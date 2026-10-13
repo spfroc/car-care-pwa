@@ -25,6 +25,8 @@ export interface SyncOutboxItem {
    * 'unbound' = enqueued before first successful verify.
    */
   ownerUserId?: string;
+  /** M3-C: blocked while an open conflict exists for this entity+id. */
+  blockedByConflictId?: string;
 }
 
 export interface SyncConflict {

@@ -38,7 +38,7 @@ export async function putVehicle(v: Vehicle): Promise<void> {
   await settleTx(tx, async () => {
     await tx.objectStore('vehicles').put(v);
     if (outboxItem) {
-      runSyncTxHook('after_business_before_outbox', { store: 'vehicles' });
+      await runSyncTxHook('after_business_before_outbox', { store: 'vehicles' });
       await putOutboxInTx(tx, outboxItem);
     }
   });
