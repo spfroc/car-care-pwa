@@ -16,3 +16,5 @@
 | D9 | 非 vehicles/records | 不进手动队列 | stations 单测 | ☐ |
 
 **明确不做（本 PR）**：设置页最近删除 30 天浏览/恢复（→ M3-C.1）；部署；改正式 Supabase schema。
+
+> Staging 自动化执行记录见 `docs/m3c-staging-acceptance-report.md`（2026-10-13，car-test + disposable；双 Playwright context）。

@@ -1,0 +1,203 @@
+{
+  "ranAt": "2026-10-13T01:59:07.309Z",
+  "base": "https://car-test.adobesun.com",
+  "expectGit": "9b64a2b",
+  "expectBundle": "index-TdTLY2U-.js",
+  "disposable": "skwoahneuqkqgxzpkkzl",
+  "passed": 38,
+  "failed": 0,
+  "results": [
+    {
+      "name": "0.stamp.git",
+      "ok": true,
+      "detail": "git=9b64a2bd204acfb5791f3f6668110e4c00ab3c95 | bundle=index-TdTLY2U-.js | sha256=6eb256e40f233cae892b6b07cc9e368f71d504a3aa3656287509e436ce66c3cb | builtAt=2026-10-13T09:49:18+08:00 | target=car-test.adobesun.com"
+    },
+    {
+      "name": "0.stamp.bundle",
+      "ok": true,
+      "detail": "git=9b64a2bd204acfb5791f3f6668110e4c00ab3c95\nbundle=index-TdTLY2U-.js\nsha256=6eb256e40f233cae892b6b07cc9e368f71d504a3aa3656287509e436ce66c3cb\nbuiltAt=2026-10-13T09:49:18+08:00\ntarget=car-test.adobesun.com\npr=7\nmerge=9b64a2bd204acfb5791f3f6668110e4c00ab3c95\nfeature_tip=29b3c5e79fa6de6545d358fc701726cce3b05e3b\n"
+    },
+    {
+      "name": "0.stamp.target-staging",
+      "ok": true,
+      "detail": "git=9b64a2bd204acfb5791f3f6668110e4c00ab3c95\nbundle=index-TdTLY2U-.js\nsha256=6eb256e40f233cae892b6b07cc9e368f71d504a3aa3656287509e436ce66c3cb\nbuiltAt=2026-10-13T09:49:18+08:00\ntarget=car-test.adobesun.com\npr=7\nmerge=9b64a2bd204acfb5791f3f6668110e4c00ab3c95\nfeature_tip=29b3c5e79fa6de6545d358fc701726cce3b05e3b\n"
+    },
+    {
+      "name": "0.prod.untouched",
+      "ok": true,
+      "detail": "git=d7dd681fc934fa07915ae6cff2434b75122aa4a0 | bundle=index-Cv8wDxDq.js | sha256=f6ac3b122fa0eff5a1fb37106181b9ac894218356a59e4e6dcb78e492ef421dc | builtAt=2026-10-12T17:19:52+0800"
+    },
+    {
+      "name": "0.smoke.url.disposable",
+      "ok": true,
+      "detail": "https://skwoahneuqkqgxzpkkzl.supabase.co"
+    },
+    {
+      "name": "0.unit.m3c+detect",
+      "ok": true,
+      "detail": "passed=20 status=0"
+    },
+    {
+      "name": "D1.A.verify",
+      "ok": true,
+      "detail": "连接成功（m2smoke@carcare.test）；云端约 17 行。不会自动改动本地数据。"
+    },
+    {
+      "name": "D1.A.seed",
+      "ok": true,
+      "detail": "{\"ok\":true,\"cloudUserId\":\"dee8546c-3fc8-465b-8e17-66bbff0e9c45\",\"opId\":\"op-m3c-acc-d1-v-1791856322582\"}"
+    },
+    {
+      "name": "D1.A.sync",
+      "ok": true,
+      "detail": "双向同步完成：推送 1，拉取应用 0 更新 / 0 删除。"
+    },
+    {
+      "name": "D1.cloud.has",
+      "ok": true,
+      "detail": "\"D1-Car-A\""
+    },
+    {
+      "name": "D1.B.verify",
+      "ok": true,
+      "detail": "连接成功（m2smoke@carcare.test）；云端约 18 行。不会自动改动本地数据。"
+    },
+    {
+      "name": "D1.B.sync",
+      "ok": true,
+      "detail": "双向同步完成：推送 0，拉取应用 1 更新 / 0 删除。"
+    },
+    {
+      "name": "D1.B.pulled",
+      "ok": true,
+      "detail": "{\"id\":\"m3c-acc-d1-v\",\"name\":\"D1-Car-A\",\"plate\":\"M3C\",\"bodyType\":\"SEDAN\",\"createdAt\":\"2026-10-13T01:52:02.578Z\",\"updatedAt\":\"2026-10-13T01:52:02.578Z\",\"energyType\":\"ICE\"}"
+    },
+    {
+      "name": "D1.idb.sync_conflicts",
+      "ok": true,
+      "detail": "learning,media,meta,records,settings,stations,sync_conflicts,sync_meta,sync_outbox,vehicles"
+    },
+    {
+      "name": "D2.open",
+      "ok": true,
+      "detail": "{\"entities\":[\"vehicles:m3c-acc-d2-v\"],\"kinds\":[\"edit_edit\"]}"
+    },
+    {
+      "name": "D2.no-silent-lww",
+      "ok": true,
+      "detail": "{\"id\":\"m3c-acc-d2-v\",\"name\":\"D2-Local\",\"plate\":\"M3C\",\"energyType\":\"ICE\",\"bodyType\":\"SEDAN\",\"createdAt\":\"2026-01-10T00:00:00.000Z\",\"updatedAt\":\"2026-01-10T00:00:00.000Z\"}"
+    },
+    {
+      "name": "D2.ui.visible",
+      "ok": true,
+      "detail": "存储未持久化，建议安装到主屏幕并定期导出备份\n怎么装\n×\n设置\n通用\n语言\n简体中文\nEnglish\n日期显示格式\nyyyy-mm-dd\nyyyy/mm/dd\ndd/mm/yyyy\nmm/dd/yyyy\n时间显示格式\n24 小时制\n12 小时制 (AM/PM)\n\n日期时间选择器的月份、星期与按钮文案跟随语言；输入框展示跟随上述格式（默认 yyyy-mm-dd + 24 小时制）。\n\n燃油\n默认燃油\n92#\n95#\n98#\n0#柴油\n92#×\n95#×\n98#×\n0#柴油×\n添加\n能耗与折算\n油耗显示单位\nL/100km\nkm/L\n电耗显示单位\nkWh/100km\nkm/kWh\n电油折算系数 (L/kWh)\nHEV 允许录充电（默认关闭）\n安装到主屏幕\n\n已安装时（独立窗口 / 无浏览器地址栏）会显示「已安装」提示。未安装时可在首页顶部横幅点「安装」或「怎么装」。\n\n查看安装说明\nOCR 识"
+    },
+    {
+      "name": "D3.pre-open",
+      "ok": true,
+      "detail": "[\"vehicles:m3c-acc-d3-v\",\"vehicles:m3c-acc-d2-v\"]"
+    },
+    {
+      "name": "D3.keep_local",
+      "ok": true,
+      "detail": "{\"local\":\"D3-KeepLocal\",\"cloud\":\"D3-KeepLocal\",\"stillOpen\":false}"
+    },
+    {
+      "name": "D3.cloud.pushed",
+      "ok": true,
+      "detail": "cloud matched local"
+    },
+    {
+      "name": "D4.pre-open",
+      "ok": true,
+      "detail": "[\"vehicles:m3c-acc-d4-v\",\"vehicles:m3c-acc-d2-v\"]"
+    },
+    {
+      "name": "D4.take_cloud",
+      "ok": true,
+      "detail": "{\"local\":\"D4-CloudWin\",\"stillOpen\":false,\"outbox\":{\"count\":0,\"opIds\":[],\"ops\":[]}}"
+    },
+    {
+      "name": "D5.edit_vs_delete",
+      "ok": true,
+      "detail": "{\"id\":\"8fd8e163-108e-4098-9ebe-55eeff9fe023\",\"entity\":\"records\",\"entityId\":\"m3c-acc-d5-r\",\"kind\":\"edit_vs_delete\",\"status\":\"open\",\"localUpdatedAt\":\"2026-01-15T00:00:00.000Z\",\"cloudUpdatedAt\":\"2026-02-15T00:00:00+00:00\",\"localSnapshot\":{\"op\":\"upsert\",\"payload\":{\"id\":\"m3c-acc-d5-r\",\"vehicleId\":\"m3c-acc-d5-v\",\"type\":\"wash\",\"date\":\"2026-01-15\",\"amountPaid\":20,\"mediaIds\":[],\"note\":\"keep-me\",\"createdAt\":\"2026-01-15T00:00:00.000Z\",\"updatedAt\":\"2026-01-15T00:00:00.000Z\",\"washKind\":\"basic\"}},\"cloudSnapshot\":{\"op\":\"delete\",\"deletedAt\":\"2026-02-15T00:00:00+00:00\",\"payload\":{}},\"blockedOpIds\":[\"op-m3c-acc-d5-r-1791856519524\"],\"createdAt\":\"2026-10-13T01:55:54.173Z\",\"notedAt\":\"2026-10-13T01:55:54.608Z\"}"
+    },
+    {
+      "name": "D5.ui.kind",
+      "ok": true,
+      "detail": "待处理"
+    },
+    {
+      "name": "D5.confirm-path-ready",
+      "ok": true,
+      "detail": "takeButtons=2"
+    },
+    {
+      "name": "D6.offline-open",
+      "ok": true,
+      "detail": "{\"open\":true,\"local\":\"D6-OfflineLocal\"}"
+    },
+    {
+      "name": "D7.pre-open",
+      "ok": true,
+      "detail": "[\"vehicles:m3c-acc-d6-v\",\"vehicles:m3c-acc-d2-v\",\"vehicles:m3c-acc-d7-v\",\"records:m3c-acc-d5-r\"]"
+    },
+    {
+      "name": "D7.failure-keeps-open",
+      "ok": true,
+      "detail": "{\"still\":true,\"local\":\"D7-Local\",\"outbox\":1}"
+    },
+    {
+      "name": "D7.retry-ok",
+      "ok": true,
+      "detail": "{\"closed\":true,\"local\":\"D7-Cloud\"}"
+    },
+    {
+      "name": "D8.lock-mutex",
+      "ok": true,
+      "detail": "{\"mode\":\"web-locks\",\"otherBusy\":true,\"bHeld\":false}"
+    },
+    {
+      "name": "D8.busy-or-serialized",
+      "ok": true,
+      "detail": "双向同步完成：推送 0，拉取应用 0 更新 / 0 删除。"
+    },
+    {
+      "name": "D9.stations-no-open",
+      "ok": true,
+      "detail": "[\"vehicles:m3c-acc-d6-v\",\"vehicles:m3c-acc-d2-v\",\"records:m3c-acc-d5-r\"]"
+    },
+    {
+      "name": "TOCTOU.post-edit-seed",
+      "ok": true,
+      "detail": "{\"ok\":true,\"cloudUserId\":\"dee8546c-3fc8-465b-8e17-66bbff0e9c45\",\"opId\":\"op-m3c-acc-toc-v-1791856741584\"}"
+    },
+    {
+      "name": "TOCTOU.protect-new-edit",
+      "ok": true,
+      "detail": "{\"local\":\"TOC-NewEdit\",\"stillOpen\":true,\"outbox\":2}"
+    },
+    {
+      "name": "R.idb.m2-m3a-m3b-m3c",
+      "ok": true,
+      "detail": "learning,media,meta,records,settings,stations,sync_conflicts,sync_meta,sync_outbox,vehicles"
+    },
+    {
+      "name": "R.web-locks",
+      "ok": true,
+      "detail": "available=true"
+    },
+    {
+      "name": "R.settings.sync-ui",
+      "ok": true,
+      "detail": "settings cues"
+    },
+    {
+      "name": "R.media.writable",
+      "ok": true,
+      "detail": "media store put/delete"
+    }
+  ],
+  "log": [],
+  "method": "dual Playwright contexts + IDB conflict seeding + disposable Supabase; unit filter re-run; not physical phones"
+}
