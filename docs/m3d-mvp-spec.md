@@ -2,8 +2,21 @@
 
 > **状态**：设计中（2026-10-13）· **本里程碑不写业务 `src`、不部署、不碰正式 Supabase/生产**  
 > 生产基线：M3-C merge `9b64a2bd204acfb5791f3f6668110e4c00ab3c95`  
-> 配套：[`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
+> 配套：[`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md) · [`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
 > 既往结论：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)（无安全代理前禁止；个人 token 进前端否决）
+
+## 0. 已采用默认（2026-10-13）
+
+> **用户未显式回复产品待决 widget，采用产品/架构默认**（待独立审查确认）。实现阶段不得擅自改口；若评审推翻，须回写本节。
+
+| # | 议题 | 已采用默认 |
+|---|------|------------|
+| P1 | MVP 媒体 | **不同步图片**（二进制不入 Notion；本地 IDB / JSON 导出仍可用） |
+| P2 | 冲突 | **接受**可见冲突 + 有限二选一 / 降级文案（复用 M3-C keep_local / take_cloud）；**不**要求对等 M3-C@Supabase 能力才开放 Notion 冲突入口 |
+| P3 | 产品入口 | 先以 **实验 / 高级开关** 暴露；至 **D2 真机通过** 后再考虑与 Supabase 正式并列 |
+| P4 | 安全通道 | 对齐架构推荐：**BYO Cloudflare Worker Gateway**（Notion Token 仅存用户 Worker Secret；PWA 只持 Gateway URL + 用户自设会话/密钥） |
+
+仍开放给架构评审（不阻塞本默认采纳）：Gateway 会话形态（短命 JWT vs 长期 Gateway API Key）、属性命名终选（`AppEntityId` vs `app_id` 等）、Payload 超长策略、trash vs `AppDeletedAt` 双轨、信息架构（设置页文案与向导步骤细节）。
 
 ## 1. 产品目标
 

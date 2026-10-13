@@ -1,7 +1,7 @@
 # M3-D 风险清单与分阶段验收矩阵
 
 > **状态**：设计中（2026-10-13）· docs-only  
-> 配套：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · [`m3d-architecture.md`](./m3d-architecture.md)
+> 配套：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · [`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md)
 
 ## 1. 风险清单
 
@@ -46,12 +46,13 @@
 
 | # | 验收项 | 证据 |
 |---|--------|------|
-| D0.1 | 三文档落盘且中文可读 | `docs/m3d-*.md` |
+| D0.1 | 三文档落盘且中文可读 | `docs/m3d-*.md`（含架构师独立稿 `m3d-notion-byo-architecture.md`） |
 | D0.2 | 代码盘点含路径与复用/分叉 | `m3d-architecture.md` §0 |
 | D0.3 | API 调研含 URL | 本文 §1.1 + 架构 §2–5 |
-| D0.4 | 单一推荐 + 否决表 | 架构 §1 |
+| D0.4 | 单一推荐 + 否决表 | 架构 §1 · 独立稿 §0/§7 |
 | D0.5 | 可行性 stub 顶部指向 M3-D | `notion-sync-feasibility.md` |
 | D0.6 | 无业务 src 实现、无生产/Supabase 变更 | PR diff 仅 docs（+可选 roadmap） |
+| D0.7 | [x] 产品默认已采纳（待独立审查确认） | `m3d-mvp-spec.md` §0：媒体不同步 · 接受可见冲突 · 实验/高级入口 · BYO CF Worker Gateway |
 
 ### 2.2 D1 — 用户 Worker 原型（实现后续）
 

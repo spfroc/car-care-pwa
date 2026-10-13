@@ -2,7 +2,10 @@
 
 > **状态**：设计中（2026-10-13）· docs-only  
 > 规格：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) · 风险/验收：[`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md)  
+> **架构师独立稿（交叉阅读）**：[`m3d-notion-byo-architecture.md`](./m3d-notion-byo-architecture.md)  
 > 原则对齐：[`own-cloud-sync-architecture.md`](./own-cloud-sync-architecture.md) · 可行性 stub：[`notion-sync-feasibility.md`](./notion-sync-feasibility.md)
+>
+> **文档优先级（若与独立稿表述冲突，以下列为准）**：BYO Cloudflare Worker Gateway · **客户端 LWW**（`merge.ts`）+ Gateway 尽力先读后写 · **媒体不同步** · 与 Supabase **互斥**。详见 [`m3d-mvp-spec.md` §0 已采用默认](./m3d-mvp-spec.md)。独立稿中的 Gateway API 草图、映射表与否决表仍有效；属性命名等细则以评审终选为准。
 
 ---
 
