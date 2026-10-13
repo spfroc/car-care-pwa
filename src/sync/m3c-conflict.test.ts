@@ -13,6 +13,7 @@ import {
   putOutboxItem,
 } from './outbox';
 import { MemoryCloudProvider } from './providers/memory';
+import { setSyncTxHookForTests } from './txHooks';
 import { putRecord } from '../repositories/records';
 import { putVehicle } from '../repositories/vehicles';
 
@@ -57,6 +58,7 @@ describe('M3-C conflict UI engine paths', () => {
   let mem: MemoryCloudProvider;
 
   beforeEach(async () => {
+    setSyncTxHookForTests(null);
     await reset();
     mem = new MemoryCloudProvider();
     setCloudProviderForTests(mem);
@@ -74,6 +76,7 @@ describe('M3-C conflict UI engine paths', () => {
   });
 
   afterEach(async () => {
+    setSyncTxHookForTests(null);
     setCloudProviderForTests(null);
     await closeDBForTests();
   });
@@ -374,5 +377,92 @@ describe('M3-C conflict UI engine paths', () => {
     expect(afterLocal?.name).toBe(beforeLocal?.name);
     const afterBox = await listOutbox();
     expect(afterBox.map((o) => o.opId).sort()).toEqual(beforeBox.map((o) => o.opId).sort());
+  });
+
+  it('TOCTOU take_cloud: edit after check before tx must not overwrite local', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudNewer', '2026-03-01T00:00:00.000Z'),
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await bidirectionalSync();
+    const open = await listOpenConflicts();
+    const c = open.find((x) => x.entityId === 'v1');
+    expect(c).toBeTruthy();
+    const blockedBefore = new Set(c!.blockedOpIds ?? []);
+
+    // Outside P0 check passes; inject a new edit in the race window before apply tx.
+    setSyncTxHookForTests(async (phase) => {
+      if (phase === 'before_take_cloud_tx') {
+        await putVehicle(vehicle('v1', 'RaceAfterCheck', '2026-10-05T00:00:00.000Z'));
+      }
+    });
+
+    const result = await resolveConflict(c!.id, 'take_cloud');
+    expect(result.ok).toBe(false);
+    expect(result.reopened).toBe(true);
+    expect(result.message).toMatch(/新编辑/);
+
+    const local = await (await getDB()).get('vehicles', 'v1');
+    expect(local?.name).toBe('RaceAfterCheck');
+    const afterBox = await listOutbox();
+    const raceOps = afterBox.filter(
+      (o) => o.entityId === 'v1' && !blockedBefore.has(o.opId),
+    );
+    expect(raceOps.length).toBeGreaterThan(0);
+    expect(raceOps.some((o) => (o.payload as Vehicle)?.name === 'RaceAfterCheck')).toBe(true);
+    const stillOpen = await listOpenConflicts();
+    expect(stillOpen.some((x) => x.id === c!.id && x.status === 'open')).toBe(true);
+  });
+
+  it('TOCTOU keep_local: subsequent edit must not be cleared or overwritten', async () => {
+    await putVehicle(vehicle('v1', 'Local', '2026-01-01T00:00:00.000Z'));
+    mem.rows.set('vehicles:v1', {
+      entity: 'vehicles',
+      id: 'v1',
+      payload: vehicle('v1', 'CloudNewer', '2026-02-01T00:00:00.000Z'),
+      updatedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
+    });
+    await bidirectionalSync();
+    const open = await listOpenConflicts();
+    const c = open.find((x) => x.entityId === 'v1');
+    expect(c).toBeTruthy();
+    const blockedBefore = new Set(c!.blockedOpIds ?? []);
+    expect(c!.localSnapshot && 'payload' in c!.localSnapshot).toBe(true);
+    expect((c!.localSnapshot?.payload as Vehicle).name).toBe('Local');
+
+    setSyncTxHookForTests(async (phase) => {
+      if (phase === 'before_keep_local_tx') {
+        await putVehicle(vehicle('v1', 'KeepLocalRace', '2026-10-06T00:00:00.000Z'));
+      }
+    });
+
+    const result = await resolveConflict(c!.id, 'keep_local');
+    expect(result.ok).toBe(false);
+    expect(result.reopened).toBe(true);
+    expect(result.message).toMatch(/新编辑/);
+
+    const local = await (await getDB()).get('vehicles', 'v1');
+    // Must keep the newer race edit, not stale conflict snapshot "Local"
+    expect(local?.name).toBe('KeepLocalRace');
+    const afterBox = await listOutbox();
+    const raceOps = afterBox.filter(
+      (o) => o.entityId === 'v1' && !blockedBefore.has(o.opId),
+    );
+    expect(raceOps.length).toBeGreaterThan(0);
+    expect(raceOps.some((o) => (o.payload as Vehicle)?.name === 'KeepLocalRace')).toBe(true);
+    // Original blocked ops should still be present (tx aborted; no clear)
+    for (const id of blockedBefore) {
+      expect(afterBox.some((o) => o.opId === id)).toBe(true);
+    }
+    const stillOpen = await listOpenConflicts();
+    const refreshed = stillOpen.find((x) => x.id === c!.id);
+    expect(refreshed).toBeTruthy();
+    expect(refreshed!.status).toBe('open');
+    expect((refreshed!.localSnapshot?.payload as Vehicle).name).toBe('KeepLocalRace');
   });
 });

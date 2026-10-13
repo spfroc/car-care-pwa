@@ -10,7 +10,6 @@ import {
 import {
   getConflict,
   listResolvedConflicts,
-  markConflictResolved,
   openConflict,
   putConflict,
   type SyncConflictRecord,
@@ -21,12 +20,9 @@ import {
   type ConflictKind,
 } from './conflictTypes';
 import {
-  clearOutboxConflictBlock,
   listOutbox,
   makeOutboxItem,
   markOutboxBlockedByConflict,
-  putOutboxItem,
-  removeOutboxForEntityId,
   removeOutboxItems,
   settleTx,
   stampOutboxOwner,
@@ -36,6 +32,7 @@ import {
   throwIfSyncAborted,
   withSyncLock,
 } from './tabLock';
+import { runSyncTxHook } from './txHooks';
 import type { CloudRow, SyncEntity, SyncOutboxItem } from './types';
 
 export type ResolveChoice = 'keep_local' | 'take_cloud';
@@ -48,6 +45,19 @@ export type ResolveResult = {
   /** keep_local may re-open if push still cloud_newer; take_cloud may keep open for re-prompt */
   reopened?: boolean;
 };
+
+/** Thrown inside resolve readwrite tx when outbox gained ops not in conflict.blockedOpIds. */
+export class PostConflictLocalEditError extends Error {
+  readonly entityOps: SyncOutboxItem[];
+  constructor(entityOps: SyncOutboxItem[], message = '冲突发生后本地又有新编辑') {
+    super(message);
+    this.name = 'PostConflictLocalEditError';
+    this.entityOps = entityOps;
+  }
+}
+
+const POST_CONFLICT_EDIT_MSG =
+  '冲突发生后本地又有新编辑；已保留本地数据与待同步队列，请重新确认后再选择采用云端或保留本地。';
 
 async function assertAuthOk(): Promise<{ ok: true } | { ok: false; message: string }> {
   const { resolveProvider, guardUserSwitch } = await import('./engine');
@@ -147,17 +157,24 @@ async function refreshConflictPostLocalEdits(
 /**
  * Apply verified cloud row + clear only conflict-related outbox + mark resolved
  * in one IndexedDB transaction (vehicles|records + sync_outbox + sync_conflicts).
+ * Re-checks entity outbox inside the same readwrite tx (TOCTOU): any op not in
+ * conflict.blockedOpIds aborts the tx without mutating local/entity/outbox/conflict.
  */
 async function applyTakeCloudInTx(
+  signal: AbortSignal,
   conflict: SyncConflictRecord,
   cloudRow: CloudRow | null,
-  outboxOpIdsToRemove: string[],
 ): Promise<SyncConflictRecord> {
-  const db = await getDB();
-  const entityStore = conflict.entity === 'vehicles' ? 'vehicles' : 'records';
   if (conflict.entity !== 'vehicles' && conflict.entity !== 'records') {
     throw new Error(`不支持采用云端实体 ${conflict.entity}`);
   }
+  throwIfSyncAborted(signal);
+  await runSyncTxHook('before_take_cloud_tx', { store: conflict.entity });
+  throwIfSyncAborted(signal);
+
+  const db = await getDB();
+  const entityStore = conflict.entity === 'vehicles' ? 'vehicles' : 'records';
+  const blockedSet = new Set(conflict.blockedOpIds ?? []);
   const now = nowISO();
   const resolved: SyncConflictRecord = {
     ...conflict,
@@ -169,6 +186,17 @@ async function applyTakeCloudInTx(
 
   const tx = db.transaction([entityStore, 'sync_outbox', 'sync_conflicts'], 'readwrite');
   await settleTx(tx, async () => {
+    const all = (await tx.objectStore('sync_outbox').getAll()) as SyncOutboxItem[];
+    const entityOps = all.filter(
+      (o) => o.entity === conflict.entity && o.entityId === conflict.entityId,
+    );
+    const postConflictOps = entityOps.filter((o) => !blockedSet.has(o.opId));
+    if (postConflictOps.length > 0) {
+      throw new PostConflictLocalEditError(entityOps);
+    }
+
+    throwIfSyncAborted(signal);
+
     const snapOp =
       cloudRow != null
         ? cloudRow.deletedAt
@@ -190,7 +218,12 @@ async function applyTakeCloudInTx(
       }
     }
 
-    for (const opId of outboxOpIdsToRemove) {
+    // Only remove ops covered by this conflict snapshot (blocked set).
+    const toRemove = new Set<string>(conflict.blockedOpIds ?? []);
+    for (const o of entityOps) {
+      if (blockedSet.has(o.opId)) toRemove.add(o.opId);
+    }
+    for (const opId of toRemove) {
       await tx.objectStore('sync_outbox').delete(opId);
     }
 
@@ -256,8 +289,7 @@ async function takeCloudUnlocked(
     const refreshed = await refreshConflictPostLocalEdits(conflict, entityOps);
     return {
       ok: false,
-      message:
-        '冲突发生后本地又有新编辑；已保留本地数据与待同步队列，请重新确认后再选择采用云端或保留本地。',
+      message: POST_CONFLICT_EDIT_MSG,
       conflict: refreshed,
       reopened: true,
     };
@@ -265,24 +297,25 @@ async function takeCloudUnlocked(
 
   throwIfSyncAborted(signal);
 
-  // Only clear ops that belong to this conflict (blocked set). With P0 gate above,
-  // entityOps should be a subset of blocked; still never wipe unrelated newer ids.
-  const toRemove = entityOps
-    .filter((o) => blockedSet.has(o.opId))
-    .map((o) => o.opId);
-  // Also remove any blockedOpIds that may already be gone from outbox (no-op deletes).
-  for (const id of conflict.blockedOpIds ?? []) {
-    if (!toRemove.includes(id)) toRemove.push(id);
-  }
-
+  // Critical TOCTOU re-check happens inside applyTakeCloudInTx (same readwrite tx).
   try {
-    const resolved = await applyTakeCloudInTx(conflict, cloudRow, toRemove);
+    const resolved = await applyTakeCloudInTx(signal, conflict, cloudRow);
     return {
       ok: true,
       message: '已采用云端版本；本地已恢复，冲突相关待同步队列已清除。',
       conflict: resolved,
     };
   } catch (e) {
+    if (e instanceof PostConflictLocalEditError) {
+      const refreshed = await refreshConflictPostLocalEdits(conflict, e.entityOps);
+      return {
+        ok: false,
+        message: POST_CONFLICT_EDIT_MSG,
+        conflict: refreshed,
+        reopened: true,
+      };
+    }
+    if (e instanceof SyncLeaseLostError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
@@ -302,68 +335,86 @@ async function pruneResolvedConflictsBestEffort(): Promise<void> {
   await pruneTx.done;
 }
 
-async function applyLocalSnapshot(
-  entity: SyncEntity,
-  entityId: string,
-  snapshot: SyncConflictRecord['localSnapshot'],
+/**
+ * keep_local atomic apply: re-check entity outbox inside the same readwrite tx.
+ * Post-conflict ops (not in blockedOpIds) → abort, no clear / no stale overwrite.
+ * Only removes conflict-blocked ops; enqueues one bumped op from localSnapshot.
+ */
+async function applyKeepLocalInTx(
+  signal: AbortSignal,
+  conflict: SyncConflictRecord,
   mutatedAt: string,
-): Promise<SyncOutboxItem> {
+  freshOp: SyncOutboxItem,
+): Promise<SyncConflictRecord> {
+  if (conflict.entity !== 'vehicles' && conflict.entity !== 'records') {
+    throw new Error(`不支持保留本地实体 ${conflict.entity}`);
+  }
+  throwIfSyncAborted(signal);
+  await runSyncTxHook('before_keep_local_tx', { store: conflict.entity });
+  throwIfSyncAborted(signal);
+
   const db = await getDB();
+  const entityStore = conflict.entity === 'vehicles' ? 'vehicles' : 'records';
+  const blockedSet = new Set(conflict.blockedOpIds ?? []);
+  const now = nowISO();
+  const resolved: SyncConflictRecord = {
+    ...conflict,
+    status: 'resolved',
+    resolution: 'keep_local',
+    resolvedAt: now,
+    notedAt: now,
+  };
+  const snapshot = conflict.localSnapshot;
   if (!snapshot) throw new Error('缺少本地快照');
-  if (snapshot.op === 'delete') {
-    if (entity === 'vehicles') await db.delete('vehicles', entityId);
-    else if (entity === 'records') await db.delete('records', entityId);
-    const item = await stampOutboxOwner(
-      makeOutboxItem({ entity, entityId, op: 'delete', mutatedAt }),
+
+  const tx = db.transaction([entityStore, 'sync_outbox', 'sync_conflicts'], 'readwrite');
+  await settleTx(tx, async () => {
+    const all = (await tx.objectStore('sync_outbox').getAll()) as SyncOutboxItem[];
+    const entityOps = all.filter(
+      (o) => o.entity === conflict.entity && o.entityId === conflict.entityId,
     );
-    await putOutboxItem(item);
-    return item;
-  }
-  if (!snapshot.payload || typeof snapshot.payload !== 'object') {
-    // Fall back to current IDB row
-    if (entity === 'vehicles') {
-      const row = await db.get('vehicles', entityId);
-      if (!row) throw new Error('本地车辆不存在且无快照 payload');
-      const next = { ...row, updatedAt: mutatedAt };
-      await db.put('vehicles', next);
-      const item = await stampOutboxOwner(
-        makeOutboxItem({ entity, entityId, op: 'upsert', payload: next, mutatedAt }),
-      );
-      await putOutboxItem(item);
-      return item;
+    const postConflictOps = entityOps.filter((o) => !blockedSet.has(o.opId));
+    if (postConflictOps.length > 0) {
+      throw new PostConflictLocalEditError(entityOps);
     }
-    if (entity === 'records') {
-      const row = await db.get('records', entityId);
-      if (!row) throw new Error('本地记录不存在且无快照 payload');
-      const next = { ...row, updatedAt: mutatedAt };
-      await db.put('records', next);
-      const item = await stampOutboxOwner(
-        makeOutboxItem({ entity, entityId, op: 'upsert', payload: next, mutatedAt }),
-      );
-      await putOutboxItem(item);
-      return item;
+
+    throwIfSyncAborted(signal);
+
+    if (snapshot.op === 'delete') {
+      await tx.objectStore(entityStore).delete(conflict.entityId);
+    } else {
+      let payload = snapshot.payload;
+      if (!payload || typeof payload !== 'object') {
+        const row = await tx.objectStore(entityStore).get(conflict.entityId);
+        if (!row) throw new Error('本地实体不存在且无快照 payload');
+        payload = row;
+      }
+      if (entityStore === 'vehicles') {
+        const next = { ...(payload as Vehicle), updatedAt: mutatedAt };
+        await tx.objectStore('vehicles').put(next);
+        freshOp.payload = next;
+      } else {
+        const next = { ...(payload as CareRecord), updatedAt: mutatedAt };
+        await tx.objectStore('records').put(next);
+        freshOp.payload = next;
+      }
     }
-    throw new Error(`不支持保留本地实体 ${entity}`);
-  }
-  if (entity === 'vehicles') {
-    const next = { ...(snapshot.payload as Vehicle), updatedAt: mutatedAt };
-    await db.put('vehicles', next);
-    const item = await stampOutboxOwner(
-      makeOutboxItem({ entity, entityId, op: 'upsert', payload: next, mutatedAt }),
-    );
-    await putOutboxItem(item);
-    return item;
-  }
-  if (entity === 'records') {
-    const next = { ...(snapshot.payload as CareRecord), updatedAt: mutatedAt };
-    await db.put('records', next);
-    const item = await stampOutboxOwner(
-      makeOutboxItem({ entity, entityId, op: 'upsert', payload: next, mutatedAt }),
-    );
-    await putOutboxItem(item);
-    return item;
-  }
-  throw new Error(`不支持保留本地实体 ${entity}`);
+
+    // Clear only conflict-blocked ops — never wipe post-check newcomers (aborted above).
+    const toRemove = new Set<string>(conflict.blockedOpIds ?? []);
+    for (const o of entityOps) {
+      if (blockedSet.has(o.opId)) toRemove.add(o.opId);
+    }
+    for (const opId of toRemove) {
+      await tx.objectStore('sync_outbox').delete(opId);
+    }
+
+    await tx.objectStore('sync_outbox').put(freshOp);
+    await tx.objectStore('sync_conflicts').put(resolved);
+  });
+
+  await pruneResolvedConflictsBestEffort();
+  return resolved;
 }
 
 async function keepLocalUnlocked(
@@ -374,24 +425,58 @@ async function keepLocalUnlocked(
   const auth = await assertAuthOk();
   if (!auth.ok) return { ok: false, message: auth.message };
 
-  const mutatedAt = nowISO();
-  // Clear old blocked ops first so we can enqueue a fresh bumped op
-  const blocked = conflict.blockedOpIds ?? [];
-  if (blocked.length) {
-    await clearOutboxConflictBlock(blocked);
-    await removeOutboxItems(blocked);
+  // Early post-conflict gate (same message as in-tx TOCTOU abort).
+  const allOutbox = await listOutbox();
+  const entityOpsEarly = allOutbox.filter(
+    (o) => o.entity === conflict.entity && o.entityId === conflict.entityId,
+  );
+  const blockedSet = new Set(conflict.blockedOpIds ?? []);
+  const postConflictEarly = entityOpsEarly.filter((o) => !blockedSet.has(o.opId));
+  if (postConflictEarly.length > 0) {
+    const refreshed = await refreshConflictPostLocalEdits(conflict, entityOpsEarly);
+    return {
+      ok: false,
+      message: POST_CONFLICT_EDIT_MSG,
+      conflict: refreshed,
+      reopened: true,
+    };
   }
-  await removeOutboxForEntityId(conflict.entity, conflict.entityId);
 
   throwIfSyncAborted(signal);
-  const freshOp = await applyLocalSnapshot(
-    conflict.entity,
-    conflict.entityId,
-    conflict.localSnapshot,
-    mutatedAt,
+  const mutatedAt = nowISO();
+  const freshOp = await stampOutboxOwner(
+    makeOutboxItem({
+      entity: conflict.entity,
+      entityId: conflict.entityId,
+      op: conflict.localSnapshot?.op === 'delete' ? 'delete' : 'upsert',
+      payload:
+        conflict.localSnapshot?.op === 'delete'
+          ? undefined
+          : conflict.localSnapshot?.payload,
+      mutatedAt,
+    }),
   );
 
-  const resolved = await markConflictResolved(conflict.id, 'keep_local');
+  let resolved: SyncConflictRecord;
+  try {
+    resolved = await applyKeepLocalInTx(signal, conflict, mutatedAt, freshOp);
+  } catch (e) {
+    if (e instanceof PostConflictLocalEditError) {
+      const refreshed = await refreshConflictPostLocalEdits(conflict, e.entityOps);
+      return {
+        ok: false,
+        message: POST_CONFLICT_EDIT_MSG,
+        conflict: refreshed,
+        reopened: true,
+      };
+    }
+    if (e instanceof SyncLeaseLostError) throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `保留本地失败（冲突保持待处理）：${msg}`,
+    };
+  }
 
   // Normal push / LWW — never force-overwrite cloud
   throwIfSyncAborted(signal);

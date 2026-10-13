@@ -304,7 +304,7 @@ async function applyCloudRows(
 
     for (const row of toUpsert) {
       if (signal) throwIfSyncAborted(signal);
-      runSyncTxHook('during_restore_apply', { store: row.entity });
+      await runSyncTxHook('during_restore_apply', { store: row.entity });
       if (row.entity === 'vehicles') {
         await tx.objectStore('vehicles').put(row.payload as Vehicle);
       } else if (row.entity === 'records') {
