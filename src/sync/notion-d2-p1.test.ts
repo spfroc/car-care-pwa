@@ -6,7 +6,7 @@ import {
   getCloudStorageConfig,
   setCloudStorageConfig,
 } from './config';
-import { isCloudEnqueueEnabled } from './outbox';
+import { isCloudEnqueueEnabled, listOutbox } from './outbox';
 import {
   hasValidNotionRuntimeSession,
   resetNotionRuntimeSessionForTests,
@@ -14,6 +14,13 @@ import {
 } from './notionSession';
 import { NotionProvider } from './providers/notion';
 import type { SyncOutboxItem } from './types';
+import { putStation } from '../repositories/stations';
+import { setSetting } from '../repositories/settings';
+import { deleteVehicle, putVehicle } from '../repositories/vehicles';
+import { putRecord } from '../repositories/records';
+import { nowISO } from '../lib/constants';
+import type { CareRecord, Media, Station, Vehicle } from '../types';
+import { getDB } from '../db';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -202,3 +209,114 @@ describe('D2.4a static scan (no Notion SDK / secret literals in src)', () => {
     expect(hits).toEqual([]);
   });
 });
+
+describe('D2.1 repository enqueue (Notion session: no stations/settings/media)', () => {
+  beforeEach(resetDb);
+  afterEach(async () => {
+    await closeDBForTests();
+    resetNotionRuntimeSessionForTests();
+  });
+
+  async function enableNotionSession() {
+    await setCloudStorageConfig({
+      provider: 'notion',
+      notionGatewayUrl: 'https://gw.example.com',
+      workspaceKey: 'ws',
+    });
+    setNotionRuntimeSession({ bearer: 'session-key', workspaceKey: 'ws' });
+  }
+
+  it('putStation does not enqueue stations', async () => {
+    await enableNotionSession();
+    const s: Station = {
+      id: 'st1',
+      stationType: 'gas',
+      name: 'Shell',
+      sortOrder: 0,
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    await putStation(s);
+    const box = await listOutbox();
+    expect(box.filter((o) => o.entity === 'stations')).toEqual([]);
+    expect(await (await getDB()).get('stations', 'st1')).toBeTruthy();
+  });
+
+  it('setSetting does not enqueue settings', async () => {
+    await enableNotionSession();
+    await setSetting('currency', { code: 'CNY', symbol: '¥' });
+    const box = await listOutbox();
+    expect(box.filter((o) => o.entity === 'settings')).toEqual([]);
+    expect(await (await getDB()).get('settings', 'currency')).toBeTruthy();
+  });
+
+  it('deleteVehicle enqueues vehicles/records but not media', async () => {
+    await enableNotionSession();
+    const v: Vehicle = {
+      id: 'v1',
+      name: 'A',
+      energyType: 'ICE',
+      bodyType: 'SEDAN',
+      coverMediaId: 'cover1',
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    const media: Media = {
+      id: 'm1',
+      mimeType: 'image/jpeg',
+      byteSize: 4,
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }),
+      createdAt: nowISO(),
+    };
+    const cover: Media = {
+      id: 'cover1',
+      mimeType: 'image/jpeg',
+      byteSize: 2,
+      blob: new Blob([new Uint8Array([9, 9])], { type: 'image/jpeg' }),
+      createdAt: nowISO(),
+    };
+    const rec: CareRecord = {
+      id: 'r1',
+      vehicleId: 'v1',
+      type: 'fuel',
+      date: '2026-01-01T00:00:00.000Z',
+      amountPaid: 10,
+      mediaIds: ['m1'],
+      liters: 10,
+      odometer: 100,
+      fuelGrade: '95#',
+      filledUp: true,
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    const db = await getDB();
+    await putVehicle(v);
+    await db.put('media', media);
+    await db.put('media', cover);
+    await putRecord(rec);
+
+    const before = await listOutbox();
+    expect(before.some((o) => o.entity === 'vehicles' && o.entityId === 'v1')).toBe(true);
+    expect(before.some((o) => o.entity === 'records' && o.entityId === 'r1')).toBe(true);
+    expect(before.filter((o) => o.entity === 'media')).toEqual([]);
+
+    await deleteVehicle('v1');
+
+    const box = await listOutbox();
+    expect(box.some((o) => o.entity === 'vehicles' && o.op === 'delete' && o.entityId === 'v1')).toBe(
+      true,
+    );
+    expect(box.some((o) => o.entity === 'records' && o.op === 'delete' && o.entityId === 'r1')).toBe(
+      true,
+    );
+    expect(box.filter((o) => o.entity === 'media')).toEqual([]);
+    expect(box.filter((o) => o.entity === 'stations' || o.entity === 'settings')).toEqual([]);
+
+    const db2 = await getDB();
+    expect(await db2.get('vehicles', 'v1')).toBeUndefined();
+    expect(await db2.get('records', 'r1')).toBeUndefined();
+    expect(await db2.get('media', 'm1')).toBeUndefined();
+    expect(await db2.get('media', 'cover1')).toBeUndefined();
+  });
+});
+

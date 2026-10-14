@@ -382,7 +382,7 @@ export async function enqueueSyncOp(input: {
   payload?: unknown;
   mutatedAt?: string;
 }): Promise<void> {
-  if (!(await isCloudEnqueueEnabled())) return;
+  if (!(await isCloudEnqueueEnabled(input.entity))) return;
   await putOutboxItem(makeOutboxItem(input));
 }
 

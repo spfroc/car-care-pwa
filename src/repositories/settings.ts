@@ -17,7 +17,7 @@ export async function getSetting<T = unknown>(key: string): Promise<T | undefine
 export async function setSetting(key: string, value: unknown): Promise<void> {
   const row: SettingRow = { key, value, updatedAt: nowISO() };
   const db = await getDB();
-  const sync = key !== 'cloudStorage' && (await isCloudEnqueueEnabled());
+  const sync = key !== 'cloudStorage' && (await isCloudEnqueueEnabled('settings'));
   const outboxItem = sync
     ? await stampOutboxOwner(
         makeOutboxItem({

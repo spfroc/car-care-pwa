@@ -18,7 +18,7 @@ export async function listStations(type?: StationType): Promise<Station[]> {
 
 export async function putStation(s: Station): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled();
+  const sync = await isCloudEnqueueEnabled('stations');
   const outboxItem = sync
     ? await stampOutboxOwner(
         makeOutboxItem({
@@ -41,27 +41,33 @@ export async function putStation(s: Station): Promise<void> {
 export async function deleteStation(id: string): Promise<void> {
   const db = await getDB();
   const records = await db.getAll('records');
-  const sync = await isCloudEnqueueEnabled();
+  const syncStations = await isCloudEnqueueEnabled('stations');
+  const syncRecords = await isCloudEnqueueEnabled('records');
+  const syncAny = syncStations || syncRecords;
   const mutatedAt = new Date().toISOString();
   const touched = records.filter((r) => 'stationId' in r && r.stationId === id);
   const nextRecords = touched.map((r) => ({ ...r, stationId: undefined, updatedAt: mutatedAt }));
-  const outboxItems = sync
+  const outboxItems = syncAny
     ? await Promise.all([
-        ...nextRecords.map((next) =>
-          stampOutboxOwner(
-            makeOutboxItem({
-              entity: 'records',
-              entityId: next.id,
-              op: 'upsert',
-              payload: next,
-              mutatedAt,
-            }),
-          ),
-        ),
-        stampOutboxOwner(makeOutboxItem({ entity: 'stations', entityId: id, op: 'delete', mutatedAt })),
+        ...(syncRecords
+          ? nextRecords.map((next) =>
+              stampOutboxOwner(
+                makeOutboxItem({
+                  entity: 'records',
+                  entityId: next.id,
+                  op: 'upsert',
+                  payload: next,
+                  mutatedAt,
+                }),
+              ),
+            )
+          : []),
+        ...(syncStations
+          ? [stampOutboxOwner(makeOutboxItem({ entity: 'stations', entityId: id, op: 'delete', mutatedAt }))]
+          : []),
       ])
     : [];
-  const stores = sync
+  const stores = syncAny
     ? (['stations', 'records', 'sync_outbox'] as const)
     : (['stations', 'records'] as const);
   const tx = db.transaction(stores, 'readwrite');
