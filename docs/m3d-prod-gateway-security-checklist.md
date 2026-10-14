@@ -101,13 +101,15 @@
 | G1 | **SW1–SW4 真实双工作区 live PASS**（2026-10-14 17:22 CST）— A `d1-test` wkFp `c647ac0368ff` · B `d1-test-b` wkFp `db38e1e5a251`；证据 `artifacts/m3d-prod-pre-gates/sw-dual/` | ☑ |
 | G2 | **离线 IDB 探针异常**（历史 `IDB.databases` SecurityError）；**2026-10-14 RR-IDB**：对象仓直读直写 + reonline Outbox sync **PASS**（`artifacts/m3d-prod-pre-gates/rr-idb/`）；未清用户 IDB | ☐ |
 | G3 | Gateway LWW 弱于 Supabase RPC；竞态靠 M3-C，不承诺强一致 | ☐ |
-| G4 | 未接受 G1/G2 前强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
+| G4 | G1 双工作区 live **已 PASS**；若仍带已知残余（SW4 flush 观测偏软、正式 Gateway/PWA 未部署等）强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
 
 **G4「带伤上线」书面接受模板（须原样确认）**
 
+> **口径更新（2026-10-14）**：G1 SW1–SW4 真实双工作区 live **已闭合（PASS）**；不得再写「SW1–SW4 无真实双工作区 E2E」。本模板仅覆盖**剩余残余**。
+
 勾选 G4「用户接受」**仅当**用户授权原文中含以下短句（一字不改；缺任一项则 G4 不可勾、视为未接受）：
 
-> 我确认：SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险。同意在此条件下带伤上线。
+> 我确认：SW1–SW4 双工作区 live 已 PASS；接受 SW4 flush 证据偏软（push200=0 / seenOnA=true）及正式 Gateway/PWA 尚未部署等残余风险。同意在此条件下带伤上线。
 
 用户确认原文粘贴处：
 
@@ -138,7 +140,7 @@
 | 安全审查 | | | |
 | 用户授权（部署执行） | | | 另附指令原文 |
 
-**带条件 Go 时必须写明条件**（例如：「先完成双工作区 SW1–SW4 E2E」）：
+**带条件 Go 时必须写明条件**（例如：「正式 Gateway 冒烟补观察 SW4 switchback flush push 200」或「接受 G4 带伤短句所列残余」）：
 
 > _______________________________________________________________
 
@@ -170,13 +172,19 @@
 | **G1** | **闭** — SW1–SW4 live PASS |
 | **G2** | 主路径已 PASS；历史探针风险保留披露 |
 | **G3** | 已知披露 |
-| **G4** | **未**原样确认带伤短句 → 不可勾 |
+| **G4** | **未**原样确认（已改写为残余风险短句；**不再**要求「无双工作区 E2E」）→ 不可勾 |
 | **H** | 本轮遵守（无生产名部署、无清 IDB、无密钥进 git） |
 
-### 第二工作区缺口（SW live）
+### 第二工作区缺口（SW live）— **已闭合（归档）**
 
-1. 第二 Notion workspace（`workspace_id` ≠ `90da532e-…`）  
-2. Integration Token + Vehicles/Records DS ids  
-3. 测试 Worker 名含 `d1-test-b`（独立 KV/Key/CORS；**禁止** `car-care-notion-sync`）  
-4. 写入 `~/.car-care-secrets/m3d-d1-b-notion.env`（或 `GATEWAY_B_*`）后重跑 `node scripts/m3d-sw-dual-workspace-live.mjs`
+> **2026-10-14 17:22 CST**：Workspace B + Gateway `car-care-notion-sync-d1-test-b` + SW1–SW4 live **PASS**。本附录保留为历史缺口说明，**不得**再当作未完成项。
+
+| 原缺口 | 闭合证据 |
+|--------|----------|
+| 第二 Notion workspace（`workspace_id` ≠ A） | B wkFp `db38e1e5a251` ← `18eab0db-43db-817c-911a-000390294864`（≠ A `c647ac0368ff`） |
+| Integration Token + Vehicles/Records DS | 仓外 `~/.car-care-secrets/m3d-d1-b-notion.env`（密钥未进 git） |
+| 测试 Worker `*-d1-test-b`（独立 KV/Key/CORS） | `https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev` keyFp `5d915911b54a` |
+| 重跑 live harness | `node scripts/m3d-sw-dual-workspace-live.mjs` → **PASS** |
+
+权威证据目录：[`artifacts/m3d-prod-pre-gates/sw-dual/`](../artifacts/m3d-prod-pre-gates/sw-dual/)（`sw-matrix.json` · `sw-SUMMARY.md` · `sw-dual-final.png`）。
 

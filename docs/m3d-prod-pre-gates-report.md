@@ -99,7 +99,7 @@
 | **SW1** 断开保留 Outbox | **PASS** |
 | **SW2** park 隔离（无误推 B） | **PASS** `push200toB=0` `leakedA=false` |
 | **SW3** 无 DISCARD 拒清 / DISCARD 清 orphan | **PASS** |
-| **SW4** 切回 A flush（B 无串写） | **PASS** `seenOnA=true` `leakedB=false` |
+| **SW4** 切回 A flush（B 无串写） | **PASS** `seenOnA=true` `leakedB=false`（**偏软**：`push200=0`；见 §5.1） |
 
 证据：`artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · `sw-SUMMARY.md` · `sw-dual-final.png`
 
@@ -116,7 +116,7 @@
 | G1 SW 双工作区 | **已闭合（PASS）** |
 | G2 RR-IDB | **主路径已 PASS**（对象仓）；`databases()` 历史风险保留披露 |
 | G3 LWW | 已知披露，未改 |
-| G4 带伤上线 | **未**获用户原样确认短句 → 不可勾 |
+| G4 带伤上线 | 模板已改为**仅覆盖残余**（不再写「无双工作区 E2E」）；**未**获用户原样确认 → 不可勾 |
 | H 禁止项 | 本轮遵守 |
 
 ---
@@ -134,9 +134,22 @@
 
 ---
 
+
+## 5.1 发布前应知（非阻塞 · 诚实披露）
+
+下列项**不推翻**本轮 SW1–SW4 / DEL / RR-IDB **PASS**，但正式发布前审查应知情：
+
+| 项 | 说明 | 建议 |
+|----|------|------|
+| **SW4 flush 证据偏软** | `sw-matrix`：`push200=0` 却 `seenOnA=true`；隔离硬（`leakedB=false`），PWA 双向 flush 观测不够铁 | 正式 Gateway 冒烟补 **switchback flush**，观察真实 `push` 200 |
+| **SW3 `removed=?`** | DISCARD 后 `aOwnerLeft=0` 已证明清空；返回摘要未给出精确 `removed` 计数 | 可接受；后续 harness 可补打印 |
+| **SW1 `sessionStorage-clear-fallback`** | 断开清除走了 sessionStorage fallback 路径（仍 `retained=1`） | 披露即可；非失败 |
+| **DEL 摘要旧 `SW_NOTE` 残留** | `artifacts/m3d-prod-pre-gates/del/*` 仍写「单测覆盖、不能 dual-tenant live」——属 DEL 跑次当时口径；**已被**本轮 `sw-dual/` live PASS **取代**，勿再当现状 | 以 `sw-dual/` 与本报告 §3 为准 |
+
 ## 6. 后续
 
 1. ~~第二工作区 + Gateway B~~ **已完成**；SW1–SW4 live **PASS**。
 2. Checklist G1 已闭合；A–F 生产部署项仍待**显式部署授权**。
 3. 本轮**未**开业务 fix PR（缺陷仅在验收 harness，已在本 docs 分支修复）。
-4. **不要 merge** 至生产部署，直至用户按 checklist 完成带伤/Go 确认与部署授权。
+4. **不要 merge** 至生产部署，直至用户按 checklist 完成 Go /（若适用）改写后的带伤残余确认与部署授权。
+5. 正式 Gateway 冒烟时优先补观察 SW4 switchback flush 的 `push` 200（见 §5.1）。

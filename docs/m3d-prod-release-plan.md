@@ -335,7 +335,7 @@ nginx -t
 | SW4 切回可 flush | `listFlushableForOwner` | **单元已覆盖** |
 | 权威规格 | architecture §4.8 · risks SW1–SW4 · `notion-d2-p5.test.ts` 19/19 | 设计闭合 |
 
-**关键残余（必须披露）**：SW1–SW4 **缺少真实双工作区 E2E** — 见 §7。不得以 unit-only 对外宣称「双工作区验收 PASS」。
+**关键残余（必须披露）**：SW1–SW4 **真实双工作区 live 已 PASS**（2026-10-14 · `artifacts/m3d-prod-pre-gates/sw-dual/` · 见 [`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)）。单元 19/19 仅为支持证据。**剩余残余**：SW4 flush 观测偏软（`push200=0` / `seenOnA=true`）；正式 Gateway/PWA 尚未部署 — 见 §7。
 
 ---
 
@@ -343,11 +343,11 @@ nginx -t
 
 | ID | 风险 | 严重度 | 现状 | 发布含义 |
 |----|------|--------|------|----------|
-| **RR-SW** | **SW1–SW4 缺少真实双工作区验收** | **高** | Staging 报告明确 **SKIP (unit-only)**；仅 `notion-d2-p5.test.ts` 19/19 | 生产发布前应补：两个真实 Notion workspace + 正式/预发 Gateway 的断开/切换/丢弃/切回 flush；**或**用户按 §8 G5 模板**原样确认**「SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险」 |
+| **RR-SW** | **SW1–SW4 双工作区 live 已 PASS；残余为 flush 观测偏软** | **中**（原「缺 live」已闭合） | pre-gates 2026-10-14：A/B Gateway + 双 wkFp live **PASS**（`artifacts/m3d-prod-pre-gates/sw-dual/`）；SW4 `push200=0` 却 `seenOnA=true` | 正式 Gateway 冒烟补观察 switchback flush `push` 200；若带残余上线须按 §8 G5 **改写后**模板原样确认（**不得**再写「无真实双工作区 E2E」） |
 | **RR-IDB** | **离线 IDB 探针异常** | 中（非阻断同步主路径） | car-test E2E：`offline.idb_probe` → `IDB.databases` **SecurityError**（离线 context）；**未**清用户 IDB；双向同步 / reonline 仍 PASS | 属探针/自动化环境限制嫌疑；生产前建议在真实浏览器离线场景手工确认 IDB 读写；**不得**为「修探针」而清用户 Outbox |
 | R2 | Gateway 无原子 LWW | 高（已知架构） | 尽力先读后写 + M3-C | 产品承诺不得写「强一致」 |
 | R10 | 双开撕裂 | 高 | 互斥已实现 | 保持单一 provider |
-| R16 | 误清 Outbox | 高 | 默认保留已实现；双库 E2E 未做 | 与 RR-SW 绑定 |
+| R16 | 误清 Outbox | 高 | 默认保留已实现；双工作区 live **已 PASS**（见 RR-SW） | 与 RR-SW 绑定；正式部署前仍防误清 |
 
 来源：[`m3d-pr17-car-test-deploy-report.md`](./m3d-pr17-car-test-deploy-report.md) §4 / §6 · [`artifacts/m3d-pr17-car-test-accept/SUMMARY.md`](../artifacts/m3d-pr17-car-test-accept/SUMMARY.md)。
 
@@ -361,16 +361,18 @@ nginx -t
 | G2 Gateway | 正式 Worker 独立资源；CORS 含 `https://car.adobesun.com`；verify PASS；**非** d1-test |
 | G3 密钥 | Secrets 仅 CF；扫描 PR/仓无 Token |
 | G4 前端 | tip 批准；测试绿；生产备份完成 |
-| G5 风险 | RR-SW / RR-IDB 已披露；补验完成 **或** 用户按下方模板**原样确认**接受 |
+| G5 风险 | RR-SW live 已 PASS（残余偏软已披露）/ RR-IDB 已披露；正式冒烟补验 **或** 用户按下方**改写后**模板**原样确认**接受残余 |
 | G6 授权 | 用户明示「部署 car.adobesun.com」+（若同批）「部署正式 Gateway」 |
 
 **G5「带伤上线」书面接受模板（须原样确认，不可改写后算接受）**
 
+> **口径更新（2026-10-14）**：G1 / RR-SW 主缺口（缺真实双工作区 E2E）**已闭合**。本模板**仅**覆盖剩余残余；**禁止**再使用旧短句「SW1–SW4 无真实双工作区 E2E」。
+
 用户须在授权指令中**原样**包含（可另附签名/日期）以下短句，否则「用户接受」**不可执行**、G5 = No-Go：
 
-> 我确认：SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险。同意在此条件下带伤上线。
+> 我确认：SW1–SW4 双工作区 live 已 PASS；接受 SW4 flush 证据偏软（push200=0 / seenOnA=true）及正式 Gateway/PWA 尚未部署等残余风险。同意在此条件下带伤上线。
 
-（英译备查，中文原句为准：*I confirm SW1–SW4 have no real dual-workspace E2E; I accept switch-corridor unit-test-only risk; I agree to ship with these known gaps.*）
+（英译备查，中文原句为准：*I confirm SW1–SW4 dual-workspace live has PASS; I accept soft SW4 flush evidence (push200=0 / seenOnA=true) and that formal Gateway/PWA is not yet deployed; I agree to ship with these remaining gaps.*）
 
 任一 No-Go → **停止**；不得用 d1-test 顶替 G2。
 
