@@ -1,0 +1,84 @@
+{
+  "status": "PASS",
+  "steps": {
+    "SW0_verify_A": {
+      "ok": true,
+      "summary": "status=200 wkFp=c647ac0368ff",
+      "workspaceKeyFp": "c647ac0368ff",
+      "at": "2026-10-14T09:21:53.557Z"
+    },
+    "SW0_verify_B": {
+      "ok": true,
+      "summary": "status=200 wkFp=db38e1e5a251",
+      "workspaceKeyFp": "db38e1e5a251",
+      "at": "2026-10-14T09:21:53.557Z"
+    },
+    "SW0_distinct_workspaceKey": {
+      "ok": true,
+      "summary": "wkA=c647ac0368ff wkB=db38e1e5a251 distinct=true",
+      "at": "2026-10-14T09:21:53.557Z"
+    },
+    "SW0_seed_A": {
+      "ok": true,
+      "summary": "status=200",
+      "at": "2026-10-14T09:21:54.555Z"
+    },
+    "SW_connect_A": {
+      "ok": true,
+      "summary": "pwa=https://car-test.adobesun.com",
+      "at": "2026-10-14T09:21:57.385Z"
+    },
+    "SW1_offline_enqueue": {
+      "ok": true,
+      "summary": "before=0 after=1 via=idb",
+      "byOwnerFp": {
+        "c647ac0368ff": 1
+      },
+      "at": "2026-10-14T09:21:58.048Z"
+    },
+    "SW1_disconnect_retain": {
+      "ok": true,
+      "summary": "retained=1 sessionCleared=true how=sessionStorage-clear-fallback",
+      "at": "2026-10-14T09:21:58.397Z"
+    },
+    "SW2_connect_B": {
+      "ok": true,
+      "summary": "wkB=db38e1e5a251",
+      "at": "2026-10-14T09:22:00.129Z"
+    },
+    "SW2_park_no_mispush": {
+      "ok": true,
+      "summary": "parkedTotal=1 push200toB=0 leakedA=false",
+      "at": "2026-10-14T09:22:02.372Z"
+    },
+    "SW3_reject_without_DISCARD": {
+      "ok": true,
+      "summary": "wrong={\"ok\":false,\"removed\":0,\"reason\":\"token-rejected-client\"} total=1",
+      "at": "2026-10-14T09:22:02.383Z"
+    },
+    "SW3_DISCARD_clears_parked": {
+      "ok": true,
+      "summary": "removed=? aOwnerLeft=0",
+      "at": "2026-10-14T09:22:02.931Z"
+    },
+    "SW4_switchback_flush": {
+      "ok": true,
+      "summary": "parkedBefore=1 afterPark=1 push200=0 seenOnA=true leakedB=false",
+      "at": "2026-10-14T09:22:13.183Z"
+    }
+  },
+  "started": "2026-10-14T09:21:52.998Z",
+  "pwa": "https://car-test.adobesun.com",
+  "aUrl": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "aKeyFp": "91dee0d48d59",
+  "bUrl": "https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+  "bKeyFp": "5d915911b54a",
+  "hardBans": {
+    "noProdGatewayDeploy": true,
+    "noProdPwaDeploy": true,
+    "noFormalSupabase": true,
+    "noClearUserIdb": true,
+    "secretsFingerprintsOnly": true
+  },
+  "ended": "2026-10-14T09:22:15.380Z"
+}

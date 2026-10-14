@@ -3,7 +3,8 @@
 > **用途**：正式 Cloudflare Worker Gateway **部署前/后**勾选；供架构与安全审查。  
 > **配套总案**：[`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md)  
 > **状态**：docs-only · **本检查表本身不授权部署**  
-> **基线**：d1-test = `car-care-notion-sync-d1-test` / `m3d-d1-0.1.1` — **勾选任一项前须确认未复用该 Worker**
+> **基线**：d1-test = `car-care-notion-sync-d1-test` / `m3d-d1-0.1.1` — **勾选任一项前须确认未复用该 Worker**  
+> **pre-gates（2026-10-14 CST）**：DEL **PASS** · RR-IDB **PASS** · SW1–SW4 live **PASS**（Gateway B `d1-test-b` · wkFp `db38e1e5a251`）；详见 [`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)
 
 操作者：____________　日期（CST）：____________　审查人：____________
 
@@ -97,16 +98,18 @@
 
 | # | 风险 | 已向用户/审查披露 | ✅ |
 |---|------|-------------------|---|
-| G1 | **SW1–SW4 缺少真实双工作区验收**（仅 unit）；不得宣称双工作区 E2E PASS | ☐ |
-| G2 | **离线 IDB 探针异常**（`IDB.databases` SecurityError @ car-test）；主同步路径曾 PASS，但仍须手工关注 | ☐ |
+| G1 | **SW1–SW4 真实双工作区 live PASS**（2026-10-14 17:22 CST）— A `d1-test` wkFp `c647ac0368ff` · B `d1-test-b` wkFp `db38e1e5a251`；证据 `artifacts/m3d-prod-pre-gates/sw-dual/` | ☑ |
+| G2 | **离线 IDB 探针异常**（历史 `IDB.databases` SecurityError）；**2026-10-14 RR-IDB**：对象仓直读直写 + reonline Outbox sync **PASS**（`artifacts/m3d-prod-pre-gates/rr-idb/`）；未清用户 IDB | ☐ |
 | G3 | Gateway LWW 弱于 Supabase RPC；竞态靠 M3-C，不承诺强一致 | ☐ |
-| G4 | 未接受 G1/G2 前强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
+| G4 | G1 双工作区 live **已 PASS**；若仍带已知残余（SW4 flush 观测偏软、正式 Gateway/PWA 未部署等）强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
 
 **G4「带伤上线」书面接受模板（须原样确认）**
 
+> **口径更新（2026-10-14）**：G1 SW1–SW4 真实双工作区 live **已闭合（PASS）**；不得再写「SW1–SW4 无真实双工作区 E2E」。本模板仅覆盖**剩余残余**。
+
 勾选 G4「用户接受」**仅当**用户授权原文中含以下短句（一字不改；缺任一项则 G4 不可勾、视为未接受）：
 
-> 我确认：SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险。同意在此条件下带伤上线。
+> 我确认：SW1–SW4 双工作区 live 已 PASS；接受 SW4 flush 证据偏软（push200=0 / seenOnA=true）及正式 Gateway/PWA 尚未部署等残余风险。同意在此条件下带伤上线。
 
 用户确认原文粘贴处：
 
@@ -137,6 +140,68 @@
 | 安全审查 | | | |
 | 用户授权（部署执行） | | | 另附指令原文 |
 
-**带条件 Go 时必须写明条件**（例如：「先完成双工作区 SW1–SW4 E2E」）：
+**带条件 Go 时必须写明条件**（例如：「正式 Gateway 冒烟补观察 SW4 switchback flush push 200」或「接受 G4 带伤短句所列残余」）：
 
 > _______________________________________________________________
+
+---
+
+## 验收证据附录（pre-gates · 2026-10-14 CST · **不部署**）
+
+操作者：验收执行者（box）　配套报告：[`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)
+
+### 已用 d1-test / car-test 证明（≠ 正式生产勾选）
+
+| 项 | 结果 | 证据路径 |
+|----|------|----------|
+| E4 同类：delete → `skipped_deleted` 防复活 | **PASS** | `artifacts/m3d-prod-pre-gates/del/del-matrix.json`（`DEL2_NO_RECREATE`） |
+| RR-IDB 断网本地读写 + 恢复同步 | **PASS** | `artifacts/m3d-prod-pre-gates/rr-idb/rr-idb-matrix.json` |
+| SW1–SW4 真实双工作区 E2E | **PASS** | `artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · B URL `…d1-test-b.spf-roc.workers.dev` keyFp `5d915911b54a` wkFp `db38e1e5a251` |
+| SW 单测（非 live） | 19/19 PASS | `artifacts/m3d-prod-pre-gates/sw-dual/unit-sw-support.txt` |
+
+### A–H 剩余待授权后执行项（简表）
+
+> **本轮仅归档验收资料 · 零部署。** 下列项**不得**在无用户明示「部署正式 Gateway / 生产 PWA」授权时执行。
+
+| 节 | 剩余项（须授权后执行） | 本轮状态 |
+|----|------------------------|----------|
+| **A** | 新建正式 Worker / 独立 KV / 生产 Integration+DS / 新 `GATEWAY_API_KEY` / 核对 `wrangler.toml` name≠`*-d1-test` | **待授权** — 未建正式 Gateway |
+| **B** | 生产 Secrets 仅 `wrangler secret put`；密码管理器备份；轮换 SOP | **待授权** — d1-test Key 仅测试；生产须新熵 |
+| **C** | 正式 `ALLOWED_ORIGIN` 含 `https://car.adobesun.com`；CORS/401 探针 | **待授权** — d1-test 现仅 car-test + localhost |
+| **D** | 生产 Notion 契约（`NOTION_VERSION` / Share / Payload / tombstone） | **待授权** |
+| **E** | 正式 Key 冒烟（health/verify/夹具 push-pull/delete）；**另见下方「正式 Gateway 发布验收条件」** | **待授权**（E4 行为已在 d1-test 证明） |
+| **F** | 生产备份 + tip 部署 + stamp 公网核对；不改正式 Supabase / 不清用户 IDB | **待授权** — 未动 `car.adobesun.com` |
+| **G1** | — | **已闭** — SW1–SW4 live PASS |
+| **G2** | 正式环境手工确认离线 IDB（可选） | 主路径已 PASS；历史探针风险保留披露 |
+| **G3** | — | 已知披露（LWW） |
+| **G4** | 带伤上线须原样确认短句（含 SW4 `push200=0`） | **未**原样确认 → 不可勾 |
+| **H** | 持续遵守禁止项 | 本轮遵守（无生产部署、无清 IDB、无密钥进 git） |
+
+### 正式 Gateway 发布验收条件（强制 · 授权部署后冒烟）
+
+> 交叉引用：[`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md) §5.1 · [`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md) §7 RR-SW / §8 G5。  
+> **不得**将 pre-gates SW4（`push200=0` / `seenOnA=true`）改写成「已验证真实 PWA 推送」。
+
+正式 Gateway（及联动 PWA）发布冒烟时，**必须**观测到下列全部条件，方可勾选 E 节相关项 / 宣称 switchback flush 铁证：
+
+| # | 验收条件 | ✅ |
+|---|----------|---|
+| FG1 | 切回原工作区 A 后，实际产生 **`/sync/push` HTTP 200**（网络层可计数；非仅 `seenOnA`） | ☐ |
+| FG2 | 该 owner（`workspaceKey`）的 Outbox **正确清空**（无残留待推条目） | ☐ |
+| FG3 | 数据**仅**出现在工作区 A；工作区 B **无**串写 / 泄漏（`leakedB=false` 类断言） | ☐ |
+
+pre-gates SW4 现状（保留披露）：`push200=0` 却 `seenOnA=true` · `leakedB=false` — **隔离硬、flush 观测偏软**；上表 FG1–FG3 为正式发布补验门槛。
+
+### 第二工作区缺口（SW live）— **已闭合（归档）**
+
+> **2026-10-14 17:22 CST**：Workspace B + Gateway `car-care-notion-sync-d1-test-b` + SW1–SW4 live **PASS**。本附录保留为历史缺口说明，**不得**再当作未完成项。
+
+| 原缺口 | 闭合证据 |
+|--------|----------|
+| 第二 Notion workspace（`workspace_id` ≠ A） | B wkFp `db38e1e5a251` ← `18eab0db-43db-817c-911a-000390294864`（≠ A `c647ac0368ff`） |
+| Integration Token + Vehicles/Records DS | 仓外 `~/.car-care-secrets/m3d-d1-b-notion.env`（密钥未进 git） |
+| 测试 Worker `*-d1-test-b`（独立 KV/Key/CORS） | `https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev` keyFp `5d915911b54a` |
+| 重跑 live harness | `node scripts/m3d-sw-dual-workspace-live.mjs` → **PASS** |
+
+权威证据目录：[`artifacts/m3d-prod-pre-gates/sw-dual/`](../artifacts/m3d-prod-pre-gates/sw-dual/)（`sw-matrix.json` · `sw-SUMMARY.md` · `sw-dual-final.png`）。
+

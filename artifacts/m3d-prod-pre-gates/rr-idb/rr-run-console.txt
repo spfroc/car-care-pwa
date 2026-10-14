@@ -1,0 +1,13 @@
+PASS boot.settings https://car-test.adobesun.com/settings
+PASS browser.verify keyFp=91dee0d48d59
+PASS online.vehicle_create url=https://car-test.adobesun.com/vehicles/c678d9fc-1787-4ede-9ba2-9223f29d1886
+PASS online.idb_objectstore_read {"ok":true,"names":["learning","media","meta","records","settings","stations","sync_conflicts","sync_meta","sync_notion_map","sync_outbox","vehicles"],"vehicles":1,"outbox":0,"meta":1,"sampleName":"RRIDB-mv7vrfdx"}
+PASS pre_offline.vehicles_loaded len=115
+PASS offline.shell_reachable len=115 (no nav after offline)
+PASS offline.idb_databases_probe ["car-care-db"]
+PASS offline.idb_objectstore_rw {"ok":true,"id":"c678d9fc-1787-4ede-9ba2-9223f29d1886","readName":"RRIDB-mv7vrfdx-OFF","outboxCount":1}
+PASS offline.ui_reads_local uiSees=true idbOk=true
+PASS reonline.outbox_sync [{"path":"/sync/push","status":200,"t":1791968485106},{"path":"/sync/pull?entities=vehicles,records","status":200,"t":1791968485845}]
+PASS reonline.idb_intact {"ok":true,"names":["learning","media","meta","records","settings","stations","sync_conflicts","sync_meta","sync_notion_map","sync_outbox","vehicles"],"vehicles":1,"outbox":0,"meta":1,"sampleName":"RRIDB-mv7vrfdx-OFF"}
+PASS api.pull_after_reonline idFp=6f2231f5da08 name=RRIDB-mv7vrfdx-OFF
+STATUS PASS
