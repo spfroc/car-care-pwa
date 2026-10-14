@@ -1,0 +1,17 @@
+Gateway https://car-care-notion-sync-d1-test.spf-roc.workers.dev
+Key fingerprint 91dee0d48d59
+PASS G1.health http=200 version=m3d-d1-0.1.1
+PASS G1.verify http=200 bot=grok bot wk=c647ac0368ff
+PASS starC.create applied=2 errors=0
+PASS D2.3.pull_after_create veh=true rec=true totalRows=31
+PASS starU.update_same_page applied=true alivePages=1 nameHint=D2P3 UPD d2p3-1791966294464
+PASS D2.2.outbox_flush http=200 applied=op-off-d2p3-1791966294464
+PASS starD.delete_tombstone applied=true pullTomb=false pushSkippedDeleted=true pullAttempts=6
+PASS starT.stale_upsert_skipped skipped_deleted=true
+PASS starT.idempotent_delete_retry http=200 applied=true hardError=false
+PASS starR.restore applied=true alive=true
+PASS D2.6.media_worker_probe gatewayApplied=false gatewayErrored=true workerRejects=true
+PASS cleanup applied=op-clean-v-d2p3-1791966294464,op-clean-r-d2p3-1791966294464
+
+==> PASS all required live gates green
+Artifacts: /workspace/car-care-pwa/app/artifacts/live-notion/matrix.json /workspace/car-care-pwa/app/artifacts/live-notion/SUMMARY.md

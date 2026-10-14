@@ -1,0 +1,59 @@
+{
+  "ranAt": "2026-10-14T16:26:00+08:00",
+  "mergeSha": "c5dcf493eca7a088605ca685fe2e43acf8ca4eaa",
+  "headTip": "5b7052c00d2ed7370c7cca119672bed247c5396a",
+  "pr": 17,
+  "optionalPr16MergeSha": "aa7788ac7ce6bdb27f8c3da9e7c74c319f9783e0",
+  "staging": {
+    "url": "https://car-test.adobesun.com",
+    "bundle": "index-B32gzRTV.js",
+    "bundleSha256": "fc4e608c3dbcbfd72a2b1f5556be0c4859ba0b9347cec62fe6f032c396fc63b7",
+    "deploySha": "c5dcf493eca7a088605ca685fe2e43acf8ca4eaa"
+  },
+  "prodUntouched": {
+    "url": "https://car.adobesun.com",
+    "bundle": "index-TdTLY2U-.js",
+    "git": "9b64a2bd204acfb5791f3f6668110e4c00ab3c95"
+  },
+  "backup": {
+    "vps": "/var/www/car-care-backups/car-care-staging-pre-m3d-pr17-20261014-102422.tar.gz",
+    "local": "/workspace/car-care-pwa/backups/car-care-staging-pre-m3d-pr17-20261014-102422.tar.gz",
+    "sha256": "e2391ea1ebd9744fb07b8a3e831dc2dc3aa1201a340bec23666b592ee369c71a",
+    "preFingerprint": "index-TdTLY2U-.js / git=9b64a2bd"
+  },
+  "gateway": {
+    "url": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+    "version": "m3d-d1-0.1.1",
+    "keyFp": "91dee0d48d59",
+    "workspaceFp": "c647ac0368ff",
+    "note": "d1-test DEV only — not production Gateway"
+  },
+  "preDeploy": {
+    "npmTest": "PASS 339 passed / 5 skipped",
+    "tsc": "PASS exit 0",
+    "build": "PASS index-B32gzRTV.js"
+  },
+  "e2e": [
+    {"id": "name_plate_roundtrip", "status": "PASS", "kind": "browser+Gateway pull"},
+    {"id": "vehicle_crud_sync", "status": "PASS", "kind": "browser bidirectional + P3 API"},
+    {"id": "record_sync", "status": "PASS", "kind": "P3 live Gateway API"},
+    {"id": "conflict_resolve", "status": "PASS", "kind": "P4 cloud_newer + keep_local LWW"},
+    {"id": "delete_anti_revive", "status": "PASS", "kind": "P5 DEL2 skipped_deleted"},
+    {"id": "offline_recover", "status": "PASS", "kind": "P3 D2.2 outbox flush + browser reonline sync"},
+    {"id": "SW1", "status": "SKIP", "label": "unit-only — not dual-workspace live"},
+    {"id": "SW2", "status": "SKIP", "label": "unit-only — not dual-workspace live"},
+    {"id": "SW3", "status": "SKIP", "label": "unit-only — not dual-workspace live"},
+    {"id": "SW4", "status": "SKIP", "label": "unit-only — not dual-workspace live"}
+  ],
+  "supabaseRegression": {
+    "status": "PASS",
+    "project": "disposable skwoahneuqkqgxzpkkzl only",
+    "formalSchemaOrDataChanged": false
+  },
+  "hardBansObserved": {
+    "noProdDeploy": true,
+    "noClearUserIdbOrOutbox": true,
+    "d1TestNotProdGateway": true,
+    "noFormalSupabaseMutation": true
+  }
+}
