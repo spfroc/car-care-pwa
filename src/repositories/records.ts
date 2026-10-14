@@ -3,10 +3,12 @@ import type { CareRecord, RecordType } from '../types';
 import {
   isCloudEnqueueEnabled,
   makeOutboxItem,
+  prepareOutboxEnqueue,
   putOutboxInTx,
   settleTx,
   stampOutboxOwner,
 } from '../sync/outbox';
+import { noteLocalHardDelete } from '../sync/notionMap';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -33,19 +35,15 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 
 export async function putRecord(r: CareRecord): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled('records');
-  const outboxItem = sync
-    ? await stampOutboxOwner(
-        makeOutboxItem({
-          entity: 'records',
-          entityId: r.id,
-          op: 'upsert',
-          payload: r,
-          mutatedAt: r.updatedAt,
-        }),
-      )
-    : null;
-  const stores = sync ? (['records', 'sync_outbox'] as const) : (['records'] as const);
+  // Shared helper: isCloudEnqueueEnabled + Notion same-workspace tombstone gate
+  const outboxItem = await prepareOutboxEnqueue({
+    entity: 'records',
+    entityId: r.id,
+    op: 'upsert',
+    payload: r,
+    mutatedAt: r.updatedAt,
+  });
+  const stores = outboxItem ? (['records', 'sync_outbox'] as const) : (['records'] as const);
   const tx = db.transaction(stores, 'readwrite');
   await settleTx(tx, async () => {
     await tx.objectStore('records').put(r);
@@ -116,6 +114,7 @@ export async function deleteRecord(id: string): Promise<void> {
     await tx.objectStore('records').delete(id);
     for (const item of outboxItems) await putOutboxInTx(tx, item);
   });
+  if (syncRecords) await noteLocalHardDelete('records', id);
 }
 
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {

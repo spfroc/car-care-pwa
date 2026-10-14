@@ -7,6 +7,7 @@ import {
 import {
   bidirectionalSync,
   disconnectCloud,
+  discardOrphanOutboxOwner,
   firstUploadToCloud,
   getSyncStatusSummary,
   resolveProvider,
@@ -44,6 +45,10 @@ export function DataStorageSettings() {
   const [outboxCount, setOutboxCount] = useState(0);
   const [outboxReadyCount, setOutboxReadyCount] = useState(0);
   const [openConflictCount, setOpenConflictCount] = useState(0);
+  const [orphanOutboxCount, setOrphanOutboxCount] = useState(0);
+  const [orphanOwners, setOrphanOwners] = useState<Array<{ ownerUserId: string; count: number }>>(
+    [],
+  );
 
   const refreshSessionUi = useCallback(() => {
     const s = getNotionRuntimeSession();
@@ -64,6 +69,8 @@ export function DataStorageSettings() {
     setOutboxCount(summary.outboxCount);
     setOutboxReadyCount(summary.outboxReadyCount);
     setOpenConflictCount(summary.openConflictCount ?? 0);
+    setOrphanOutboxCount(summary.orphanOutboxCount ?? 0);
+    setOrphanOwners(summary.orphanOwners ?? []);
     setConflicts(await listConflicts());
     refreshSessionUi();
     const m = summary.meta;
@@ -368,6 +375,43 @@ export function DataStorageSettings() {
               {t('storage.retryOutbox')}
             </button>
           )}
+
+          <div className="orphan-outbox-panel" style={{ marginTop: 12 }}>
+            <p className="hint">{t('storage.orphanOutboxTitle')}</p>
+            <p className="muted small">{t('storage.orphanOutboxHint')}</p>
+            <p className="muted small">{t('storage.disconnectRetainNote')}</p>
+            {orphanOutboxCount === 0 ? (
+              <p className="muted small">{t('storage.orphanOutboxEmpty')}</p>
+            ) : (
+              <ul className="small" style={{ paddingLeft: 18 }}>
+                {orphanOwners.map((o) => (
+                  <li key={o.ownerUserId} style={{ marginBottom: 8 }}>
+                    {t('storage.orphanOutboxRow', {
+                      key: o.ownerUserId.slice(0, 8),
+                      n: o.count,
+                    })}
+                    <button
+                      type="button"
+                      className="btn danger"
+                      style={{ marginLeft: 8 }}
+                      disabled={busy}
+                      onClick={() => {
+                        if (!confirm(t('storage.orphanDiscardConfirm'))) return;
+                        void run(() =>
+                          discardOrphanOutboxOwner({
+                            ownerUserId: o.ownerUserId,
+                            confirmToken: 'DISCARD',
+                          }),
+                        );
+                      }}
+                    >
+                      {t('storage.orphanDiscard')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 

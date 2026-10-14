@@ -2,6 +2,7 @@ import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
 import { getCloudStorageConfig } from './config';
 import { hasValidNotionRuntimeSession } from './notionSession';
+import { shouldBlockBlindRecreate } from './notionMap';
 import { listOpenConflictKeys } from './conflictStore';
 import { dedupeOutbox } from './merge';
 import {
@@ -173,19 +174,77 @@ export async function countOutboxForOwner(ownerUserId: string): Promise<number> 
   return all.filter((o) => (o.ownerUserId ?? OUTBOX_UNBOUND) === ownerUserId).length;
 }
 
+/**
+ * Ops whose owner is set and differs from the current workspaceKey / cloudUserId.
+ * These must never be flushed while bound to another owner (SW2 isolation).
+ */
+export async function listOrphanOutbox(currentOwnerId: string | undefined): Promise<SyncOutboxItem[]> {
+  const all = await listOutbox();
+  return all.filter((o) => {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    if (owner === OUTBOX_UNBOUND) return false;
+    if (!currentOwnerId) return true;
+    return owner !== currentOwnerId;
+  });
+}
+
+export async function countOrphanOutbox(currentOwnerId: string | undefined): Promise<number> {
+  return (await listOrphanOutbox(currentOwnerId)).length;
+}
+
+/** Summarize orphan queues by ownerUserId for the minimal switch panel. */
+export async function summarizeOrphanOutbox(
+  currentOwnerId: string | undefined,
+): Promise<Array<{ ownerUserId: string; count: number }>> {
+  const orphans = await listOrphanOutbox(currentOwnerId);
+  const map = new Map<string, number>();
+  for (const o of orphans) {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    map.set(owner, (map.get(owner) ?? 0) + 1);
+  }
+  return [...map.entries()].map(([ownerUserId, count]) => ({ ownerUserId, count }));
+}
+
+/**
+ * Explicit discard of one parked owner's queue (SW3).
+ * Exact owner match only — never clears unbound or other owners.
+ * Returns 0 if ownerUserId is empty/unbound (refuse accidental wipe).
+ */
+export async function discardOutboxForExactOwner(ownerUserId: string): Promise<number> {
+  const owner = ownerUserId?.trim();
+  if (!owner || owner === OUTBOX_UNBOUND) return 0;
+  const all = await listOutbox();
+  const mine = all.filter((o) => (o.ownerUserId ?? OUTBOX_UNBOUND) === owner);
+  await removeOutboxItems(mine.map((o) => o.opId));
+  return mine.length;
+}
+
 export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
   const meta = await getSyncMeta();
   const mine = await listOutboxForUser(meta.cloudUserId);
   const openKeys = await listOpenConflictKeys();
-  return dedupeOutbox(
-    mine.filter(
-      (o) =>
-        o.attempts < MAX_OUTBOX_ATTEMPTS &&
-        o.nextRetryAt <= now &&
-        !o.blockedByConflictId &&
-        !openKeys.has(`${o.entity}:${o.entityId}`),
-    ),
+  const cfg = await getCloudStorageConfig();
+  const wk = meta.cloudUserId ?? cfg.workspaceKey;
+  const candidates = mine.filter(
+    (o) =>
+      o.attempts < MAX_OUTBOX_ATTEMPTS &&
+      o.nextRetryAt <= now &&
+      !o.blockedByConflictId &&
+      !openKeys.has(`${o.entity}:${o.entityId}`),
   );
+  // Defense in depth: never flush Notion upserts that hit a same-workspace map tombstone
+  const ready: SyncOutboxItem[] = [];
+  for (const o of candidates) {
+    if (
+      o.op === 'upsert' &&
+      cfg.provider === 'notion' &&
+      (await shouldBlockBlindRecreate(o.entity, o.entityId, wk))
+    ) {
+      continue;
+    }
+    ready.push(o);
+  }
+  return dedupeOutbox(ready);
 }
 
 /** Mark outbox ops as blocked by an open conflict (also filters listReadyOutbox). */
@@ -374,6 +433,40 @@ export async function markOutboxFailure(opId: string, error: string): Promise<vo
   await db.put('sync_outbox', next);
 }
 
+/**
+ * True when Notion map tombstone forbids enqueueing/flushing an upsert (same workspace).
+ * Shared by prepareOutboxEnqueue, enqueueSyncOp, and listReadyOutbox.
+ */
+export async function shouldSkipNotionUpsertEnqueue(
+  entity: SyncEntity | string,
+  entityId: string,
+): Promise<boolean> {
+  const cfg = await getCloudStorageConfig();
+  if (cfg.provider !== 'notion') return false;
+  const meta = await getSyncMeta();
+  const wk = meta.cloudUserId ?? cfg.workspaceKey;
+  return shouldBlockBlindRecreate(entity, entityId, wk);
+}
+
+/**
+ * Shared enqueue prep for repositories (putVehicle/putRecord) and enqueueSyncOp.
+ * Call BEFORE opening the IDB write transaction (may await map/meta).
+ * Returns null when cloud enqueue is disabled or blind-recreate is blocked.
+ */
+export async function prepareOutboxEnqueue(input: {
+  entity: SyncEntity;
+  entityId: string;
+  op: SyncOpKind;
+  payload?: unknown;
+  mutatedAt?: string;
+}): Promise<SyncOutboxItem | null> {
+  if (!(await isCloudEnqueueEnabled(input.entity))) return null;
+  if (input.op === 'upsert' && (await shouldSkipNotionUpsertEnqueue(input.entity, input.entityId))) {
+    return null;
+  }
+  return stampOutboxOwner(makeOutboxItem(input));
+}
+
 /** Standalone enqueue (prefer transactional putOutboxInTx from repositories). */
 export async function enqueueSyncOp(input: {
   entity: SyncEntity;
@@ -382,8 +475,10 @@ export async function enqueueSyncOp(input: {
   payload?: unknown;
   mutatedAt?: string;
 }): Promise<void> {
-  if (!(await isCloudEnqueueEnabled(input.entity))) return;
-  await putOutboxItem(makeOutboxItem(input));
+  const item = await prepareOutboxEnqueue(input);
+  if (!item) return;
+  // Already stamped; putOutboxItem is a no-op re-stamp when ownerUserId is set.
+  await putOutboxItem(item);
 }
 
 export async function listConflicts(): Promise<SyncConflict[]> {

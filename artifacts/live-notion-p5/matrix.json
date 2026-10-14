@@ -1,0 +1,70 @@
+{
+  "status": "PASS",
+  "runId": "d2p5-1791963925313",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFp": "91dee0d48d59",
+  "started": "2026-10-14T07:45:25.313Z",
+  "ended": "2026-10-14T07:45:33.513Z",
+  "steps": {
+    "G1_verify": {
+      "ok": true,
+      "summary": "status=200 wkFp=c647ac0368ff",
+      "status": 200,
+      "workspaceKeyFp": "c647ac0368ff",
+      "at": "2026-10-14T07:45:25.667Z"
+    },
+    "CREATE": {
+      "ok": true,
+      "summary": "status=200 applied=[\"op-c-p5-mv7t1y8z-y092gv\"]",
+      "conflicts": [],
+      "at": "2026-10-14T07:45:26.563Z"
+    },
+    "PULL_ALIVE": {
+      "ok": true,
+      "summary": "attempts=1",
+      "at": "2026-10-14T07:45:27.415Z"
+    },
+    "DEL1_DELETE_PUSH": {
+      "ok": true,
+      "summary": "status=200 applied=[\"op-d-p5-mv7t1y8z-y092gv\"]",
+      "at": "2026-10-14T07:45:28.551Z"
+    },
+    "DEL1_PULL_TOMBSTONE": {
+      "ok": true,
+      "summary": "pullTomb=true deleteApplied=true attempts=1 (KV tombstone OK if pull omits trash)",
+      "mapHint": {
+        "entity": "vehicles",
+        "appEntityId": "p5-mv7t1y8z-y092gv",
+        "tombstone": true
+      },
+      "at": "2026-10-14T07:45:29.467Z"
+    },
+    "DEL2_NO_RECREATE": {
+      "ok": true,
+      "summary": "applied=[] conflicts=[{\"id\":\"op-stale-p5-mv7t1y8z-y092gv\",\"reason\":\"skipped_deleted\"}]",
+      "at": "2026-10-14T07:45:30.208Z"
+    },
+    "DEL3_RESTORE_PUSH": {
+      "ok": true,
+      "summary": "status=200 applied=[\"op-r-p5-mv7t1y8z-y092gv\"] conflicts=[]",
+      "at": "2026-10-14T07:45:31.586Z"
+    },
+    "DEL3_PULL_ALIVE": {
+      "ok": true,
+      "summary": "attempts=1",
+      "at": "2026-10-14T07:45:32.369Z"
+    },
+    "SW_NOTE": {
+      "ok": true,
+      "summary": "SW1–SW4 isolation covered by unit tests (single d1-test workspaceKey cannot dual-tenant live). Default retain + owner isolation confirmed in notion-d2-p5.test.ts",
+      "at": "2026-10-14T07:45:33.512Z"
+    }
+  },
+  "entityIdFp": "bf823a6eb8f7",
+  "hardBans": {
+    "noPwaDeploy": true,
+    "noFormalSupabase": true,
+    "d1TestNotProd": true,
+    "noSecretsInArtifacts": true
+  }
+}

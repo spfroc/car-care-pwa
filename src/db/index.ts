@@ -3,8 +3,8 @@ import type { CareRecord, LearningRow, Media, MetaRow, SettingRow, Station, Vehi
 import { APP_SCHEMA_VERSION, DEFAULT_FUEL_GRADES, OCR_DEFAULTS, nowISO } from '../lib/constants';
 
 export const DB_NAME = 'car-care-db';
-/** IndexedDB open version. 2 = learning; 3 = sync_outbox + sync_meta; 4 = sync_conflicts (M3-C). */
-export const DB_VERSION = 4;
+/** IndexedDB open version. 2 = learning; 3 = sync_outbox + sync_meta; 4 = sync_conflicts (M3-C); 5 = sync_notion_map (D2-P5). */
+export const DB_VERSION = 5;
 
 export interface CarCareDB extends DBSchema {
   vehicles: { key: string; value: Vehicle; indexes: { byEnergy: string; byUpdated: string } };
@@ -69,6 +69,29 @@ export interface CarCareDB extends DBSchema {
       byEntityId: [string, string];
     };
   };
+  /**
+   * Notion page map (D2-P5): (entity, appEntityId) → pageId / workspace / tombstone.
+   * Prevents blind recreate after hard UI delete when Gateway row is Absent.
+   */
+  sync_notion_map: {
+    key: string;
+    value: {
+      /** Composite key `${entity}:${appEntityId}` */
+      mapKey: string;
+      entity: string;
+      appEntityId: string;
+      pageId: string;
+      workspaceKey: string;
+      /** True when locally known deleted / cloud tombstone. */
+      tombstone?: boolean;
+      deletedAt?: string | null;
+      updatedAt: string;
+    };
+    indexes: {
+      byWorkspace: string;
+      byEntityId: [string, string];
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<CarCareDB>> | null = null;
@@ -116,6 +139,11 @@ export async function getDB(): Promise<IDBPDatabase<CarCareDB>> {
           const conflicts = db.createObjectStore('sync_conflicts', { keyPath: 'id' });
           conflicts.createIndex('byStatus', 'status');
           conflicts.createIndex('byEntityId', ['entity', 'entityId']);
+        }
+        if (oldVersion < 5) {
+          const notionMap = db.createObjectStore('sync_notion_map', { keyPath: 'mapKey' });
+          notionMap.createIndex('byWorkspace', 'workspaceKey');
+          notionMap.createIndex('byEntityId', ['entity', 'appEntityId']);
         }
       },
     }).catch((e) => {
