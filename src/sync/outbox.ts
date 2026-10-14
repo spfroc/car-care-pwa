@@ -223,15 +223,28 @@ export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]>
   const meta = await getSyncMeta();
   const mine = await listOutboxForUser(meta.cloudUserId);
   const openKeys = await listOpenConflictKeys();
-  return dedupeOutbox(
-    mine.filter(
-      (o) =>
-        o.attempts < MAX_OUTBOX_ATTEMPTS &&
-        o.nextRetryAt <= now &&
-        !o.blockedByConflictId &&
-        !openKeys.has(`${o.entity}:${o.entityId}`),
-    ),
+  const cfg = await getCloudStorageConfig();
+  const wk = meta.cloudUserId ?? cfg.workspaceKey;
+  const candidates = mine.filter(
+    (o) =>
+      o.attempts < MAX_OUTBOX_ATTEMPTS &&
+      o.nextRetryAt <= now &&
+      !o.blockedByConflictId &&
+      !openKeys.has(`${o.entity}:${o.entityId}`),
   );
+  // Defense in depth: never flush Notion upserts that hit a same-workspace map tombstone
+  const ready: SyncOutboxItem[] = [];
+  for (const o of candidates) {
+    if (
+      o.op === 'upsert' &&
+      cfg.provider === 'notion' &&
+      (await shouldBlockBlindRecreate(o.entity, o.entityId, wk))
+    ) {
+      continue;
+    }
+    ready.push(o);
+  }
+  return dedupeOutbox(ready);
 }
 
 /** Mark outbox ops as blocked by an open conflict (also filters listReadyOutbox). */
@@ -420,6 +433,40 @@ export async function markOutboxFailure(opId: string, error: string): Promise<vo
   await db.put('sync_outbox', next);
 }
 
+/**
+ * True when Notion map tombstone forbids enqueueing/flushing an upsert (same workspace).
+ * Shared by prepareOutboxEnqueue, enqueueSyncOp, and listReadyOutbox.
+ */
+export async function shouldSkipNotionUpsertEnqueue(
+  entity: SyncEntity | string,
+  entityId: string,
+): Promise<boolean> {
+  const cfg = await getCloudStorageConfig();
+  if (cfg.provider !== 'notion') return false;
+  const meta = await getSyncMeta();
+  const wk = meta.cloudUserId ?? cfg.workspaceKey;
+  return shouldBlockBlindRecreate(entity, entityId, wk);
+}
+
+/**
+ * Shared enqueue prep for repositories (putVehicle/putRecord) and enqueueSyncOp.
+ * Call BEFORE opening the IDB write transaction (may await map/meta).
+ * Returns null when cloud enqueue is disabled or blind-recreate is blocked.
+ */
+export async function prepareOutboxEnqueue(input: {
+  entity: SyncEntity;
+  entityId: string;
+  op: SyncOpKind;
+  payload?: unknown;
+  mutatedAt?: string;
+}): Promise<SyncOutboxItem | null> {
+  if (!(await isCloudEnqueueEnabled(input.entity))) return null;
+  if (input.op === 'upsert' && (await shouldSkipNotionUpsertEnqueue(input.entity, input.entityId))) {
+    return null;
+  }
+  return stampOutboxOwner(makeOutboxItem(input));
+}
+
 /** Standalone enqueue (prefer transactional putOutboxInTx from repositories). */
 export async function enqueueSyncOp(input: {
   entity: SyncEntity;
@@ -428,19 +475,10 @@ export async function enqueueSyncOp(input: {
   payload?: unknown;
   mutatedAt?: string;
 }): Promise<void> {
-  if (!(await isCloudEnqueueEnabled(input.entity))) return;
-  // D2-P5: refuse upsert that would blindly recreate a tombstoned Notion entity
-  if (input.op === 'upsert') {
-    const meta = await getSyncMeta();
-    const cfg = await getCloudStorageConfig();
-    if (cfg.provider === 'notion') {
-      const wk = meta.cloudUserId ?? cfg.workspaceKey;
-      if (await shouldBlockBlindRecreate(input.entity, input.entityId, wk)) {
-        return;
-      }
-    }
-  }
-  await putOutboxItem(makeOutboxItem(input));
+  const item = await prepareOutboxEnqueue(input);
+  if (!item) return;
+  // Already stamped; putOutboxItem is a no-op re-stamp when ownerUserId is set.
+  await putOutboxItem(item);
 }
 
 export async function listConflicts(): Promise<SyncConflict[]> {

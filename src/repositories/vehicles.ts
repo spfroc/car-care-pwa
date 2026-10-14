@@ -3,6 +3,7 @@ import type { Vehicle } from '../types';
 import {
   isCloudEnqueueEnabled,
   makeOutboxItem,
+  prepareOutboxEnqueue,
   putOutboxInTx,
   stampOutboxOwner,
   settleTx,
@@ -22,19 +23,15 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 
 export async function putVehicle(v: Vehicle): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled('vehicles');
-  const outboxItem = sync
-    ? await stampOutboxOwner(
-        makeOutboxItem({
-          entity: 'vehicles',
-          entityId: v.id,
-          op: 'upsert',
-          payload: v,
-          mutatedAt: v.updatedAt,
-        }),
-      )
-    : null;
-  const stores = sync ? (['vehicles', 'sync_outbox'] as const) : (['vehicles'] as const);
+  // Shared helper: isCloudEnqueueEnabled + Notion same-workspace tombstone gate
+  const outboxItem = await prepareOutboxEnqueue({
+    entity: 'vehicles',
+    entityId: v.id,
+    op: 'upsert',
+    payload: v,
+    mutatedAt: v.updatedAt,
+  });
+  const stores = outboxItem ? (['vehicles', 'sync_outbox'] as const) : (['vehicles'] as const);
   const tx = db.transaction(stores, 'readwrite');
   await settleTx(tx, async () => {
     await tx.objectStore('vehicles').put(v);

@@ -5,7 +5,8 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { closeDBForTests, DB_VERSION, getDB } from '../db';
 import { nowISO } from '../lib/constants';
-import type { Vehicle } from '../types';
+import type { CareRecord, Vehicle } from '../types';
+import { putRecord } from '../repositories/records';
 import { deleteVehicle, putVehicle } from '../repositories/vehicles';
 import { setCloudStorageConfig } from './config';
 import {
@@ -38,6 +39,7 @@ import {
   listReadyOutbox,
   makeOutboxItem,
   patchSyncMeta,
+  prepareOutboxEnqueue,
   putOutboxItem,
 } from './outbox';
 import {
@@ -200,6 +202,124 @@ describe('D2-P5 IDB sync_notion_map store', () => {
       payload: vehicle('veh-x', 'X', nowISO()),
     });
     expect(await listOutbox()).toHaveLength(0);
+  });
+
+  it('putVehicle upsert enqueue blocked when map tombstone (same workspace)', async () => {
+    await setCloudStorageConfig({
+      provider: 'notion',
+      notionGatewayUrl: 'https://gw.example.com',
+      workspaceKey: 'wk-a',
+    });
+    setNotionRuntimeSession({ bearer: 'test-key', workspaceKey: 'wk-a' });
+    await patchSyncMeta({
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'notion',
+      cloudUserId: 'wk-a',
+    });
+    await markNotionMapTombstone({
+      entity: 'vehicles',
+      appEntityId: 'veh-repo',
+      workspaceKey: 'wk-a',
+    });
+    const t0 = nowISO();
+    await putVehicle(vehicle('veh-repo', 'RepoBlind', t0));
+    // Local write still happens; outbox must not get a blind-recreate upsert
+    const db = await getDB();
+    expect(await db.get('vehicles', 'veh-repo')).toBeTruthy();
+    expect(await listOutbox()).toHaveLength(0);
+    // Control: different workspace tombstone does not block
+    await markNotionMapTombstone({
+      entity: 'vehicles',
+      appEntityId: 'veh-other-wk',
+      workspaceKey: 'wk-other',
+    });
+    await putVehicle(vehicle('veh-other-wk', 'OtherWk', t0));
+    const box = await listOutbox();
+    expect(box).toHaveLength(1);
+    expect(box[0]?.entityId).toBe('veh-other-wk');
+    expect(box[0]?.op).toBe('upsert');
+  });
+
+  it('putRecord upsert enqueue blocked when map tombstone (same workspace)', async () => {
+    await setCloudStorageConfig({
+      provider: 'notion',
+      notionGatewayUrl: 'https://gw.example.com',
+      workspaceKey: 'wk-a',
+    });
+    setNotionRuntimeSession({ bearer: 'test-key', workspaceKey: 'wk-a' });
+    await patchSyncMeta({
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'notion',
+      cloudUserId: 'wk-a',
+    });
+    await markNotionMapTombstone({
+      entity: 'records',
+      appEntityId: 'rec-repo',
+      workspaceKey: 'wk-a',
+    });
+    const t0 = nowISO();
+    const rec: CareRecord = {
+      id: 'rec-repo',
+      vehicleId: 'veh-1',
+      type: 'fuel',
+      date: t0,
+      amountPaid: 100,
+      mediaIds: [],
+      createdAt: t0,
+      updatedAt: t0,
+      fuelGrade: '95#',
+      liters: 40,
+      filledUp: true,
+      odometer: 1000,
+    };
+    await putRecord(rec);
+    const db = await getDB();
+    expect(await db.get('records', 'rec-repo')).toBeTruthy();
+    expect(await listOutbox()).toHaveLength(0);
+    // prepareOutboxEnqueue directly returns null for tombstoned upsert
+    expect(
+      await prepareOutboxEnqueue({
+        entity: 'records',
+        entityId: 'rec-repo',
+        op: 'upsert',
+        payload: rec,
+        mutatedAt: t0,
+      }),
+    ).toBeNull();
+  });
+
+  it('listReadyOutbox filters tombstoned upserts (defense in depth)', async () => {
+    await setCloudStorageConfig({
+      provider: 'notion',
+      notionGatewayUrl: 'https://gw.example.com',
+      workspaceKey: 'wk-a',
+    });
+    setNotionRuntimeSession({ bearer: 'test-key', workspaceKey: 'wk-a' });
+    await patchSyncMeta({
+      deviceId: 'dev',
+      status: 'idle',
+      provider: 'notion',
+      cloudUserId: 'wk-a',
+    });
+    // Bypass prepareOutboxEnqueue to simulate a stale pre-gate outbox row
+    await putOutboxItem(
+      makeOutboxItem({
+        entity: 'vehicles',
+        entityId: 'veh-stale',
+        op: 'upsert',
+        payload: vehicle('veh-stale', 'Stale', nowISO()),
+        ownerUserId: 'wk-a',
+      }),
+    );
+    await markNotionMapTombstone({
+      entity: 'vehicles',
+      appEntityId: 'veh-stale',
+      workspaceKey: 'wk-a',
+    });
+    expect(await listOutbox()).toHaveLength(1);
+    expect(await listReadyOutbox()).toHaveLength(0);
   });
 });
 
