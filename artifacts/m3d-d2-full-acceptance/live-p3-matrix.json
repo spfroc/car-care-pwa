@@ -1,0 +1,219 @@
+{
+  "status": "PASS",
+  "reason": "all required live gates green",
+  "started": "2026-10-14T08:00:48.745Z",
+  "ended": "2026-10-14T08:01:16.830Z",
+  "timezone": "Asia/Shanghai",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFingerprint": "91dee0d48d59",
+  "gates": {
+    "G1": true,
+    "G4": true,
+    "D2.2": true,
+    "D2.3": true,
+    "D2.6": false,
+    "starC": true,
+    "starU": true,
+    "starD": true,
+    "starR": true,
+    "starT": true
+  },
+  "d26LiveStatus": "unit-only+residual",
+  "d26WorkerProbeOk": true,
+  "steps": {
+    "G1.health": {
+      "ok": true,
+      "summary": "http=200 version=m3d-d1-0.1.0",
+      "http": 200,
+      "version": "m3d-d1-0.1.0",
+      "at": "2026-10-14T08:00:48.917Z"
+    },
+    "G1.verify": {
+      "ok": true,
+      "summary": "http=200 bot=grok bot wk=c647ac0368ff",
+      "http": 200,
+      "workspaceKeyFingerprint": "c647ac0368ff",
+      "botName": "grok bot",
+      "dataSources": {
+        "vehicles": "8576578526ab",
+        "records": "6091d7e09158"
+      },
+      "at": "2026-10-14T08:00:49.211Z"
+    },
+    "starC.create": {
+      "ok": true,
+      "summary": "applied=2 errors=0",
+      "http": 200,
+      "applied": [
+        "op-c-v-d2p3-1791964849212",
+        "op-c-r-d2p3-1791964849212"
+      ],
+      "conflicts": [],
+      "at": "2026-10-14T08:00:51.170Z"
+    },
+    "D2.3.pull_after_create": {
+      "ok": true,
+      "summary": "veh=true rec=true totalRows=25",
+      "http": 200,
+      "vehicleUpdatedAt": "2026-10-14T08:00:49.212Z",
+      "recordUpdatedAt": "2026-10-14T08:00:49.212Z",
+      "at": "2026-10-14T08:00:53.584Z"
+    },
+    "starU.update_same_page": {
+      "ok": true,
+      "summary": "applied=true alivePages=1 nameHint=updated",
+      "http": 200,
+      "applied": [
+        "op-u-v-d2p3-1791964849212"
+      ],
+      "aliveCount": 1,
+      "at": "2026-10-14T08:00:55.093Z"
+    },
+    "D2.2.outbox_flush": {
+      "ok": true,
+      "summary": "http=200 applied=op-off-d2p3-1791964849212",
+      "http": 200,
+      "applied": [
+        "op-off-d2p3-1791964849212"
+      ],
+      "at": "2026-10-14T08:00:55.925Z"
+    },
+    "starD.delete_tombstone": {
+      "ok": true,
+      "summary": "applied=true pullTomb=false pushSkippedDeleted=true pullAttempts=6",
+      "http": 200,
+      "applied": [
+        "op-d-v-d2p3-1791964849212"
+      ],
+      "deletedAt": null,
+      "updatedAt": null,
+      "pullAttempts": 6,
+      "skippedDeletedProbe": [
+        {
+          "id": "op-stale-d-d2p3-1791964849212",
+          "entity": "vehicles",
+          "reason": "skipped_deleted",
+          "attemptedAt": "2026-10-14T08:00:49.212Z",
+          "cloudRow": {
+            "entity": "vehicles",
+            "id": "veh-d2p3-1791964849212",
+            "payload": {
+              "bodyType": "SEDAN",
+              "note": "offline-queue-flush",
+              "createdAt": "2026-10-14T08:00:49.212Z"
+            },
+            "updatedAt": "2026-10-14T08:00:54.212Z",
+            "deletedAt": "2026-10-14T08:00:54.212Z",
+            "deviceId": "live-matrix-a"
+          }
+        }
+      ],
+      "note": "CF KV list eventual consistency: pull tombstone may lag; push getTombstone+skipped_deleted is authoritative for ★D",
+      "at": "2026-10-14T08:01:08.336Z"
+    },
+    "starT.stale_upsert_skipped": {
+      "ok": true,
+      "summary": "skipped_deleted=true",
+      "conflicts": [
+        {
+          "id": "op-stale-d2p3-1791964849212",
+          "entity": "vehicles",
+          "reason": "skipped_deleted",
+          "attemptedAt": "2026-10-14T08:00:49.212Z",
+          "cloudRow": {
+            "entity": "vehicles",
+            "id": "veh-d2p3-1791964849212",
+            "payload": {
+              "bodyType": "SEDAN",
+              "note": "offline-queue-flush",
+              "createdAt": "2026-10-14T08:00:49.212Z"
+            },
+            "updatedAt": "2026-10-14T08:00:54.212Z",
+            "deletedAt": "2026-10-14T08:00:54.212Z",
+            "deviceId": "live-matrix-a"
+          }
+        }
+      ],
+      "applied": [],
+      "at": "2026-10-14T08:01:09.382Z"
+    },
+    "starT.idempotent_delete_retry": {
+      "ok": true,
+      "summary": "http=200 applied=true hardError=false",
+      "applied": [
+        "op-d-retry-d2p3-1791964849212"
+      ],
+      "conflicts": [],
+      "at": "2026-10-14T08:01:10.180Z"
+    },
+    "starR.restore": {
+      "ok": true,
+      "summary": "applied=true alive=true",
+      "applied": [
+        "op-r-v-d2p3-1791964849212"
+      ],
+      "conflicts": [],
+      "aliveUpdatedAt": "2026-10-14T08:00:59.212Z",
+      "at": "2026-10-14T08:01:12.216Z"
+    },
+    "D2.6.media_worker_probe": {
+      "ok": true,
+      "summary": "gatewayApplied=false gatewayErrored=true workerRejects=true",
+      "http": 200,
+      "applied": [],
+      "errors": [
+        {
+          "id": "op-media-d2p3-1791964849212",
+          "entity": "media",
+          "code": "unsupported_entity",
+          "message": "entity media not supported (vehicles|records only)",
+          "retryable": false
+        }
+      ],
+      "scope": "observational — not G4-required until Worker redeploy",
+      "unitGate": "D2.6 product = unit (enqueue false + client strip); see notion-d2-p1 / notion-d2-p3 tests",
+      "workerResidual": null,
+      "at": "2026-10-14T08:01:12.402Z"
+    },
+    "cleanup": {
+      "ok": true,
+      "summary": "applied=op-clean-v-d2p3-1791964849212,op-clean-r-d2p3-1791964849212",
+      "applied": [
+        "op-clean-v-d2p3-1791964849212",
+        "op-clean-r-d2p3-1791964849212"
+      ],
+      "at": "2026-10-14T08:01:16.812Z"
+    }
+  },
+  "notes": [
+    "Live matrix via Gateway only (no direct Notion SDK in PWA).",
+    "D2.5 Supabase regression = unit test suite (mock/live supabase separate).",
+    "D2.6 live: NOT G4-required; unit covers client gate; Worker reject pending redeploy.",
+    "★F conflict UI deferred to D2-P4.",
+    "d1-test Worker is DEV Gateway only — not production."
+  ],
+  "runId": "d2p3-1791964849212",
+  "vehId": "veh-d2p3-1791964849212",
+  "recId": "rec-d2p3-1791964849212",
+  "required": [
+    "G1.verify",
+    "starC.create",
+    "starU.update_same_page",
+    "starD.delete_tombstone",
+    "starR.restore",
+    "starT.stale_upsert_skipped",
+    "starT.idempotent_delete_retry",
+    "D2.2.outbox_flush",
+    "D2.3.pull_after_create"
+  ],
+  "failed": [],
+  "startedCST": "2026-10-14 16:00:48 CST",
+  "residuals": {
+    "D2.6": "unit-only (client enqueue+filter); live Worker reject pending d1-test redeploy (Node≥22). Not G4-required.",
+    "D2-P4": "cloud_newer → M3-C open/keep/take (★F)",
+    "D2-P5": "sync_notion_map + switch corridor UI (optional)",
+    "WorkerRedeploy": "docs/templates/notion-sync-worker push.ts rejects unsupported entities (media); d1-test not redeployed (wrangler needs Node≥22).",
+    "D2.5": "Supabase regression covered by full unit suite; formal Supabase unchanged."
+  },
+  "endedCST": "2026-10-14 16:01:16 CST"
+}

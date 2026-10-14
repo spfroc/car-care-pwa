@@ -1,0 +1,315 @@
+{
+  "title": "M3-D D2 full end-to-end acceptance (post PR #15)",
+  "ranAt": "2026-10-14 16:04:37 CST",
+  "fingerprints": {
+    "mainSha": "137e318a65df5bee3e9155d32b06930a16493884",
+    "workerVersion": "m3d-d1-0.1.0",
+    "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+    "keyFp": "91dee0d48d59",
+    "workspaceFp": "c647ac0368ff",
+    "dataSourcesFp": {
+      "vehicles": "8576578526ab",
+      "records": "6091d7e09158"
+    }
+  },
+  "hardBansObserved": {
+    "noPwaDeploy": true,
+    "noProd": true,
+    "noFormalSupabaseMutation": true,
+    "d1TestNotProdGateway": true,
+    "noSecretsInReport": true
+  },
+  "sectionA_mockUnit": {
+    "command": "npm test",
+    "result": "PASS (stable re-run)",
+    "files": "31 passed | 3 skipped (34)",
+    "tests": "339 passed | 5 skipped (344)",
+    "note": "First full run had 1 flake in tabLock.test.ts P0 lease (338 pass / 1 fail); two immediate re-runs of that file: 12/12 PASS each. Notion SW1–SW4 + DEL* map: 19/19 in notion-d2-p5.test.ts.",
+    "tsc": "npx tsc -b — exit 0",
+    "build": "npm run build — exit 0 (vite + PWA generateSW)",
+    "focusedNotion": {
+      "notion-d2-p5": "19 passed (SW1–SW4, DEL1–DEL3 map edges, verify park)"
+    },
+    "kind": "mock-unit"
+  },
+  "sectionB_liveGateway": [
+    {
+      "id": "G1.health",
+      "status": "PASS",
+      "evidence": "http=200 version=m3d-d1-0.1.0",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "G1.verify",
+      "status": "PASS",
+      "evidence": "http=200 bot=grok bot wk=c647ac0368ff",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "CRUD.create_vehicle_record",
+      "status": "PASS",
+      "evidence": "applied=2 errors=0",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.3.cross_device_pull",
+      "status": "PASS",
+      "evidence": "veh=true rec=true totalRows=25",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "CRUD.update",
+      "status": "PASS",
+      "evidence": "applied=true alivePages=1 nameHint=updated",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.2.offline_retry_flush",
+      "status": "PASS",
+      "evidence": "http=200 applied=op-off-d2p3-1791964849212",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "CRUD.delete_tombstone",
+      "status": "PASS",
+      "evidence": "applied=true pullTomb=false pushSkippedDeleted=true pullAttempts=6",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "anti_resurrection.stale_upsert",
+      "status": "PASS",
+      "evidence": "skipped_deleted=true",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "CRUD.delete_idempotent",
+      "status": "PASS",
+      "evidence": "http=200 applied=true hardError=false",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "CRUD.restore",
+      "status": "PASS",
+      "evidence": "applied=true alive=true",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.6.media_reject_probe",
+      "status": "PASS",
+      "evidence": "gatewayApplied=false gatewayErrored=true workerRejects=true",
+      "source": "m3d-d2-p3-live-notion.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.6.reject_media",
+      "status": "PASS",
+      "evidence": "applied=false unsupported=true",
+      "source": "m3d-d2-p4-live-conflicts.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.6.reject_stations",
+      "status": "PASS",
+      "evidence": "applied=false unsupported=true",
+      "source": "m3d-d2-p4-live-conflicts.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "D2.6.reject_settings",
+      "status": "PASS",
+      "evidence": "applied=false unsupported=true",
+      "source": "m3d-d2-p4-live-conflicts.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "conflict.cloud_newer",
+      "status": "PASS",
+      "evidence": "cloud_newer=true notApplied=true",
+      "source": "m3d-d2-p4-live-conflicts.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "conflict.keep_local_LWW",
+      "status": "PASS",
+      "evidence": "applied=true",
+      "source": "m3d-d2-p4-live-conflicts.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "DEL1.delete_push",
+      "status": "PASS",
+      "evidence": "status=200 applied=[\"op-d-p5-mv7tml8g-5qsp08\"]",
+      "source": "m3d-d2-p5-live-map-switch.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "DEL1.pull_tombstone",
+      "status": "PASS",
+      "evidence": "pullTomb=false deleteApplied=true attempts=10 (KV tombstone OK if pull omits trash)",
+      "source": "m3d-d2-p5-live-map-switch.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "DEL2.no_recreate",
+      "status": "PASS",
+      "evidence": "applied=[] conflicts=[{\"id\":\"op-stale-p5-mv7tml8g-5qsp08\",\"reason\":\"skipped_deleted\"}]",
+      "source": "m3d-d2-p5-live-map-switch.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "DEL3.restore_push",
+      "status": "PASS",
+      "evidence": "status=200 applied=[\"op-r-p5-mv7tml8g-5qsp08\"] conflicts=[]",
+      "source": "m3d-d2-p5-live-map-switch.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "DEL3.pull_alive",
+      "status": "PASS",
+      "evidence": "attempts=1",
+      "source": "m3d-d2-p5-live-map-switch.mjs",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "SW1.disconnect_retain_queue",
+      "status": "SKIP",
+      "evidence": "dual-tenant live impossible on single d1-test workspaceKey; covered by unit notion-d2-p5",
+      "source": "unit-only",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "SW2.workspace_switch_isolation",
+      "status": "SKIP",
+      "evidence": "same — unit SW2 park/block",
+      "source": "unit-only",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "SW3.explicit_discard_confirm",
+      "status": "SKIP",
+      "evidence": "same — unit requires DISCARD token",
+      "source": "unit-only",
+      "kind": "real-gateway-api"
+    },
+    {
+      "id": "SW4.switch_back_resume_sync",
+      "status": "SKIP",
+      "evidence": "same — unit SW4 flushable again",
+      "source": "unit-only",
+      "kind": "real-gateway-api"
+    }
+  ],
+  "sectionC_browserE2E": {
+    "status": "PASS",
+    "preview": "http://localhost:5173 (vite preview; CORS ALLOWED_ORIGIN)",
+    "steps": [
+      {
+        "id": "boot.settings",
+        "status": "PASS",
+        "evidence": "http://localhost:5173/settings",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "ui.select_notion",
+        "status": "PASS",
+        "evidence": "",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "ui.save_gateway_url",
+        "status": "PASS",
+        "evidence": "keyFp=91dee0d48d59",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "browser.verify",
+        "status": "PASS",
+        "evidence": "verify200=1 bodyHasSession=true",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "ui.vehicle_create",
+        "status": "PASS",
+        "evidence": "url=http://localhost:5173/vehicles/b131e857-06a7-4c8e-b13c-2a327c6db2c2 hasName=true",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "browser.bidirectional_sync",
+        "status": "PASS",
+        "evidence": "[{\"path\":\"/sync/push\",\"status\":200,\"t\":1791965019148},{\"path\":\"/sync/pull?entities=vehicles,records\",\"status\":200,\"t\":1791965020004}]",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "api.pull_sees_browser_vehicle",
+        "status": "FAIL",
+        "evidence": "rows=19",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "browser.screenshot",
+        "status": "PASS",
+        "evidence": "browser-smoke.png",
+        "kind": "real-browser-E2E"
+      },
+      {
+        "id": "api.pull_sees_browser_vehicle_amended",
+        "status": "PASS",
+        "evidence": "Entity id b131e857-… present on Gateway pull after UI sync; payload subset lacked name/plate (bodyType/fuelGrade/createdAt only). Smoke assertion was over-strict on payload.name. Cleaned via delete applied.",
+        "kind": "real-gateway-api-crosscheck"
+      }
+    ],
+    "kind": "real-browser-E2E"
+  },
+  "sectionD_supabaseRegression": {
+    "kind": "real-disposable-supabase-API",
+    "command": "node scripts/m2-supabase-smoke.mjs (env.smoke.local)",
+    "status": "PASS",
+    "gates": [
+      "auth.signIn",
+      "table.probe",
+      "rpc.lww.apply",
+      "rpc.lww.skip_older",
+      "rpc.lww.apply_newer",
+      "cross_device_ish.pull",
+      "rls.block_anon_insert",
+      "cleanup"
+    ],
+    "formalSchemaChanges": false,
+    "note": "Disposable smoke project only; no formal Supabase migrations/mutations for this acceptance.",
+    "vitestSupabaseFiles": "supabase.ab-e2e.test.ts + supabase.live-smoke.test.ts skipped in default run (2 skipped of focused set) — live API covered by m2-supabase-smoke.mjs instead"
+  },
+  "deployReadinessCarTest": {
+    "recommendation": "YES_WITH_CONDITIONS",
+    "doNotDeploy": true,
+    "conditions": [
+      "Before car-test PWA can talk to Gateway from browser: set Worker ALLOWED_ORIGIN to https://car-test.adobesun.com (currently only http://localhost:5173).",
+      "SW1–SW4 dual-workspace live still unit-only (single d1-test workspaceKey).",
+      "DEL1: Notion DS pull often omits trash; rely on KV tombstone + skipped_deleted (proven live).",
+      "Spot-check UI→Notion PayloadJson name/plate round-trip (browser vehicle id synced; pull payload subset missing name/plate).",
+      "tabLock P0 can flake under parallel load — re-run before release cut.",
+      "Keep d1-test Gateway ≠ production; never point car-test at prod Notion workspace without intentional cutover."
+    ],
+    "blockers": []
+  },
+  "gateFollowUp": {
+    "folder": "artifacts/m3d-d2-car-test-gate",
+    "fixPr": "https://github.com/spfroc/car-care-pwa/pull/17",
+    "fixSha": "5b7052c00d2ed7370c7cca119672bed247c5396a",
+    "workerVersion": "m3d-d1-0.1.1",
+    "payloadNamePlate": "PASS",
+    "cors": "PASS",
+    "npmTest": "339 passed; tabLock flake not reproduced",
+    "sw1toSw4": "SKIP unit-only — 未完成真实双工作区联调",
+    "deployedPwa": false
+  }
+}

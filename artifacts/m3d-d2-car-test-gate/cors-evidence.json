@@ -1,0 +1,39 @@
+{
+  "keyFp": "91dee0d48d59",
+  "workerVersion": "m3d-d1-0.1.1",
+  "ALLOWED_ORIGIN": "https://car-test.adobesun.com,http://localhost:5173",
+  "note": "exact allowlist; not wildcard",
+  "probes": [
+    {
+      "method": "OPTIONS",
+      "origin": "https://car-test.adobesun.com",
+      "status": 204,
+      "ACAO": "https://car-test.adobesun.com"
+    },
+    {
+      "method": "OPTIONS",
+      "origin": "http://localhost:5173",
+      "status": 204,
+      "ACAO": "http://localhost:5173"
+    },
+    {
+      "method": "OPTIONS",
+      "origin": "https://evil.example",
+      "status": 403,
+      "ACAO": null
+    },
+    {
+      "method": "GET /health",
+      "origin": "https://car-test.adobesun.com",
+      "status": 200,
+      "ACAO": "https://car-test.adobesun.com",
+      "bodyVersion": "m3d-d1-0.1.1"
+    },
+    {
+      "method": "GET /health",
+      "origin": "https://evil.example",
+      "status": 403,
+      "ACAO": null
+    }
+  ]
+}

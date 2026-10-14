@@ -1,0 +1,15 @@
+HTTP/2 200 
+date: Wed, 14 Oct 2026 08:14:41 GMT
+content-type: application/json
+content-length: 36
+access-control-allow-origin: https://car-test.adobesun.com
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=So2k08g7Aa1ihsrwy3jXmc41iUcaMkV288tK2bUTKlJNL%2FLJgd6up0W8JajlcevkmvdDYuRuHjnwaHL0xIaINjJN1lKY9w8VEnXzk5B4oDYTpSTBRhC9IsSVZur6%2FFybzdB3r%2BqZFeBomJ%2Fg8zp%2FsiKJVmS8no8zQRvwdCdWyXTkG5Ye9uDgAxki2ktpZAQ%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4a521c6cf1ac5b9-IAD
+alt-svc: h3=":443"; ma=86400
+
