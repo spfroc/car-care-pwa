@@ -5,7 +5,7 @@ import {
   queryByAppEntityId,
   retrievePage,
 } from './notion.ts';
-import { decodePayloadJson, encodePayloadJson, slimPayload } from './payload.ts';
+import { decodePayloadJson, encodePayloadJson, hydrateCloudPayload, slimPayload } from './payload.ts';
 import { clearTombstone, getTombstone, putTombstone } from './tombstone-map.ts';
 import type {
   CloudRow,
@@ -33,10 +33,26 @@ function liteToCloudRow(entity: EntityKind, lite: NotionPageLite): CloudRow {
   const decoded = decodePayloadJson(lite.payloadJson);
   const deletedAt =
     lite.appDeletedAt || (lite.inTrash ? lite.appUpdatedAt || new Date().toISOString() : null);
+  const payload =
+    decoded === null
+      ? { _decodeError: true }
+      : hydrateCloudPayload(entity, decoded, {
+          appEntityId: lite.appEntityId,
+          name: lite.name,
+          plate: lite.plate,
+          energyType: lite.energyType,
+          archived: lite.archived,
+          vehicleId: lite.vehicleId,
+          recordType: lite.recordType,
+          recordDate: lite.recordDate,
+          amountPaid: lite.amountPaid,
+          appUpdatedAt: lite.appUpdatedAt,
+          deviceId: lite.deviceId,
+        });
   return {
     entity,
     id: lite.appEntityId,
-    payload: decoded ?? { _decodeError: true },
+    payload,
     updatedAt: lite.appUpdatedAt || new Date(0).toISOString(),
     deletedAt,
     deviceId: lite.deviceId,
