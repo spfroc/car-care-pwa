@@ -57,8 +57,16 @@ export interface CloudStorageConfig {
   supabaseUrl?: string;
   /** anon / publishable only — never service_role */
   supabaseAnonKey?: string;
-  /** Notion stub fields (unused until Phase D) */
+  /** Notion Gateway base URL (HTTPS). Not a secret. */
+  notionGatewayUrl?: string;
+  /** Display hint only — not a credential. */
   notionWorkspaceHint?: string;
+  /**
+   * Stable workspace / tenant key from Gateway verify (same as VerifyResult.userId).
+   * Not a secret; optional duplicate of sync_meta.cloudUserId for offline checks.
+   */
+  workspaceKey?: string;
+  // Intentionally NO gateway/API token fields — secrets stay in NotionRuntimeSession (memory only).
 }
 
 /** M2 JSONB/base64 body. */
@@ -129,6 +137,19 @@ export interface PushResult {
     cloudUpdatedAt?: string;
     /** Local mutatedAt that was skipped — used to drop matching outbox without touching newer mid-sync ops */
     attemptedAt?: string;
+    /** Optional Gateway cloud snapshot for conflict UI (M3-C). */
+    cloudRow?: CloudRow;
+  }>;
+  /**
+   * Per-op Gateway errors (§3.5.3). Never ACK these opIds.
+   * Engine may markOutboxFailure / backoff from retryable flags.
+   */
+  errors?: Array<{
+    opId: string;
+    entity?: SyncEntity | string;
+    code: string;
+    message: string;
+    retryable: boolean;
   }>;
   error?: string;
 }

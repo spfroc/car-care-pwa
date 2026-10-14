@@ -43,6 +43,7 @@ import {
 import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
+import { getNotionRuntimeSession } from './notionSession';
 import { SupabaseProvider } from './providers/supabase';
 import { assertCloudRowsValid } from './validatePayload';
 import { runSyncTxHook } from './txHooks';
@@ -141,7 +142,16 @@ export async function resolveProvider(): Promise<CloudProvider | null> {
       deviceId,
     });
   }
-  if (cfg.provider === 'notion') return new NotionProvider();
+  if (cfg.provider === 'notion') {
+    // Skeleton: construct only when URL present; missing session → provider still
+    // constructed but verify/pushOps refuse until Key is entered (P2 settings).
+    if (!cfg.notionGatewayUrl?.trim()) return null;
+    return new NotionProvider({
+      gatewayUrl: cfg.notionGatewayUrl,
+      getSession: getNotionRuntimeSession,
+      requireSession: true,
+    });
+  }
   return null;
 }
 

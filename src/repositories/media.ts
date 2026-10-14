@@ -23,7 +23,7 @@ export async function putMediaFromFile(file: File): Promise<Media> {
       createdAt: nowISO(),
     };
     const db = await getDB();
-    const sync = await isCloudEnqueueEnabled();
+    const sync = await isCloudEnqueueEnabled('media');
     const outboxItem = sync
       ? await stampOutboxOwner(
           makeOutboxItem({
@@ -53,7 +53,7 @@ export async function getMedia(id: string): Promise<Media | undefined> {
 
 export async function deleteMedia(id: string): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled();
+  const sync = await isCloudEnqueueEnabled('media');
   const outboxItem = sync
     ? await stampOutboxOwner(
         makeOutboxItem({
