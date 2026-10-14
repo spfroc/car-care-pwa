@@ -159,21 +159,38 @@
 | SW1–SW4 真实双工作区 E2E | **PASS** | `artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · B URL `…d1-test-b.spf-roc.workers.dev` keyFp `5d915911b54a` wkFp `db38e1e5a251` |
 | SW 单测（非 live） | 19/19 PASS | `artifacts/m3d-prod-pre-gates/sw-dual/unit-sw-support.txt` |
 
-### A–H 待确认 / 待部署授权后
+### A–H 剩余待授权后执行项（简表）
 
-| 节 | 状态 |
-|----|------|
-| **A** 隔离门禁（正式 Worker/KV/Token/DS） | **待部署授权后** — 本轮未建正式 Gateway |
-| **B** 密钥面 | **待部署授权后** — d1-test Key 仅用于测试；生产须新熵 |
-| **C** CORS（含 `car.adobesun.com`） | **待部署授权后** — d1-test 现仅 car-test + localhost |
-| **D** Notion 生产契约 | **待部署授权后** |
-| **E** 正式 Key 冒烟 | **待部署授权后**（E4 行为已在 d1-test 证明） |
-| **F** 生产 PWA 联动 | **待部署授权后** — 本轮未动 `car.adobesun.com` |
-| **G1** | **闭** — SW1–SW4 live PASS |
-| **G2** | 主路径已 PASS；历史探针风险保留披露 |
-| **G3** | 已知披露 |
-| **G4** | **未**原样确认（已改写为残余风险短句；**不再**要求「无双工作区 E2E」）→ 不可勾 |
-| **H** | 本轮遵守（无生产名部署、无清 IDB、无密钥进 git） |
+> **本轮仅归档验收资料 · 零部署。** 下列项**不得**在无用户明示「部署正式 Gateway / 生产 PWA」授权时执行。
+
+| 节 | 剩余项（须授权后执行） | 本轮状态 |
+|----|------------------------|----------|
+| **A** | 新建正式 Worker / 独立 KV / 生产 Integration+DS / 新 `GATEWAY_API_KEY` / 核对 `wrangler.toml` name≠`*-d1-test` | **待授权** — 未建正式 Gateway |
+| **B** | 生产 Secrets 仅 `wrangler secret put`；密码管理器备份；轮换 SOP | **待授权** — d1-test Key 仅测试；生产须新熵 |
+| **C** | 正式 `ALLOWED_ORIGIN` 含 `https://car.adobesun.com`；CORS/401 探针 | **待授权** — d1-test 现仅 car-test + localhost |
+| **D** | 生产 Notion 契约（`NOTION_VERSION` / Share / Payload / tombstone） | **待授权** |
+| **E** | 正式 Key 冒烟（health/verify/夹具 push-pull/delete）；**另见下方「正式 Gateway 发布验收条件」** | **待授权**（E4 行为已在 d1-test 证明） |
+| **F** | 生产备份 + tip 部署 + stamp 公网核对；不改正式 Supabase / 不清用户 IDB | **待授权** — 未动 `car.adobesun.com` |
+| **G1** | — | **已闭** — SW1–SW4 live PASS |
+| **G2** | 正式环境手工确认离线 IDB（可选） | 主路径已 PASS；历史探针风险保留披露 |
+| **G3** | — | 已知披露（LWW） |
+| **G4** | 带伤上线须原样确认短句（含 SW4 `push200=0`） | **未**原样确认 → 不可勾 |
+| **H** | 持续遵守禁止项 | 本轮遵守（无生产部署、无清 IDB、无密钥进 git） |
+
+### 正式 Gateway 发布验收条件（强制 · 授权部署后冒烟）
+
+> 交叉引用：[`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md) §5.1 · [`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md) §7 RR-SW / §8 G5。  
+> **不得**将 pre-gates SW4（`push200=0` / `seenOnA=true`）改写成「已验证真实 PWA 推送」。
+
+正式 Gateway（及联动 PWA）发布冒烟时，**必须**观测到下列全部条件，方可勾选 E 节相关项 / 宣称 switchback flush 铁证：
+
+| # | 验收条件 | ✅ |
+|---|----------|---|
+| FG1 | 切回原工作区 A 后，实际产生 **`/sync/push` HTTP 200**（网络层可计数；非仅 `seenOnA`） | ☐ |
+| FG2 | 该 owner（`workspaceKey`）的 Outbox **正确清空**（无残留待推条目） | ☐ |
+| FG3 | 数据**仅**出现在工作区 A；工作区 B **无**串写 / 泄漏（`leakedB=false` 类断言） | ☐ |
+
+pre-gates SW4 现状（保留披露）：`push200=0` 却 `seenOnA=true` · `leakedB=false` — **隔离硬、flush 观测偏软**；上表 FG1–FG3 为正式发布补验门槛。
 
 ### 第二工作区缺口（SW live）— **已闭合（归档）**
 

@@ -141,15 +141,27 @@
 
 | 项 | 说明 | 建议 |
 |----|------|------|
-| **SW4 flush 证据偏软** | `sw-matrix`：`push200=0` 却 `seenOnA=true`；隔离硬（`leakedB=false`），PWA 双向 flush 观测不够铁 | 正式 Gateway 冒烟补 **switchback flush**，观察真实 `push` 200 |
+| **SW4 flush 证据偏软** | `sw-matrix`：`push200=0` 却 `seenOnA=true`；隔离硬（`leakedB=false`），PWA 双向 flush 观测不够铁。**禁止**改写成「已验证真实 PWA 推送」 | 升格为**正式 Gateway 发布验收条件**（见下 §5.2 / checklist FG1–FG3）：须见 `/sync/push` **200** + Outbox 清空 + 数据仅在 A |
 | **SW3 `removed=?`** | DISCARD 后 `aOwnerLeft=0` 已证明清空；返回摘要未给出精确 `removed` 计数 | 可接受；后续 harness 可补打印 |
 | **SW1 `sessionStorage-clear-fallback`** | 断开清除走了 sessionStorage fallback 路径（仍 `retained=1`） | 披露即可；非失败 |
 | **DEL 摘要旧 `SW_NOTE` 残留** | `artifacts/m3d-prod-pre-gates/del/*` 仍写「单测覆盖、不能 dual-tenant live」——属 DEL 跑次当时口径；**已被**本轮 `sw-dual/` live PASS **取代**，勿再当现状 | 以 `sw-dual/` 与本报告 §3 为准 |
 
+## 5.2 正式 Gateway 发布验收条件（强制）
+
+> 交叉引用：[`m3d-prod-gateway-security-checklist.md`](./m3d-prod-gateway-security-checklist.md)「正式 Gateway 发布验收条件」FG1–FG3 · [`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md) §7 RR-SW。
+
+本轮 SW4 **PASS 但偏软**（`push200=0`）。正式 Gateway 发布冒烟时，切回原工作区后须同时满足：
+
+1. 实际产生 **`/sync/push` HTTP 200**（可计数的网络成功，非仅 `seenOnA`）。
+2. 该 owner 的 **Outbox 正确清空**。
+3. 数据**仅**出现在工作区 A（不漏 B）。
+
+未满足上列三项 → **不得**勾选正式发布相关 E/冒烟项，亦**不得**声称「真实 PWA 推送已验证」。
+
 ## 6. 后续
 
-1. ~~第二工作区 + Gateway B~~ **已完成**；SW1–SW4 live **PASS**。
-2. Checklist G1 已闭合；A–F 生产部署项仍待**显式部署授权**。
+1. ~~第二工作区 + Gateway B~~ **已完成**；SW1–SW4 live **PASS**（SW4 `push200=0` 残余保留）。
+2. Checklist G1 已闭合；A–F 及 FG1–FG3 仍待**显式部署授权**后执行。
 3. 本轮**未**开业务 fix PR（缺陷仅在验收 harness，已在本 docs 分支修复）。
-4. **不要 merge** 至生产部署，直至用户按 checklist 完成 Go /（若适用）改写后的带伤残余确认与部署授权。
-5. 正式 Gateway 冒烟时优先补观察 SW4 switchback flush 的 `push` 200（见 §5.1）。
+4. **本 PR 仅归档验收资料合入 main**；**不**构成生产部署授权。正式部署须另批 Go +（若适用）带伤残余原样确认。
+5. 正式 Gateway 冒烟须按 §5.2 / checklist FG1–FG3 验收（含 `/sync/push` 200）。
