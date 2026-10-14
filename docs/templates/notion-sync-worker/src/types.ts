@@ -32,7 +32,7 @@ export type PushConflict = {
 
 export type PushError = {
   id: string;
-  entity: EntityKind;
+  entity: EntityKind | string;
   code: string;
   message: string;
   retryable: boolean;
