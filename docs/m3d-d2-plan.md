@@ -144,7 +144,7 @@
 | `errors[].retryable` | 429/5xx → outbox 退避；不 ACK |
 | `payload_too_large` | 失败闭合；用户可读 |
 
-> **字段级 must-fix**（`id→opId`、`workspaceKey→userId`、`errors[]`、AbortSignal、会话、持久白名单、M3-C 依赖）：见 **§3.5 前端契约适配**。
+> **字段级复审闭合**（`id→opId`、`workspaceKey→userId`、`errors[]`、AbortSignal、会话、持久白名单、M3-C 依赖）：见 **§3.5 前端契约适配**。
 
 ### 3.4 删除 / 重试走廊（继承 D1 M1）
 
@@ -152,7 +152,7 @@
 2. Trash 成功而 KV put 失败 → **不 ACK**；客户端 **幂等重试** 同一 delete（D1 风险报告残余）  
 3. 过期 upsert → `skipped_deleted`；禁止复活  
 
-### 3.5 前端契约适配（条件通过 · must-fix）
+### 3.5 前端契约适配（复审闭合）
 
 > 本节把 Gateway JSON（[`CONTRACT.md`](./templates/notion-sync-worker/CONTRACT.md)）接到现有 `CloudProvider` / `PushResult` / Outbox / M3-C。实现 PR（D2-P1..P4）必须对齐；产品侧交叉见 [`m3d-d2-product.md`](./m3d-d2-product.md) §1.1。  
 > §3.3 为摘要；**字段级映射以本小节为准**。
@@ -271,7 +271,7 @@ Gateway：`errors: [{ id, entity, code, message, retryable }]`.
 
 | ID | 项 | 通过标准 |
 |----|----|----------|
-| D2.1 | enqueue | `isCloudEnqueueEnabled` 含 `notion`；vehicles/records 入队；media **不**入队 |
+| D2.1 | enqueue | `isCloudEnqueueEnabled` 含 `notion`；**且内存会话有效**（对齐 §3.5.5；仅 URL 不足）；vehicles/records 入队；media **不**入队 |
 | U1 | GatewayClient 401/403/429/503 | 映射正确；**401** 清会话；**403 Origin** 文案区分（§3.5.8）；Abort 不 ACK |
 | U2 | PushResult 适配 | `id→opId`；`cloud_newer` / `skipped_deleted` / `ambiguous_race` **不**进 applied；`errors[]` 结算（§3.5.2–3） |
 | U3 | 类型安全 | `CloudStorageConfig` 无 token/key；含 `notionGatewayUrl` 白名单（§3.5.6） |
