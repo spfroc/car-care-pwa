@@ -500,9 +500,10 @@ export async function verifyConnection(): Promise<SyncActionResult> {
 
 
 /**
- * M3-C: handle push cloud_newer conflicts.
- * vehicles/records → open + block outbox (do NOT removeStaleConflictOps).
+ * M3-C: handle push conflicts (cloud_newer / skipped_deleted / ambiguous_race).
+ * vehicles/records → open + block outbox (do NOT removeStaleConflictOps / never ACK).
  * other entities → legacy audit + removeStaleConflictOps.
+ * Prefers Gateway conflict.cloudRow; falls back to pullAll when snapshot missing.
  */
 async function handlePushConflicts(
   conflicts: Array<{
@@ -512,6 +513,7 @@ async function handlePushConflicts(
     entityId?: string;
     cloudUpdatedAt?: string;
     attemptedAt?: string;
+    cloudRow?: CloudRow;
   }>,
   opts?: {
     /** Local rows that were attempted (first upload) — for localSnapshot only */
@@ -523,10 +525,22 @@ async function handlePushConflicts(
   if (!conflicts.length) return { opened: 0, legacySkipped: 0 };
   const cloudByKey = new Map<string, CloudRow>();
   for (const r of opts?.cloudRows ?? []) cloudByKey.set(`${r.entity}:${r.id}`, r);
+  // Seed from Gateway-provided snapshots first (D2-P4: Notion cloud_newer / skipped_deleted)
+  for (const c of conflicts) {
+    if (c.cloudRow) {
+      cloudByKey.set(`${c.cloudRow.entity}:${c.cloudRow.id}`, c.cloudRow);
+    }
+  }
+  const opById = new Map((opts?.outboxOps ?? []).map((o) => [o.opId, o]));
+  const allOutbox = await listOutbox();
+  for (const o of allOutbox) if (!opById.has(o.opId)) opById.set(o.opId, o);
+
   const needCloud = conflicts.some((c) => {
-    const entity = (c.entity as SyncEntity) || 'vehicles';
-    const entityId = c.entityId || c.opId;
-    return isManualConflictEntity(entity) && !cloudByKey.has(`${entity}:${entityId}`);
+    const localOp = opById.get(c.opId);
+    const entity = (c.entity as SyncEntity) || localOp?.entity || 'vehicles';
+    const entityId = c.entityId || localOp?.entityId || c.cloudRow?.id;
+    if (!entityId || !isManualConflictEntity(entity)) return false;
+    return !cloudByKey.has(`${entity}:${entityId}`);
   });
   if (needCloud) {
     try {
@@ -541,21 +555,18 @@ async function handlePushConflicts(
   }
   const localRowByKey = new Map<string, CloudRow>();
   for (const r of opts?.localRows ?? []) localRowByKey.set(`${r.entity}:${r.id}`, r);
-  const opById = new Map((opts?.outboxOps ?? []).map((o) => [o.opId, o]));
-  // Also look up full outbox for payload snapshots
-  const allOutbox = await listOutbox();
-  for (const o of allOutbox) if (!opById.has(o.opId)) opById.set(o.opId, o);
 
   const legacy: typeof conflicts = [];
   let opened = 0;
   for (const c of conflicts) {
-    const entity = (c.entity as SyncEntity) || 'vehicles';
-    const entityId = c.entityId || c.opId;
+    const localOpHint = opById.get(c.opId);
+    const entity = ((c.entity as SyncEntity) || localOpHint?.entity || 'vehicles') as SyncEntity;
+    const entityId = c.entityId || localOpHint?.entityId || c.cloudRow?.id || c.opId;
     if (!isManualConflictEntity(entity)) {
       legacy.push(c);
       continue;
     }
-    let localOp = opById.get(c.opId);
+    let localOp = localOpHint;
     // firstUpload uses composite opIds and may have no outbox row — use pushed local row
     if (!localOp) {
       const localRow = localRowByKey.get(`${entity}:${entityId}`);
@@ -572,15 +583,15 @@ async function handlePushConflicts(
         };
       }
     }
-    const cloudRow = cloudByKey.get(`${entity}:${entityId}`) ?? null;
-    // Prefer true cloud row from pull; cloudByKey may have been seeded with local push rows
+    const cloudRow = cloudByKey.get(`${entity}:${entityId}`) ?? c.cloudRow ?? null;
     const decision = detectPushRejected({
       entity,
       entityId,
       opId: c.opId,
       localOp,
-      cloudUpdatedAt: c.cloudUpdatedAt,
-      cloudRow: cloudRow && cloudRow.updatedAt === c.cloudUpdatedAt ? cloudRow : cloudRow,
+      cloudUpdatedAt: c.cloudUpdatedAt ?? cloudRow?.updatedAt,
+      cloudRow,
+      gatewayReason: c.reason,
     });
     if (!decision.escalate) {
       legacy.push(c);
@@ -600,7 +611,7 @@ async function handlePushConflicts(
       await markOutboxBlockedByConflict(decision.blockedOpIds, rec.id);
       opened += 1;
     } else {
-      // At open cap — keep outbox blocked via legacy path? Keep intent: do not remove.
+      // At open cap — keep outbox intent; do not remove.
       await appendConflicts([
         {
           id: uid(),

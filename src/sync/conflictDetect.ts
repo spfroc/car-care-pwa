@@ -35,7 +35,9 @@ export function cloudSnapshotFromRow(cloud: CloudRow): ConflictSnapshot {
 }
 
 /**
- * E1: push rejected (cloud_newer). Escalate for vehicles/records; keep silent LWW elsewhere.
+ * E1: push rejected (cloud_newer / skipped_deleted / ambiguous_race).
+ * Escalate for vehicles/records into existing M3-C open corridor; keep silent LWW elsewhere.
+ * skipped_deleted → edit_vs_delete (cloud tombstone; never ACK / never resurrect silently).
  */
 export function detectPushRejected(input: {
   entity: SyncEntity | string;
@@ -44,6 +46,8 @@ export function detectPushRejected(input: {
   localOp: SyncOutboxItem | undefined;
   cloudUpdatedAt?: string;
   cloudRow?: CloudRow | null;
+  /** Gateway conflict reason — shapes kind / cloud snapshot. */
+  gatewayReason?: string;
 }): EscalateDecision {
   if (!isManualConflictEntity(input.entity)) {
     return { escalate: false, reason: 'not_manual' };
@@ -54,9 +58,21 @@ export function detectPushRejected(input: {
       ? { op: 'delete' }
       : { op: 'upsert', payload: localOp.payload }
     : { op: 'upsert' };
-  const cloudSnapshot: ConflictSnapshot = input.cloudRow
+  let cloudSnapshot: ConflictSnapshot = input.cloudRow
     ? cloudSnapshotFromRow(input.cloudRow)
     : { op: 'upsert', deletedAt: null };
+  // Tombstone / skipped_deleted without row: treat cloud as delete so UI is edit_vs_delete
+  if (
+    input.gatewayReason === 'skipped_deleted' &&
+    cloudSnapshot.op !== 'delete' &&
+    !input.cloudRow?.deletedAt
+  ) {
+    cloudSnapshot = {
+      op: 'delete',
+      deletedAt: input.cloudUpdatedAt ?? input.cloudRow?.updatedAt ?? null,
+      payload: input.cloudRow?.payload,
+    };
+  }
   const kind: ConflictKind =
     localSnapshot.op === 'delete' || cloudSnapshot.op === 'delete'
       ? 'edit_vs_delete'

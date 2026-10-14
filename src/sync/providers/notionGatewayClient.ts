@@ -74,10 +74,15 @@ function isAbortError(e: unknown): boolean {
   return name === 'AbortError' || name === 'TimeoutError';
 }
 
-/** Map Gateway JSON → PWA PushResult (§3.5.2–3): id→opId; errors never in applied. */
-export function adaptGatewayPushResult(raw: GatewayPushResultRaw): PushResult {
+/** Map Gateway JSON → PWA PushResult (§3.5.2–3): id→opId; errors never in applied.
+ * Optional `ops` enrich entity/entityId when Gateway omits cloudRow (ambiguous_race). */
+export function adaptGatewayPushResult(
+  raw: GatewayPushResultRaw,
+  ops?: SyncOutboxItem[],
+): PushResult {
   const applied = Array.isArray(raw.applied) ? raw.applied.filter((x) => typeof x === 'string') : [];
   const appliedSet = new Set(applied);
+  const opById = new Map((ops ?? []).map((o) => [o.opId, o]));
 
   const conflicts: PushResult['conflicts'] = [];
   for (const c of raw.conflicts ?? []) {
@@ -87,13 +92,14 @@ export function adaptGatewayPushResult(raw: GatewayPushResultRaw): PushResult {
     // cloud_newer / skipped_deleted / ambiguous_race must never be treated as applied
     if (appliedSet.has(opId)) appliedSet.delete(opId);
     const cloud = c.cloudRow;
+    const localOp = opById.get(opId);
     conflicts.push({
       opId,
       reason,
-      entity: c.entity as SyncEntity | string | undefined,
-      entityId: cloud?.id,
+      entity: (c.entity as SyncEntity | string | undefined) ?? localOp?.entity,
+      entityId: cloud?.id ?? localOp?.entityId,
       cloudUpdatedAt: cloud?.updatedAt,
-      attemptedAt: typeof c.attemptedAt === 'string' ? c.attemptedAt : undefined,
+      attemptedAt: typeof c.attemptedAt === 'string' ? c.attemptedAt : localOp?.mutatedAt,
       cloudRow: cloud,
     });
   }
@@ -348,7 +354,7 @@ export class NotionGatewayClient {
         body: { ops: mapOutboxForGateway(allowed) },
         signal,
       });
-      const adapted = adaptGatewayPushResult((body ?? {}) as GatewayPushResultRaw);
+      const adapted = adaptGatewayPushResult((body ?? {}) as GatewayPushResultRaw, allowed);
       if (rejectedErrors.length) {
         adapted.errors = [...(adapted.errors ?? []), ...rejectedErrors];
       }
