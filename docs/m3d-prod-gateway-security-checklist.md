@@ -4,7 +4,7 @@
 > **配套总案**：[`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md)  
 > **状态**：docs-only · **本检查表本身不授权部署**  
 > **基线**：d1-test = `car-care-notion-sync-d1-test` / `m3d-d1-0.1.1` — **勾选任一项前须确认未复用该 Worker**  
-> **pre-gates（2026-10-14 CST）**：DEL **PASS** · RR-IDB **PASS** · SW1–SW4 live **BLOCKED**（等第二工作区）；详见 [`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)
+> **pre-gates（2026-10-14 CST）**：DEL **PASS** · RR-IDB **PASS** · SW1–SW4 live **PASS**（Gateway B `d1-test-b` · wkFp `db38e1e5a251`）；详见 [`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)
 
 操作者：____________　日期（CST）：____________　审查人：____________
 
@@ -98,7 +98,7 @@
 
 | # | 风险 | 已向用户/审查披露 | ✅ |
 |---|------|-------------------|---|
-| G1 | **SW1–SW4 缺少真实双工作区验收**（仅 unit）；不得宣称双工作区 E2E PASS — **2026-10-14**：live 仍 **BLOCKED**（缺 Gateway B / 第二 workspace）；harness 已就绪 `scripts/m3d-sw-dual-workspace-live.mjs` | ☐ |
+| G1 | **SW1–SW4 真实双工作区 live PASS**（2026-10-14 17:22 CST）— A `d1-test` wkFp `c647ac0368ff` · B `d1-test-b` wkFp `db38e1e5a251`；证据 `artifacts/m3d-prod-pre-gates/sw-dual/` | ☑ |
 | G2 | **离线 IDB 探针异常**（历史 `IDB.databases` SecurityError）；**2026-10-14 RR-IDB**：对象仓直读直写 + reonline Outbox sync **PASS**（`artifacts/m3d-prod-pre-gates/rr-idb/`）；未清用户 IDB | ☐ |
 | G3 | Gateway LWW 弱于 Supabase RPC；竞态靠 M3-C，不承诺强一致 | ☐ |
 | G4 | 未接受 G1/G2 前强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
@@ -154,7 +154,7 @@
 |----|------|----------|
 | E4 同类：delete → `skipped_deleted` 防复活 | **PASS** | `artifacts/m3d-prod-pre-gates/del/del-matrix.json`（`DEL2_NO_RECREATE`） |
 | RR-IDB 断网本地读写 + 恢复同步 | **PASS** | `artifacts/m3d-prod-pre-gates/rr-idb/rr-idb-matrix.json` |
-| SW1–SW4 真实双工作区 E2E | **BLOCKED** | `artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` |
+| SW1–SW4 真实双工作区 E2E | **PASS** | `artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · B URL `…d1-test-b.spf-roc.workers.dev` keyFp `5d915911b54a` wkFp `db38e1e5a251` |
 | SW 单测（非 live） | 19/19 PASS | `artifacts/m3d-prod-pre-gates/sw-dual/unit-sw-support.txt` |
 
 ### A–H 待确认 / 待部署授权后
@@ -167,7 +167,7 @@
 | **D** Notion 生产契约 | **待部署授权后** |
 | **E** 正式 Key 冒烟 | **待部署授权后**（E4 行为已在 d1-test 证明） |
 | **F** 生产 PWA 联动 | **待部署授权后** — 本轮未动 `car.adobesun.com` |
-| **G1** | **开** — SW live BLOCKED |
+| **G1** | **闭** — SW1–SW4 live PASS |
 | **G2** | 主路径已 PASS；历史探针风险保留披露 |
 | **G3** | 已知披露 |
 | **G4** | **未**原样确认带伤短句 → 不可勾 |

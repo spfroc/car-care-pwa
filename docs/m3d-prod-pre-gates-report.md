@@ -1,6 +1,6 @@
 # M3-D 生产发布前验收门禁报告（pre-gates）
 
-> **日期（CST）**：2026-10-14 17:01  
+> **日期（CST）**：2026-10-14 17:22  
 > **操作者**：车护助手验收执行者（box）  
 > **基线 main tip**：`3a7cd2ac…`（PR #19 docs merge）  
 > **功能 tip（car-test）**：`c5dcf49…` / `index-B32gzRTV.js`（**本轮未 redeploy**）  
@@ -13,7 +13,7 @@
 |------|------|------|
 | **DEL 防复活**（`skipped_deleted`） | **PASS** | `artifacts/m3d-prod-pre-gates/del/` |
 | **RR-IDB**（断网本地读写 + 恢复同步） | **PASS** | `artifacts/m3d-prod-pre-gates/rr-idb/` |
-| **SW1–SW4** 真实双工作区 E2E | **BLOCKED** | `artifacts/m3d-prod-pre-gates/sw-dual/` + harness `scripts/m3d-sw-dual-workspace-live.mjs` |
+| **SW1–SW4** 真实双工作区 E2E | **PASS** | `artifacts/m3d-prod-pre-gates/sw-dual/` + harness `scripts/m3d-sw-dual-workspace-live.mjs` |
 | SW 单测（**非** live PASS） | 19/19 PASS（支持证据） | `artifacts/m3d-prod-pre-gates/sw-dual/unit-sw-support.txt` |
 
 **本轮未开业务 fix PR**（未发现需改正式产品代码的缺陷；RR-IDB 先前 `IDB.databases` 失败属自动化探针/导航上下文问题，已用对象仓直读直写主路径闭合）。
@@ -62,33 +62,46 @@
 
 ---
 
-## 3. SW1–SW4 真实双工作区 — BLOCKED
+## 3. SW1–SW4 真实双工作区 — PASS
 
-**不得**用 `notion-d2-p5.test.ts` 单测冒充 live PASS（本轮单测 19/19 仅作支持证据）。
+**不得**用 `notion-d2-p5.test.ts` 单测冒充 live PASS（单测 19/19 仅作支持证据）。本轮为 **真实双 Gateway / 双 workspaceKey** live。
 
-### Harness（已就绪）
+### Gateway B（测试专用）
 
-- `scripts/m3d-sw-dual-workspace-live.mjs`
-- Env 驱动：`GATEWAY_A_URL` / `GATEWAY_A_KEY`（默认 d1-test）  
-  `GATEWAY_B_URL` / `GATEWAY_B_KEY`  
-  或 `~/.car-care-secrets/m3d-d1-b-notion.env` / `m3d-d1-b-gateway-url.txt` + `m3d-d1-b-gateway-api-key.txt`
-- 要求 A/B `/verify` 得到 **不同** `workspaceKey`；执行 SW1 断开保留 / SW2 park 隔离 / SW3 DISCARD / SW4 切回 flush；断言两侧无串写
+| 项 | 值 |
+|----|-----|
+| Worker | `car-care-notion-sync-d1-test-b`（**含** `d1-test-b`；**未**部署正式名 `car-care-notion-sync`） |
+| URL | `https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev` |
+| version | `m3d-d1b-0.1.0` |
+| keyFp | `5d915911b54a`（密钥仓外 `~/.car-care-secrets/m3d-d1-b-gateway-api-key.txt`） |
+| wkFp / workspaceKey | `db38e1e5a251` ← `18eab0db-43db-817c-911a-000390294864`（**≠** A 的 `c647ac0368ff`） |
+| KV | `car-care-notion-tombstone-d1-test-b` id `fbb4af0a15e1414e931fd949a78df0d8`（独立于 A） |
+| 配置目录 | 仓外 `/home/box/.car-care-secrets/notion-sync-worker-d1-test-b/`（自模板复制） |
 
-### 精确缺口（一句话）
+### Gateway A（确认未改）
 
-缺第二 Notion workspace（不同 `workspace_id`）+ Integration Token/DS ids + 测试 Worker `*-d1-test-b` URL/Key（写入 `~/.car-care-secrets/m3d-d1-b-notion.env` 后即可重跑 live）。
+| 项 | 值 |
+|----|-----|
+| URL | `https://car-care-notion-sync-d1-test.spf-roc.workers.dev` |
+| version | `m3d-d1-0.1.1`（仍） |
+| keyFp | `91dee0d48d59` |
+| wkFp | `c647ac0368ff` |
+| KV / DS / Token | **未改**（仍绑定测试区 A） |
 
-当前 Cloudflare 仅有 `car-care-notion-sync-d1-test`；Notion MCP 仅连主区 `90da532e-…`（fp `c647ac0368ff`）。主 Bot 正在处理第二工作区登录/交接。
+### Harness
+
+- `scripts/m3d-sw-dual-workspace-live.mjs`（本轮修复：断网不导航、Node 侧 UUID、`syncMeta.cloudUserId`、Outbox `ownerUserId=workspaceKey`、断开文案、SW4 切回 flush）
+- Env：`GATEWAY_A_*` / `GATEWAY_B_*` 或 `~/.car-care-secrets/m3d-d1-b-*.txt`
 
 | 项 | 结果 |
 |----|------|
-| SW1 | BLOCKED |
-| SW2 | BLOCKED |
-| SW3 | BLOCKED |
-| SW4 | BLOCKED |
-| SUPPORT_verify_A | PASS `wkFp=c647ac0368ff` |
+| SW0 verify A/B + distinct | PASS `c647ac0368ff` ≠ `db38e1e5a251` |
+| **SW1** 断开保留 Outbox | **PASS** |
+| **SW2** park 隔离（无误推 B） | **PASS** `push200toB=0` `leakedA=false` |
+| **SW3** 无 DISCARD 拒清 / DISCARD 清 orphan | **PASS** |
+| **SW4** 切回 A flush（B 无串写） | **PASS** `seenOnA=true` `leakedB=false` |
 
-证据：`artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · `sw-SUMMARY.md`
+证据：`artifacts/m3d-prod-pre-gates/sw-dual/sw-matrix.json` · `sw-SUMMARY.md` · `sw-dual-final.png`
 
 ---
 
@@ -100,7 +113,7 @@
 | 节 | 本轮状态 |
 |----|----------|
 | A–F 生产部署项 | 待部署授权后（未执行正式 Gateway/PWA） |
-| G1 SW 双工作区 | **仍开**（BLOCKED，等第二工作区） |
+| G1 SW 双工作区 | **已闭合（PASS）** |
 | G2 RR-IDB | **主路径已 PASS**（对象仓）；`databases()` 历史风险保留披露 |
 | G3 LWW | 已知披露，未改 |
 | G4 带伤上线 | **未**获用户原样确认短句 → 不可勾 |
@@ -112,6 +125,8 @@
 
 - [x] 未部署 / 未改 `car.adobesun.com`（生产 tip `9b64a2bd`）
 - [x] 未部署正式名 Worker `car-care-notion-sync`（无 `-test`）
+- [x] 仅新增测试 Worker `car-care-notion-sync-d1-test-b`；**未改** d1-test（A）的 Token/DS/KV/Key
+- [x] 未动生产 PWA / 正式 Supabase / `car.adobesun.com`
 - [x] 未改正式 Supabase
 - [x] 未清用户设备 IDB / Outbox（仅 Playwright 临时上下文）
 - [x] 未 redeploy car-test（沿用现网）
@@ -119,8 +134,9 @@
 
 ---
 
-## 6. 后续（等主 Bot 通知）
+## 6. 后续
 
-1. 写入 `~/.car-care-secrets/m3d-d1-b-notion.env`（及可选独立 `d1-test-b` Worker）后执行：  
-   `node scripts/m3d-sw-dual-workspace-live.mjs`
-2. 若 SW live PASS → 更新本报告 + checklist G1 → 可再提补充 PR；若产品缺陷 → **独立 `fix/…` PR 并停下申请审查（不 merge）**。
+1. ~~第二工作区 + Gateway B~~ **已完成**；SW1–SW4 live **PASS**。
+2. Checklist G1 已闭合；A–F 生产部署项仍待**显式部署授权**。
+3. 本轮**未**开业务 fix PR（缺陷仅在验收 harness，已在本 docs 分支修复）。
+4. **不要 merge** 至生产部署，直至用户按 checklist 完成带伤/Go 确认与部署授权。

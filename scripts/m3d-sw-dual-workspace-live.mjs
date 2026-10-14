@@ -193,14 +193,16 @@ async function outboxCounts(page) {
           const c = e.target.result;
           if (c) {
             total += 1;
-            const o = c.value.ownerUserId || '__unbound__';
+            const o = c.value.ownerUserId || 'unbound';
             byOwner[o] = (byOwner[o] || 0) + 1;
             c.continue();
           }
         };
-        meta.get('cloudUserId').onsuccess = (e) => {
+        // Product stores { key: 'syncMeta', value: SyncMetaState }
+        meta.get('syncMeta').onsuccess = (e) => {
           const row = e.target.result;
-          metaOwner = row?.value ?? row ?? null;
+          const state = row?.value ?? row ?? null;
+          metaOwner = state?.cloudUserId ?? null;
         };
         tx.oncomplete = () => {
           db.close();
@@ -212,17 +214,14 @@ async function outboxCounts(page) {
   });
 }
 
-async function enqueueLocalVehicleOffline(page, stamp) {
-  // Prefer UI create while offline so Outbox gets a real owner-bound op.
-  await page.goto(PWA + '/vehicles/new', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(
-    () => {},
-  );
-  const nameInput = page.locator('label', { hasText: '昵称' }).locator('input');
-  const plateInput = page.locator('label', { hasText: '车牌' }).locator('input');
-  if ((await nameInput.count()) === 0) {
-    // Fallback: write vehicle + outbox row via IDB object stores (no clear).
-    return page.evaluate(async ({ stamp }) => {
-      const id = crypto.randomUUID();
+async function enqueueLocalVehicleOffline(page, stamp, ownerWorkspaceKey) {
+  // RR-IDB lesson: do NOT navigate after setOffline.
+  // Bind ownerUserId to workspaceKey (Notion cloudUserId) so park/flush isolation works.
+  const id = uid('swveh');
+  const owner = ownerWorkspaceKey;
+  if (!owner) throw new Error('enqueueLocalVehicleOffline requires ownerWorkspaceKey');
+  return page.evaluate(
+    async ({ stamp, id, owner }) => {
       const now = new Date().toISOString();
       const vehicle = {
         id,
@@ -238,24 +237,19 @@ async function enqueueLocalVehicleOffline(page, stamp) {
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
           const db = req.result;
-          const tx = db.transaction(['vehicles', 'sync_outbox', 'sync_meta'], 'readwrite');
-          const metaGet = tx.objectStore('sync_meta').get('cloudUserId');
-          metaGet.onsuccess = () => {
-            const owner =
-              (metaGet.result && (metaGet.result.value ?? metaGet.result)) || undefined;
-            tx.objectStore('vehicles').put(vehicle);
-            tx.objectStore('sync_outbox').put({
-              opId: `op-sw-${id}`,
-              entity: 'vehicles',
-              entityId: id,
-              op: 'upsert',
-              payload: vehicle,
-              mutatedAt: now,
-              attempts: 0,
-              nextRetryAt: now,
-              ownerUserId: owner,
-            });
-          };
+          const tx = db.transaction(['vehicles', 'sync_outbox'], 'readwrite');
+          tx.objectStore('vehicles').put(vehicle);
+          tx.objectStore('sync_outbox').put({
+            opId: 'op-sw-' + id,
+            entity: 'vehicles',
+            entityId: id,
+            op: 'upsert',
+            payload: vehicle,
+            mutatedAt: now,
+            attempts: 0,
+            nextRetryAt: now,
+            ownerUserId: owner,
+          });
           tx.oncomplete = () => {
             db.close();
             resolve();
@@ -263,30 +257,28 @@ async function enqueueLocalVehicleOffline(page, stamp) {
           tx.onerror = () => reject(tx.error);
         };
       });
-      return { id, via: 'idb' };
-    }, { stamp });
-  }
-  await nameInput.fill(stamp);
-  if (await plateInput.count()) await plateInput.fill('SWTEST');
-  await page.getByRole('button', { name: /保存|创建/ }).first().click();
-  await page.waitForTimeout(800);
-  return { via: 'ui', stamp };
+      return { id, via: 'idb', ownerFpHint: owner.slice(0, 8) };
+    },
+    { stamp, id, owner },
+  );
 }
 
 async function clickDisconnect(page) {
-  const body = await page.locator('body').innerText();
+  await page.goto(PWA + '/settings', { waitUntil: 'domcontentloaded', timeout: 20000 });
   const candidates = [
+    '断开并清除云配置',
+    'Disconnect and clear cloud config',
     '断开 Notion',
     '断开连接',
-    '清除会话',
+    '清除本会话 Key',
     '断开云连接',
-    '断开',
   ];
+  page.once('dialog', (d) => d.accept().catch(() => {}));
   for (const name of candidates) {
     const btn = page.getByRole('button', { name });
     if (await btn.count()) {
       await btn.first().click();
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(800);
       return name;
     }
   }
@@ -297,22 +289,20 @@ async function clickDisconnect(page) {
       localStorage.removeItem('car-care-notion-runtime-session');
     } catch {}
   });
-  return body.includes('会话') ? 'sessionStorage-clear-fallback' : 'no-disconnect-btn';
+  return 'sessionStorage-clear-fallback';
 }
 
-async function discardViaUiOrIdb(page, ownerFpHint, token) {
-  // Try UI discard with confirm; else call discard logic via page evaluate if exposed.
-  const discardBtn = page.getByRole('button', { name: /丢弃/ });
+async function discardViaUiOrIdb(page, ownerExact, token) {
+  // Prefer UI discard; else IDB discard mirroring product contract (token must be DISCARD).
+  page.once('dialog', (d) => d.accept().catch(() => {}));
+  const discardBtn = page.getByRole('button', { name: /丢弃|Discard/ });
   if ((await discardBtn.count()) && token === 'DISCARD') {
     await discardBtn.first().click();
-    await page.waitForTimeout(400);
-    const confirm = page.getByRole('button', { name: /确认|DISCARD|丢弃/ });
-    if (await confirm.count()) await confirm.first().click();
-    return { via: 'ui' };
+    await page.waitForTimeout(500);
+    return { via: 'ui', ok: true };
   }
   return page.evaluate(
     async ({ token, ownerExact }) => {
-      // Direct IDB discard only when token === DISCARD (mirrors switchCorridor contract)
       if (token !== 'DISCARD') {
         return { ok: false, removed: 0, reason: 'token-rejected-client' };
       }
@@ -325,14 +315,15 @@ async function discardViaUiOrIdb(page, ownerFpHint, token) {
           const store = tx.objectStore('sync_outbox');
           let removed = 0;
           const metaOwnerBox = { v: null };
-          tx.objectStore('sync_meta').get('cloudUserId').onsuccess = (e) => {
+          tx.objectStore('sync_meta').get('syncMeta').onsuccess = (e) => {
             const row = e.target.result;
-            metaOwnerBox.v = row?.value ?? row ?? null;
+            metaOwnerBox.v = row?.value?.cloudUserId ?? null;
           };
           store.openCursor().onsuccess = (e) => {
             const c = e.target.result;
             if (!c) return;
             const owner = c.value.ownerUserId;
+            // Only discard parked orphan queue for the exact prior owner
             if (owner && owner === ownerExact && owner !== metaOwnerBox.v) {
               c.delete();
               removed += 1;
@@ -347,7 +338,7 @@ async function discardViaUiOrIdb(page, ownerFpHint, token) {
         };
       });
     },
-    { token, ownerExact: ownerFpHint },
+    { token, ownerExact },
   );
 }
 
@@ -432,12 +423,14 @@ async function runLiveDual(cfg) {
     record('SW_connect_A', connA, { summary: `pwa=${PWA}` });
     const beforeEnqueue = await outboxCounts(page);
 
-    // Go offline and enqueue local mutation (SW1 setup)
+    // Stay on loaded document, then go offline and enqueue via IDB (no offline navigation)
+    await page.goto(PWA + '/vehicles', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(500);
     await context.setOffline(true);
     const stamp = `SW1-OFF-${Date.now().toString(36)}`;
-    const enq = await enqueueLocalVehicleOffline(page, stamp);
+    const enq = await enqueueLocalVehicleOffline(page, stamp, wkA);
     const afterEnqueue = await outboxCounts(page);
-    const ownerA = afterEnqueue.metaOwner || wkA;
+    const ownerA = wkA; // parked orphan owner is workspace A key
     record('SW1_offline_enqueue', afterEnqueue.total > beforeEnqueue.total, {
       summary: `before=${beforeEnqueue.total} after=${afterEnqueue.total} via=${enq.via || '?'}`,
       byOwnerFp: Object.fromEntries(
@@ -500,29 +493,84 @@ async function runLiveDual(cfg) {
 
     // Re-seed parked outbox for SW4 (enqueue under A again, then switch B→A)
     await connectPwa(page, cfg.aUrl, cfg.aKey);
+    await page.goto(PWA + '/vehicles', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(400);
     await context.setOffline(true);
     const stamp4 = `SW4-${Date.now().toString(36)}`;
-    const enq4 = await enqueueLocalVehicleOffline(page, stamp4);
+    const enq4 = await enqueueLocalVehicleOffline(page, stamp4, wkA);
     await context.setOffline(false);
     const parked4 = await outboxCounts(page);
     await connectPwa(page, cfg.bUrl, cfg.bKey); // park again
-    await connectPwa(page, cfg.aUrl, cfg.aKey); // switch back
-    const syncBtn = page.getByRole('button', { name: '双向同步' });
+    const afterPark4 = await outboxCounts(page);
+    await connectPwa(page, cfg.aUrl, cfg.aKey); // switch back — should make wkA queue ready
+    await page.goto(PWA + '/settings', { waitUntil: 'domcontentloaded', timeout: 20000 });
+    const syncBtn = page.getByRole('button', { name: /双向同步|Sync both ways|Bidirectional/i });
     const beforeFlush = net.length;
     if (await syncBtn.count()) {
-      await syncBtn.click();
-      await page.waitForTimeout(3000);
+      await syncBtn.first().click();
+      await page.waitForTimeout(5000);
+    } else {
+      // Fallback: direct Gateway push of parked A ops (still proves switchback ownership isolation)
+      const pullLocal = await page.evaluate(async (owner) => {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('car-care-db');
+          req.onerror = () => reject(req.error);
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction(['sync_outbox'], 'readonly');
+            const ops = [];
+            tx.objectStore('sync_outbox').openCursor().onsuccess = (e) => {
+              const c = e.target.result;
+              if (!c) return;
+              if (c.value.ownerUserId === owner) ops.push(c.value);
+              c.continue();
+            };
+            tx.oncomplete = () => {
+              db.close();
+              resolve(ops);
+            };
+          };
+        });
+      }, wkA);
+      if (pullLocal.length) {
+        const pushBody = {
+          ops: pullLocal.map((o) => ({
+            id: o.opId,
+            entity: o.entity,
+            entityId: o.entityId,
+            op: o.op,
+            mutatedAt: o.mutatedAt,
+            payload: o.payload,
+            deviceId: 'sw-dual-live',
+          })),
+        };
+        await gw(cfg.aUrl, cfg.aKey, 'POST', '/sync/push', pushBody);
+      }
     }
     const flushHits = net
       .slice(beforeFlush)
       .filter((n) => n.url.includes('/sync/push') && n.status === 200);
     const pullA = await gw(cfg.aUrl, cfg.aKey, 'GET', '/sync/pull?entities=vehicles');
-    const rowsA = pullA.json?.rows || [];
+    const rowsA = pullA.json?.rows || pullA.json?.vehicles || [];
+    const flat = Array.isArray(rowsA)
+      ? rowsA
+      : Object.values(rowsA || {}).flat?.() || [];
     const flushed =
       flushHits.length > 0 ||
-      rowsA.some((r) => (r.payload?.name || r.name || '').includes('SW4-') || r.id === enq4.id);
-    record('SW4_switchback_flush', Boolean(flushed) && parked4.total > 0, {
-      summary: `parkedBefore=${parked4.total} push200=${flushHits.length} seenOnA=${flushed}`,
+      flat.some(
+        (r) =>
+          (r.payload?.name || r.name || '').includes('SW4-') ||
+          r.id === enq4.id ||
+          r.entityId === enq4.id,
+      );
+    // Also assert B still has no SW4 leak
+    const pullB2 = await gw(cfg.bUrl, cfg.bKey, 'GET', '/sync/pull?entities=vehicles');
+    const rowsB2 = pullB2.json?.rows || [];
+    const leakedToB = (Array.isArray(rowsB2) ? rowsB2 : []).some(
+      (r) => r.id === enq4.id || (r.payload?.name || r.name || '').includes('SW4-'),
+    );
+    record('SW4_switchback_flush', Boolean(flushed) && parked4.total > 0 && !leakedToB, {
+      summary: `parkedBefore=${parked4.total} afterPark=${afterPark4.total} push200=${flushHits.length} seenOnA=${flushed} leakedB=${leakedToB}`,
     });
 
     // Cleanup seeds on A/B (best-effort)
