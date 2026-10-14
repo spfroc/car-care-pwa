@@ -81,3 +81,50 @@ export function decodePayloadJson(text: string | null | undefined): Record<strin
     return null;
   }
 }
+
+/** Reassemble full app payload from slim PayloadJson + Notion column mirrors. */
+export type PageColumnFields = {
+  appEntityId: string;
+  name?: string | null;
+  plate?: string | null;
+  energyType?: string | null;
+  archived?: boolean | null;
+  vehicleId?: string | null;
+  recordType?: string | null;
+  recordDate?: string | null;
+  amountPaid?: number | null;
+  appUpdatedAt?: string | null;
+  deviceId?: string | null;
+};
+
+export function hydrateCloudPayload(
+  entity: 'vehicles' | 'records',
+  decoded: Record<string, unknown> | null | undefined,
+  cols: PageColumnFields,
+): Record<string, unknown> {
+  const base =
+    decoded && typeof decoded === 'object' && !Array.isArray(decoded) && !(decoded as { _decodeError?: boolean })._decodeError
+      ? { ...decoded }
+      : {};
+  // Column mirrors win over slim JSON for stripped scalars (authoritative Notion props).
+  base.id = cols.appEntityId;
+  if (cols.appUpdatedAt) base.updatedAt = cols.appUpdatedAt;
+  if (cols.deviceId) base.deviceId = cols.deviceId;
+
+  if (entity === 'vehicles') {
+    if (cols.name != null && cols.name !== '') base.name = cols.name;
+    else if (typeof base.name !== 'string') base.name = cols.appEntityId;
+    if (cols.plate != null) base.plate = cols.plate;
+    if (cols.energyType != null && cols.energyType !== '') base.energyType = cols.energyType;
+    if (typeof cols.archived === 'boolean') base.archived = cols.archived;
+  } else {
+    if (cols.vehicleId != null && cols.vehicleId !== '') base.vehicleId = cols.vehicleId;
+    if (cols.recordType != null && cols.recordType !== '') base.type = cols.recordType;
+    if (cols.recordDate != null && cols.recordDate !== '') base.date = cols.recordDate;
+    if (typeof cols.amountPaid === 'number' && Number.isFinite(cols.amountPaid)) {
+      base.amountPaid = cols.amountPaid;
+    }
+    // Display title is not a CareRecord field; keep slim extras only.
+  }
+  return base;
+}

@@ -48,7 +48,7 @@ records 额外：`VehicleAppId` `RecordType` `RecordDate` `AmountPaid`
 | POST | `/sync/snapshot` | 分块 push |
 | POST | `/auth/*` | D4 · 501 |
 
-无/错 Key → **401**。CORS 仅 `ALLOWED_ORIGIN`。超长 `PayloadJson` → **失败闭合**（不截断）。429/5xx/写不确定 → **不 ACK**（`errors[].retryable`）。
+无/错 Key → **401**。CORS 仅 `ALLOWED_ORIGIN`（逗号分隔多 Origin 精确匹配，不反射任意 Origin）。Pull 会把 Name/Plate/… 列镜像 **hydrate** 回 CloudRow.payload（slim PayloadJson 本身不含这些字段）。超长 `PayloadJson` → **失败闭合**（不截断）。429/5xx/写不确定 → **不 ACK**（`errors[].retryable`）。
 
 ## Fork / Deploy（约 15–30 分钟）
 

@@ -65,6 +65,12 @@ function richTextPlain(prop: any): string | null {
 
 export function pageToLite(page: any): NotionPageLite {
   const props = page.properties || {};
+  const amountProp = props.AmountPaid;
+  const amountPaid =
+    amountProp && typeof amountProp.number === 'number' ? amountProp.number : null;
+  const archivedProp = props.Archived;
+  const archived =
+    archivedProp && typeof archivedProp.checkbox === 'boolean' ? archivedProp.checkbox : null;
   return {
     pageId: page.id,
     inTrash: !!(page.in_trash || page.archived),
@@ -74,6 +80,13 @@ export function pageToLite(page: any): NotionPageLite {
     deviceId: richTextPlain(props.DeviceId) || null,
     payloadJson: richTextPlain(props.PayloadJson) || null,
     name: richTextPlain(props.Name) || null,
+    plate: richTextPlain(props.Plate),
+    energyType: richTextPlain(props.EnergyType),
+    archived,
+    vehicleId: richTextPlain(props.VehicleAppId),
+    recordType: richTextPlain(props.RecordType),
+    recordDate: richTextPlain(props.RecordDate),
+    amountPaid,
     rawProperties: props,
   };
 }

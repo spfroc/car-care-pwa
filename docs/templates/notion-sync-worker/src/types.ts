@@ -74,5 +74,14 @@ export type NotionPageLite = {
   deviceId: string | null;
   payloadJson: string | null;
   name: string | null;
+  /** vehicles */
+  plate: string | null;
+  energyType: string | null;
+  archived: boolean | null;
+  /** records */
+  vehicleId: string | null;
+  recordType: string | null;
+  recordDate: string | null;
+  amountPaid: number | null;
   rawProperties: Record<string, unknown>;
 };

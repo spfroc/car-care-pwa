@@ -18,8 +18,8 @@ workers_dev = true
 
 [vars]
 NOTION_VERSION = "2026-03-11"
-GATEWAY_VERSION = "m3d-d1-0.1.0"
-ALLOWED_ORIGIN = "http://localhost:5173"
+GATEWAY_VERSION = "m3d-d1-0.1.1"
+ALLOWED_ORIGIN = "https://car-test.adobesun.com,http://localhost:5173"
 # TEST-ONLY data source ids — replace on fork (see banner above)
 VEHICLES_DATA_SOURCE_ID = "68e70331-99b5-47b2-bdb7-718963029c62"
 RECORDS_DATA_SOURCE_ID = "dee1f83b-e9ec-4276-a68d-ffc9310473df"

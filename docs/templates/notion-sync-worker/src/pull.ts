@@ -1,4 +1,4 @@
-import { decodePayloadJson } from './payload.ts';
+import { decodePayloadJson, hydrateCloudPayload } from './payload.ts';
 import { listTombstones } from './tombstone-map.ts';
 import { notionFetch, pageToLite } from './notion.ts';
 import type { CloudRow, EntityKind, GatewayEnv } from './types.ts';
@@ -19,10 +19,26 @@ async function pullEntity(
       const lite = pageToLite(page);
       if (!lite.appEntityId) continue;
       const decoded = decodePayloadJson(lite.payloadJson);
+      const payload =
+        decoded === null
+          ? { _decodeError: true }
+          : hydrateCloudPayload(entity, decoded, {
+              appEntityId: lite.appEntityId,
+              name: lite.name,
+              plate: lite.plate,
+              energyType: lite.energyType,
+              archived: lite.archived,
+              vehicleId: lite.vehicleId,
+              recordType: lite.recordType,
+              recordDate: lite.recordDate,
+              amountPaid: lite.amountPaid,
+              appUpdatedAt: lite.appUpdatedAt,
+              deviceId: lite.deviceId,
+            });
       rows.push({
         entity,
         id: lite.appEntityId,
-        payload: decoded ?? { _decodeError: true },
+        payload,
         updatedAt: lite.appUpdatedAt || page.last_edited_time,
         deletedAt: lite.appDeletedAt || null,
         deviceId: lite.deviceId,
