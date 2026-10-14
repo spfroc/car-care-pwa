@@ -1,0 +1,13 @@
+
+ RUN  v5.0.3 /workspace/car-care-pwa/app
+
+
+ Test Files  30 passed | 3 skipped (33)
+      Tests  320 passed | 5 skipped (325)
+   Start at  15:32:21
+   Duration  1.20s (transform 43%, import 31%, tests 24%, worker 2%)
+
+  Transform  transforming modules took 2.00s · 43% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
