@@ -1,3 +1,4 @@
+
 > car-care-pwa@0.0.0 test
 > vitest run
 
@@ -7,9 +8,10 @@
 
  Test Files  29 passed | 3 skipped (32)
       Tests  312 passed | 5 skipped (317)
-   Start at  15:12:38
-   Duration  1.50s (transform 42%, import 30%, tests 26%, worker 3%)
+   Start at  15:18:08
+   Duration  1.74s (transform 40%, import 32%, tests 26%, worker 2%)
 
-    Isolate  32 workers spawned · ~150ms startup each (spawn + environment, per file)
-             at least ~535ms faster with isolate: false — reuses workers across files instead of one per file
+  Transform  transforming modules took 2.10s · 40% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
 

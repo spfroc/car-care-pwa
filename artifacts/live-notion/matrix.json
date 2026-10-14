@@ -1,8 +1,8 @@
 {
   "status": "PASS",
-  "reason": "all required gates green",
-  "started": "2026-10-14T07:13:37.677Z",
-  "ended": "2026-10-14T07:14:00.433Z",
+  "reason": "all required live gates green",
+  "started": "2026-10-14T07:18:13.236Z",
+  "ended": "2026-10-14T07:18:39.844Z",
   "timezone": "Asia/Shanghai",
   "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
   "keyFingerprint": "91dee0d48d59",
@@ -11,20 +11,22 @@
     "G4": true,
     "D2.2": true,
     "D2.3": true,
-    "D2.6": true,
+    "D2.6": false,
     "starC": true,
     "starU": true,
     "starD": true,
     "starR": true,
     "starT": true
   },
+  "d26LiveStatus": "unit-only+residual",
+  "d26WorkerProbeOk": false,
   "steps": {
     "G1.health": {
       "ok": true,
       "summary": "http=200 version=m3d-d1-0.1.0",
       "http": 200,
       "version": "m3d-d1-0.1.0",
-      "at": "2026-10-14T07:13:37.835Z"
+      "at": "2026-10-14T07:18:13.407Z"
     },
     "G1.verify": {
       "ok": true,
@@ -36,154 +38,156 @@
         "vehicles": "8576578526ab",
         "records": "6091d7e09158"
       },
-      "at": "2026-10-14T07:13:38.136Z"
+      "at": "2026-10-14T07:18:13.667Z"
     },
     "starC.create": {
       "ok": true,
       "summary": "applied=2 errors=0",
       "http": 200,
       "applied": [
-        "op-c-v-d2p3-1791962018136",
-        "op-c-r-d2p3-1791962018136"
+        "op-c-v-d2p3-1791962293668",
+        "op-c-r-d2p3-1791962293668"
       ],
       "conflicts": [],
-      "at": "2026-10-14T07:13:41.717Z"
+      "at": "2026-10-14T07:18:15.273Z"
     },
     "D2.3.pull_after_create": {
       "ok": true,
-      "summary": "veh=true rec=true totalRows=13",
+      "summary": "veh=true rec=true totalRows=16",
       "http": 200,
-      "vehicleUpdatedAt": "2026-10-14T07:13:38.136Z",
-      "recordUpdatedAt": "2026-10-14T07:13:38.136Z",
-      "at": "2026-10-14T07:13:42.308Z"
+      "vehicleUpdatedAt": "2026-10-14T07:18:13.668Z",
+      "recordUpdatedAt": "2026-10-14T07:18:13.668Z",
+      "at": "2026-10-14T07:18:17.119Z"
     },
     "starU.update_same_page": {
       "ok": true,
       "summary": "applied=true alivePages=1 nameHint=updated",
       "http": 200,
       "applied": [
-        "op-u-v-d2p3-1791962018136"
+        "op-u-v-d2p3-1791962293668"
       ],
       "aliveCount": 1,
-      "at": "2026-10-14T07:13:43.713Z"
+      "at": "2026-10-14T07:18:18.563Z"
     },
     "D2.2.outbox_flush": {
       "ok": true,
-      "summary": "http=200 applied=op-off-d2p3-1791962018136",
+      "summary": "http=200 applied=op-off-d2p3-1791962293668",
       "http": 200,
       "applied": [
-        "op-off-d2p3-1791962018136"
+        "op-off-d2p3-1791962293668"
       ],
-      "at": "2026-10-14T07:13:44.504Z"
+      "at": "2026-10-14T07:18:19.454Z"
     },
     "starD.delete_tombstone": {
       "ok": true,
-      "summary": "applied=true pullTomb=true pushSkippedDeleted=true pullAttempts=5",
+      "summary": "applied=true pullTomb=false pushSkippedDeleted=true pullAttempts=6",
       "http": 200,
       "applied": [
-        "op-d-v-d2p3-1791962018136"
+        "op-d-v-d2p3-1791962293668"
       ],
-      "deletedAt": "2026-10-14T07:13:43.136Z",
-      "updatedAt": "2026-10-14T07:13:43.136Z",
-      "pullAttempts": 5,
+      "deletedAt": null,
+      "updatedAt": null,
+      "pullAttempts": 6,
       "skippedDeletedProbe": [
         {
-          "id": "op-stale-d-d2p3-1791962018136",
+          "id": "op-stale-d-d2p3-1791962293668",
           "entity": "vehicles",
           "reason": "skipped_deleted",
-          "attemptedAt": "2026-10-14T07:13:38.136Z",
+          "attemptedAt": "2026-10-14T07:18:13.668Z",
           "cloudRow": {
             "entity": "vehicles",
-            "id": "veh-d2p3-1791962018136",
+            "id": "veh-d2p3-1791962293668",
             "payload": {
               "bodyType": "SEDAN",
               "note": "offline-queue-flush",
-              "createdAt": "2026-10-14T07:13:38.136Z"
+              "createdAt": "2026-10-14T07:18:13.668Z"
             },
-            "updatedAt": "2026-10-14T07:13:43.136Z",
-            "deletedAt": "2026-10-14T07:13:43.136Z",
+            "updatedAt": "2026-10-14T07:18:18.668Z",
+            "deletedAt": "2026-10-14T07:18:18.668Z",
             "deviceId": "live-matrix-a"
           }
         }
       ],
-      "note": "CF KV list eventual consistency: pull tombstone may lag; push getTombstone+skipped_deleted is authoritative for \u2605D",
-      "at": "2026-10-14T07:13:53.000Z"
+      "note": "CF KV list eventual consistency: pull tombstone may lag; push getTombstone+skipped_deleted is authoritative for ★D",
+      "at": "2026-10-14T07:18:31.134Z"
     },
     "starT.stale_upsert_skipped": {
       "ok": true,
       "summary": "skipped_deleted=true",
       "conflicts": [
         {
-          "id": "op-stale-d2p3-1791962018136",
+          "id": "op-stale-d2p3-1791962293668",
           "entity": "vehicles",
           "reason": "skipped_deleted",
-          "attemptedAt": "2026-10-14T07:13:38.136Z",
+          "attemptedAt": "2026-10-14T07:18:13.668Z",
           "cloudRow": {
             "entity": "vehicles",
-            "id": "veh-d2p3-1791962018136",
+            "id": "veh-d2p3-1791962293668",
             "payload": {
               "bodyType": "SEDAN",
               "note": "offline-queue-flush",
-              "createdAt": "2026-10-14T07:13:38.136Z"
+              "createdAt": "2026-10-14T07:18:13.668Z"
             },
-            "updatedAt": "2026-10-14T07:13:43.136Z",
-            "deletedAt": "2026-10-14T07:13:43.136Z",
+            "updatedAt": "2026-10-14T07:18:18.668Z",
+            "deletedAt": "2026-10-14T07:18:18.668Z",
             "deviceId": "live-matrix-a"
           }
         }
       ],
       "applied": [],
-      "at": "2026-10-14T07:13:53.622Z"
+      "at": "2026-10-14T07:18:32.193Z"
     },
     "starT.idempotent_delete_retry": {
       "ok": true,
-      "summary": "http=200 applied=op-d-retry-d2p3-1791962018136",
+      "summary": "http=200 applied=true hardError=false",
       "applied": [
-        "op-d-retry-d2p3-1791962018136"
+        "op-d-retry-d2p3-1791962293668"
       ],
       "conflicts": [],
-      "at": "2026-10-14T07:13:54.268Z"
+      "at": "2026-10-14T07:18:32.898Z"
     },
     "starR.restore": {
       "ok": true,
       "summary": "applied=true alive=true",
       "applied": [
-        "op-r-v-d2p3-1791962018136"
+        "op-r-v-d2p3-1791962293668"
       ],
       "conflicts": [],
-      "aliveUpdatedAt": "2026-10-14T07:13:48.136Z",
-      "at": "2026-10-14T07:13:56.358Z"
+      "aliveUpdatedAt": "2026-10-14T07:18:23.668Z",
+      "at": "2026-10-14T07:18:35.687Z"
     },
-    "D2.6.media_not_synced": {
-      "ok": true,
-      "summary": "clientGate=PASS gatewayApplied=true gatewayErrored=false",
+    "D2.6.media_worker_probe": {
+      "ok": false,
+      "summary": "gatewayApplied=true gatewayErrored=false workerRejects=false",
       "http": 200,
       "applied": [
-        "op-media-d2p3-1791962018136"
+        "op-media-d2p3-1791962293668"
       ],
-      "clientGate": "PWA isCloudEnqueueEnabled(media)=false + NotionGatewayClient strips media before POST",
-      "workerResidual": "d1-test Worker still ACKs media\u2192records DS; template push.ts now rejects \u2014 redeploy when Node\u226522/wrangler available",
-      "at": "2026-10-14T07:13:57.265Z"
+      "scope": "observational — not G4-required until Worker redeploy",
+      "unitGate": "D2.6 product = unit (enqueue false + client strip); see notion-d2-p1 / notion-d2-p3 tests",
+      "workerResidual": "d1-test Worker still ACKs media; template push.ts rejects unsupported_entity — redeploy when Node≥22",
+      "at": "2026-10-14T07:18:36.537Z"
     },
     "cleanup": {
       "ok": true,
-      "summary": "applied=op-clean-v-d2p3-1791962018136,op-clean-r-d2p3-1791962018136",
+      "summary": "applied=op-clean-v-d2p3-1791962293668,op-clean-r-d2p3-1791962293668",
       "applied": [
-        "op-clean-v-d2p3-1791962018136",
-        "op-clean-r-d2p3-1791962018136"
+        "op-clean-v-d2p3-1791962293668",
+        "op-clean-r-d2p3-1791962293668"
       ],
-      "at": "2026-10-14T07:14:00.432Z"
+      "at": "2026-10-14T07:18:39.809Z"
     }
   },
   "notes": [
     "Live matrix via Gateway only (no direct Notion SDK in PWA).",
     "D2.5 Supabase regression = unit test suite (mock/live supabase separate).",
-    "\u2605F conflict UI deferred to D2-P4.",
-    "d1-test Worker is DEV Gateway only \u2014 not production."
+    "D2.6 live: NOT G4-required; unit covers client gate; Worker reject pending redeploy.",
+    "★F conflict UI deferred to D2-P4.",
+    "d1-test Worker is DEV Gateway only — not production."
   ],
-  "runId": "d2p3-1791962018136",
-  "vehId": "veh-d2p3-1791962018136",
-  "recId": "rec-d2p3-1791962018136",
+  "runId": "d2p3-1791962293668",
+  "vehId": "veh-d2p3-1791962293668",
+  "recId": "rec-d2p3-1791962293668",
   "required": [
     "G1.verify",
     "starC.create",
@@ -193,16 +197,16 @@
     "starT.stale_upsert_skipped",
     "starT.idempotent_delete_retry",
     "D2.2.outbox_flush",
-    "D2.3.pull_after_create",
-    "D2.6.media_not_synced"
+    "D2.3.pull_after_create"
   ],
   "failed": [],
-  "startedCST": "2026-10-14 15:13:37 CST",
-  "endedCST": "2026-10-14 15:14:00 CST",
+  "startedCST": "2026-10-14 15:18:13 CST",
   "residuals": {
-    "D2-P4": "cloud_newer \u2192 M3-C open/keep/take (\u2605F)",
+    "D2.6": "unit-only (client enqueue+filter); live Worker reject pending d1-test redeploy (Node≥22). Not G4-required.",
+    "D2-P4": "cloud_newer → M3-C open/keep/take (★F)",
     "D2-P5": "sync_notion_map + switch corridor UI (optional)",
-    "WorkerRedeploy": "docs/templates/notion-sync-worker push.ts now rejects unsupported entities (media); d1-test Worker not redeployed (wrangler needs Node\u226522). PWA client already strips media before POST.",
-    "D2.5": "Supabase regression covered by full unit suite (312 passed); formal Supabase unchanged."
-  }
+    "WorkerRedeploy": "docs/templates/notion-sync-worker push.ts rejects unsupported entities (media); d1-test not redeployed (wrangler needs Node≥22).",
+    "D2.5": "Supabase regression covered by full unit suite; formal Supabase unchanged."
+  },
+  "endedCST": "2026-10-14 15:18:39 CST"
 }

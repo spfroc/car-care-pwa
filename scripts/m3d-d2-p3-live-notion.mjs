@@ -360,14 +360,14 @@ async function main() {
       },
     ],
   });
-  // Idempotent: applied or noop — must not error hard
-  const retryOk =
-    delRetry.status === 200 &&
-    (!(delRetry.json?.errors || []).length ||
-      (delRetry.json?.applied || []).includes(`op-d-retry-${runId}`) ||
-      (delRetry.json?.conflicts || []).length >= 0);
+  // Idempotent delete retry: Worker ACKs via applied (trash or noop_deleted).
+  // Do NOT use (conflicts||[]).length >= 0 — that is always true and false-PASSes.
+  const retryId = `op-d-retry-${runId}`;
+  const retryApplied = (delRetry.json?.applied || []).includes(retryId);
+  const retryHardError = (delRetry.json?.errors || []).some((e) => e.id === retryId);
+  const retryOk = delRetry.status === 200 && retryApplied && !retryHardError;
   record('starT.idempotent_delete_retry', retryOk, {
-    summary: `http=${delRetry.status} applied=${(delRetry.json?.applied || []).join(',')}`,
+    summary: `http=${delRetry.status} applied=${retryApplied} hardError=${retryHardError}`,
     applied: delRetry.json?.applied,
     conflicts: delRetry.json?.conflicts,
     errors: delRetry.json?.errors,
@@ -413,7 +413,10 @@ async function main() {
     aliveUpdatedAt: aliveRest?.updatedAt,
   });
 
-  // D2.6 media must not sync via Notion (PWA client filters; Gateway should error unsupported_entity)
+  // D2.6 observational Worker probe only — NOT in live G4 required set.
+  // Product gate (media 不出箱) is unit-covered (isCloudEnqueueEnabled + NotionGatewayClient strip).
+  // Do NOT hardcode clientGateDocumented=true as live PASS when gatewayApplied=true.
+  // Worker unsupported_entity reject needs d1-test redeploy (Node≥22/wrangler); box has Node 20.
   const mediaPush = await gw('POST', '/sync/push', {
     ops: [
       {
@@ -430,19 +433,17 @@ async function main() {
   const mediaErrored = (mediaPush.json?.errors || []).some(
     (e) => e.id === `op-media-${runId}` || e.code === 'unsupported_entity',
   );
-  // D2.6 product gate = media 不出箱 via PWA (enqueue false + GatewayClient filter; unit-tested).
-  // Gateway defense-in-depth (unsupported_entity) requires Worker redeploy (Node≥22 wrangler).
-  // Live matrix: PASS client gate; record Worker residual if media still applied.
-  const clientGateDocumented = true; // see src/sync/notion-d2-p1.test.ts + notion-d2-p3 / client filter
-  record('D2.6.media_not_synced', clientGateDocumented, {
-    summary: `clientGate=PASS gatewayApplied=${mediaApplied} gatewayErrored=${mediaErrored}`,
+  const workerRejectsMedia = mediaErrored && !mediaApplied;
+  record('D2.6.media_worker_probe', workerRejectsMedia, {
+    summary: `gatewayApplied=${mediaApplied} gatewayErrored=${mediaErrored} workerRejects=${workerRejectsMedia}`,
     http: mediaPush.status,
     applied: mediaPush.json?.applied,
     errors: mediaPush.json?.errors,
-    clientGate: 'PWA isCloudEnqueueEnabled(media)=false + NotionGatewayClient strips media before POST',
-    workerResidual: mediaApplied
-      ? 'd1-test Worker still ACKs media→records DS; template push.ts now rejects — redeploy when Node≥22/wrangler available'
-      : null,
+    scope: 'observational — not G4-required until Worker redeploy',
+    unitGate: 'D2.6 product = unit (enqueue false + client strip); see notion-d2-p1 / notion-d2-p3 tests',
+    workerResidual: workerRejectsMedia
+      ? null
+      : 'd1-test Worker still ACKs media; template push.ts rejects unsupported_entity — redeploy when Node≥22',
   });
   // Always best-effort cleanup of any mis-routed media-* page in records DS
   await gw('POST', '/sync/push', {
@@ -491,17 +492,41 @@ async function main() {
     'starT.idempotent_delete_retry',
     'D2.2.outbox_flush',
     'D2.3.pull_after_create',
-    'D2.6.media_not_synced',
+    // D2.6 intentionally omitted from live G4 required: unit-only + Worker residual
   ];
   const failed = required.filter((id) => !STEPS[id]?.ok);
   const status = failed.length ? 'FAIL' : 'PASS';
   gates.G4 = status === 'PASS';
-  finish(status, failed.length ? `failed: ${failed.join(', ')}` : 'all required gates green', started, {
+  const toCst = (isoStr) => {
+    const d = new Date(isoStr);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(d);
+    const g = (t) => parts.find((p) => p.type === t)?.value;
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')} CST`;
+  };
+  finish(status, failed.length ? `failed: ${failed.join(', ')}` : 'all required live gates green', started, {
     runId,
     vehId,
     recId,
     required,
     failed,
+    startedCST: toCst(started),
+    residuals: {
+      'D2.6': 'unit-only (client enqueue+filter); live Worker reject pending d1-test redeploy (Node≥22). Not G4-required.',
+      'D2-P4': 'cloud_newer → M3-C open/keep/take (★F)',
+      'D2-P5': 'sync_notion_map + switch corridor UI (optional)',
+      WorkerRedeploy:
+        'docs/templates/notion-sync-worker push.ts rejects unsupported entities (media); d1-test not redeployed (wrangler needs Node≥22).',
+      'D2.5': 'Supabase regression covered by full unit suite; formal Supabase unchanged.',
+    },
   });
 }
 
@@ -521,7 +546,8 @@ function finish(status, reason, started, extra = {}) {
       G4: gates.G4 === true,
       'D2.2': STEPS['D2.2.outbox_flush']?.ok === true,
       'D2.3': STEPS['D2.3.pull_after_create']?.ok === true,
-      'D2.6': STEPS['D2.6.media_not_synced']?.ok === true,
+      // Honest: D2.6 is unit-only until Worker redeploy; do not map observational probe → live PASS
+      'D2.6': false,
       starC: STEPS['starC.create']?.ok === true,
       starU: STEPS['starU.update_same_page']?.ok === true,
       starD: STEPS['starD.delete_tombstone']?.ok === true,
@@ -530,21 +556,73 @@ function finish(status, reason, started, extra = {}) {
         STEPS['starT.stale_upsert_skipped']?.ok === true &&
         STEPS['starT.idempotent_delete_retry']?.ok === true,
     },
+    d26LiveStatus: 'unit-only+residual',
+    d26WorkerProbeOk: STEPS['D2.6.media_worker_probe']?.ok === true,
     steps: STEPS,
     notes: [
       'Live matrix via Gateway only (no direct Notion SDK in PWA).',
       'D2.5 Supabase regression = unit test suite (mock/live supabase separate).',
+      'D2.6 live: NOT G4-required; unit covers client gate; Worker reject pending redeploy.',
       '★F conflict UI deferred to D2-P4.',
       'd1-test Worker is DEV Gateway only — not production.',
     ],
     ...extra,
   };
   writeFileSync(join(ART, 'matrix.json'), JSON.stringify(report, null, 2));
+  const gateLines = [
+    ['G1 verify', report.gates.G1],
+    ['G4 live matrix (required set)', report.gates.G4],
+    ['★C create', report.gates.starC],
+    ['★U update same page', report.gates.starU],
+    ['★D delete + tombstone', report.gates.starD],
+    ['★R restore', report.gates.starR],
+    ['★T retry / skipped_deleted', report.gates.starT],
+    ['D2.2 outbox flush', report.gates['D2.2']],
+    ['D2.3 pull visibility', report.gates['D2.3']],
+  ]
+    .map(([k, v]) => `| ${k} | ${v ? 'PASS' : 'FAIL'} |`)
+    .join('\n');
+  // Ensure CST labels on report (extra may already set startedCST)
+  const toCstLocal = (isoStr) => {
+    const d = new Date(isoStr);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(d);
+    const g = (t) => parts.find((p) => p.type === t)?.value;
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')} CST`;
+  };
+  report.endedCST = report.endedCST || toCstLocal(ended);
+  report.startedCST = report.startedCST || toCstLocal(started);
+  writeFileSync(join(ART, 'matrix.json'), JSON.stringify(report, null, 2));
+  const probeSummary = STEPS['D2.6.media_worker_probe']?.summary || 'n/a';
   writeFileSync(
     join(ART, 'SUMMARY.md'),
-    `# D2-P3 live Notion matrix\n\n- **Status**: ${status}\n- **Reason**: ${reason}\n- **Gateway**: \`${GATEWAY}\`\n- **Key fingerprint**: \`${fingerprint(KEY)}\`\n- **Started**: ${started} (CST)\n- **Ended**: ${ended} (CST)\n\n## Gates\n\n${Object.entries(report.gates)
-      .map(([k, v]) => `- ${k}: ${v ? 'PASS' : 'FAIL'}`)
-      .join('\n')}\n\nSee \`matrix.json\` for step detail (no secrets).\n`,
+    `# D2-P3 live Notion matrix\n\n` +
+      `- **Status**: ${status}\n` +
+      `- **Reason**: ${reason}\n` +
+      `- **Gateway**: \`${GATEWAY}\` (dev \`*-d1-test\` only — not production)\n` +
+      `- **Key fingerprint**: \`${fingerprint(KEY)}\` (sha256-12; raw key never stored)\n` +
+      `- **Started**: ${report.startedCST}\n` +
+      `- **Ended**: ${report.endedCST}\n\n` +
+      `## Gates (plan §4.2 / G1/G4)\n\n` +
+      `| Gate | Result |\n|------|--------|\n` +
+      `${gateLines}\n` +
+      `| D2.6 media not synced | **unit-only + residual** (not live G4-required) |\n\n` +
+      `## Notes\n\n` +
+      `- Live path: PWA Gateway client contract via HTTPS Bearer to test Worker (no Notion SDK / no Token in PWA).\n` +
+      `- ★D uses push-side \`skipped_deleted\` as authoritative tombstone proof (CF KV **list** used by pull is eventually consistent).\n` +
+      `- D2.6: product gate = **unit** (\`isCloudEnqueueEnabled('media')===false\` + GatewayClient strip). Live Worker probe (${probeSummary}) — reject pending d1-test redeploy (Node≥22).\n` +
+      `- ★T idempotent_delete_retry asserts applied ACK (noop_deleted/trash); removed always-true \`(conflicts||[]).length >= 0\`.\n` +
+      `- ★F deferred to **D2-P4**. D2-P5 map/switch corridor optional.\n` +
+      `- Unit suite: see \`unit-test.log\`.\n\n` +
+      `See \`matrix.json\` for step detail (**no secrets**).\n`,
   );
   console.log('\n==>', status, reason);
   console.log('Artifacts:', join(ART, 'matrix.json'), join(ART, 'SUMMARY.md'));
