@@ -16,6 +16,12 @@ import {
 import { SupabaseProvider } from '../sync/providers/supabase';
 import { listConflicts } from '../sync/outbox';
 import { ConflictList } from './ConflictList';
+import {
+  clearNotionRuntimeSession,
+  getNotionRuntimeSession,
+  hasValidNotionRuntimeSession,
+  setNotionSessionBearer,
+} from '../sync/notionSession';
 import type { CloudProviderId, CloudStorageConfig, SyncConflict } from '../sync/types';
 import type { MessageKey } from '../i18n/messages';
 
@@ -26,6 +32,11 @@ export function DataStorageSettings() {
   const [anon, setAnon] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [gatewayUrl, setGatewayUrl] = useState('');
+  const [notionHint, setNotionHint] = useState('');
+  const [notionApiKey, setNotionApiKey] = useState('');
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionWorkspace, setSessionWorkspace] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [statusLine, setStatusLine] = useState('');
@@ -34,15 +45,27 @@ export function DataStorageSettings() {
   const [outboxReadyCount, setOutboxReadyCount] = useState(0);
   const [openConflictCount, setOpenConflictCount] = useState(0);
 
+  const refreshSessionUi = useCallback(() => {
+    const s = getNotionRuntimeSession();
+    const valid = hasValidNotionRuntimeSession();
+    setSessionReady(valid);
+    setSessionWorkspace(valid ? (s?.workspaceKey ?? '') : '');
+    // Do not echo bearer into controlled input after hydrate — keep field empty unless user is typing
+    if (!s?.bearer) setNotionApiKey('');
+  }, []);
+
   const refreshStatus = useCallback(async () => {
     const summary = await getSyncStatusSummary();
     setCfg(summary.config);
     setUrl(summary.config.supabaseUrl ?? '');
     setAnon(summary.config.supabaseAnonKey ?? '');
+    setGatewayUrl(summary.config.notionGatewayUrl ?? '');
+    setNotionHint(summary.config.notionWorkspaceHint ?? '');
     setOutboxCount(summary.outboxCount);
     setOutboxReadyCount(summary.outboxReadyCount);
     setOpenConflictCount(summary.openConflictCount ?? 0);
     setConflicts(await listConflicts());
+    refreshSessionUi();
     const m = summary.meta;
     const parts = [
       t('storage.statusLabel', { status: statusLabel(m.status, t) }),
@@ -55,7 +78,7 @@ export function DataStorageSettings() {
     ];
     if (m.lastError) parts.push(t('storage.lastError', { error: m.lastError }));
     setStatusLine(parts.join(' · '));
-  }, [t]);
+  }, [t, refreshSessionUi]);
 
   useEffect(() => {
     void (async () => {
@@ -63,6 +86,8 @@ export function DataStorageSettings() {
       setCfg(c);
       setUrl(c.supabaseUrl ?? '');
       setAnon(c.supabaseAnonKey ?? '');
+      setGatewayUrl(c.notionGatewayUrl ?? '');
+      setNotionHint(c.notionWorkspaceHint ?? '');
       await refreshStatus();
     })();
   }, [refreshStatus]);
@@ -71,10 +96,46 @@ export function DataStorageSettings() {
     setBusy(true);
     setMsg('');
     try {
+      // D2.7: single `provider` — never enable supabase+notion together.
+      // Preserve inactive side’s non-secret URL fields for easier switch-back.
+      if (provider !== 'notion') {
+        clearNotionRuntimeSession();
+        setNotionApiKey('');
+      }
       const next: CloudStorageConfig = {
         provider,
-        supabaseUrl: url.trim() || undefined,
-        supabaseAnonKey: anon.trim() || undefined,
+        supabaseUrl: (provider === 'supabase' ? url.trim() : cfg.supabaseUrl) || undefined,
+        supabaseAnonKey:
+          (provider === 'supabase' ? anon.trim() : cfg.supabaseAnonKey) || undefined,
+        notionGatewayUrl:
+          (provider === 'notion' ? gatewayUrl.trim() : cfg.notionGatewayUrl) || undefined,
+        notionWorkspaceHint:
+          (provider === 'notion' ? notionHint.trim() : cfg.notionWorkspaceHint) ||
+          undefined,
+        workspaceKey: cfg.workspaceKey,
+      };
+      await setCloudStorageConfig(next);
+      setCfg(next);
+      setMsg(t('storage.savedProvider'));
+      await refreshStatus();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveNotionUrl() {
+    setBusy(true);
+    setMsg('');
+    try {
+      const next: CloudStorageConfig = {
+        provider: 'notion',
+        supabaseUrl: cfg.supabaseUrl,
+        supabaseAnonKey: cfg.supabaseAnonKey,
+        notionGatewayUrl: gatewayUrl.trim() || undefined,
+        notionWorkspaceHint: notionHint.trim() || undefined,
+        workspaceKey: cfg.workspaceKey,
       };
       await setCloudStorageConfig(next);
       setCfg(next);
@@ -95,6 +156,9 @@ export function DataStorageSettings() {
         provider: 'supabase',
         supabaseUrl: url.trim(),
         supabaseAnonKey: anon.trim(),
+        notionGatewayUrl: cfg.notionGatewayUrl,
+        notionWorkspaceHint: cfg.notionWorkspaceHint,
+        workspaceKey: cfg.workspaceKey,
       });
       const provider = await resolveProvider();
       if (provider instanceof SupabaseProvider && email && password) {
@@ -113,6 +177,57 @@ export function DataStorageSettings() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onVerifyNotion() {
+    setBusy(true);
+    setMsg('');
+    try {
+      const key = notionApiKey.trim();
+      const gw = gatewayUrl.trim();
+      if (!gw || !key) {
+        setMsg(t('storage.notionVerifyNeedKey'));
+        return;
+      }
+      await setCloudStorageConfig({
+        provider: 'notion',
+        supabaseUrl: cfg.supabaseUrl,
+        supabaseAnonKey: cfg.supabaseAnonKey,
+        notionGatewayUrl: gw,
+        notionWorkspaceHint: notionHint.trim() || undefined,
+        workspaceKey: cfg.workspaceKey,
+      });
+      // Bearer in memory (optional sessionStorage) before /verify; workspaceKey filled on success
+      setNotionSessionBearer(key);
+      const r = await verifyConnection();
+      if (r.ok && r.verify?.userId) {
+        await setCloudStorageConfig({
+          provider: 'notion',
+          supabaseUrl: cfg.supabaseUrl,
+          supabaseAnonKey: cfg.supabaseAnonKey,
+          notionGatewayUrl: gw,
+          notionWorkspaceHint: notionHint.trim() || undefined,
+          workspaceKey: r.verify.userId,
+        });
+        // Clear the visible key field after successful bind — session holds bearer
+        setNotionApiKey('');
+      } else if (!r.ok) {
+        // 401 path clears session inside gateway client; keep input so user can retry
+      }
+      setMsg(r.message);
+      await refreshStatus();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onClearNotionSession() {
+    clearNotionRuntimeSession();
+    setNotionApiKey('');
+    refreshSessionUi();
+    setMsg(t('storage.notionSessionMissing'));
   }
 
   async function run(action: () => Promise<{ ok: boolean; message: string }>) {
@@ -152,15 +267,114 @@ export function DataStorageSettings() {
       </label>
 
       {cfg.provider === 'notion' && (
-        <div className="muted small" style={{ marginTop: 8 }}>
-          <p>{t('storage.notionStub')}</p>
-          <p>{t('storage.notionDocs')}</p>
+        <div style={{ marginTop: 8 }}>
+          <p className="hint">{t('storage.notionExperimental')}</p>
+          <p className="muted small">{t('storage.notionMutualExclusion')}</p>
+          <p className="muted small">{t('storage.notionMediaNotice')}</p>
+          <p className="muted small">{t('storage.notionDocs')}</p>
+
+          <label>
+            {t('storage.notionGatewayUrl')}
+            <input
+              value={gatewayUrl}
+              disabled={busy}
+              placeholder="https://your-worker.example.workers.dev"
+              onChange={(e) => setGatewayUrl(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <p className="hint tiny">{t('storage.notionGatewayUrlHint')}</p>
+
+          <label>
+            {t('storage.notionWorkspaceHint')}
+            <input
+              value={notionHint}
+              disabled={busy}
+              onChange={(e) => setNotionHint(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+
+          <button
+            type="button"
+            className="btn block"
+            disabled={busy}
+            onClick={() => void saveNotionUrl()}
+          >
+            {t('storage.notionSaveUrl')}
+          </button>
+
+          <label>
+            {t('storage.notionApiKey')}
+            <input
+              type="password"
+              value={notionApiKey}
+              disabled={busy}
+              placeholder="Gateway API Key"
+              onChange={(e) => setNotionApiKey(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <p className="hint tiny">{t('storage.notionApiKeyHint')}</p>
+          <p className="muted small">
+            {sessionReady
+              ? t('storage.notionSessionActive', { key: sessionWorkspace })
+              : t('storage.notionSessionMissing')}
+          </p>
+          <p className="hint tiny">{t('storage.notionOriginHint')}</p>
+
+          <button
+            type="button"
+            className="btn block"
+            disabled={busy}
+            onClick={() => void onVerifyNotion()}
+          >
+            {t('storage.verify')}
+          </button>
+          <button
+            type="button"
+            className="btn ghost block"
+            disabled={busy}
+            onClick={onClearNotionSession}
+          >
+            {t('storage.notionClearSession')}
+          </button>
+          <button
+            type="button"
+            className="btn primary block"
+            disabled={busy || !sessionReady}
+            onClick={() => void run(bidirectionalSync)}
+          >
+            {t('storage.bidirectional')}
+          </button>
+          <button
+            type="button"
+            className="btn ghost block"
+            disabled={busy}
+            onClick={() => {
+              if (!confirm(t('storage.disconnectConfirm'))) return;
+              void run(disconnectCloud);
+            }}
+          >
+            {t('storage.disconnect')}
+          </button>
+          {outboxCount > 0 && outboxReadyCount >= 0 && (
+            <button
+              type="button"
+              className="btn block"
+              disabled={busy || !sessionReady}
+              onClick={() => void run(bidirectionalSync)}
+            >
+              {t('storage.retryOutbox')}
+            </button>
+          )}
         </div>
       )}
 
       {cfg.provider === 'supabase' && (
         <>
           <p className="muted small">{t('storage.supabaseSetup')}</p>
+          <p className="muted small">{t('storage.notionMutualExclusion')}</p>
           <label>
             {t('storage.supabaseUrl')}
             <input
@@ -329,3 +543,4 @@ function formatLocal(iso: string): string {
     return iso;
   }
 }
+
