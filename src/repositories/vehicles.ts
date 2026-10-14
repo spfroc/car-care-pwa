@@ -8,6 +8,7 @@ import {
   settleTx,
 } from '../sync/outbox';
 import { runSyncTxHook } from '../sync/txHooks';
+import { noteLocalHardDelete } from '../sync/notionMap';
 
 export async function listVehicles(): Promise<Vehicle[]> {
   const db = await getDB();
@@ -112,4 +113,11 @@ export async function deleteVehicle(id: string): Promise<void> {
       await putOutboxInTx(tx, item);
     }
   });
+  // D2-P5: persistent delete tombstone mapping (Notion)
+  if (syncVehicles) {
+    await noteLocalHardDelete('vehicles', id);
+    for (const r of rows) {
+      if (syncRecords) await noteLocalHardDelete('records', r.id);
+    }
+  }
 }

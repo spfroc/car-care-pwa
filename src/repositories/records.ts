@@ -7,6 +7,7 @@ import {
   settleTx,
   stampOutboxOwner,
 } from '../sync/outbox';
+import { noteLocalHardDelete } from '../sync/notionMap';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -116,6 +117,7 @@ export async function deleteRecord(id: string): Promise<void> {
     await tx.objectStore('records').delete(id);
     for (const item of outboxItems) await putOutboxInTx(tx, item);
   });
+  if (syncRecords) await noteLocalHardDelete('records', id);
 }
 
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {

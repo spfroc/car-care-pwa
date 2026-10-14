@@ -44,6 +44,16 @@ import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
 import { clearNotionRuntimeSession, getNotionRuntimeSession } from './notionSession';
+import {
+  applyCloudRowsToNotionMap,
+  markNotionMapTombstone,
+} from './notionMap';
+import {
+  discardParkedOutboxOwner,
+  evaluateWorkspaceSwitch,
+  getOrphanOutboxPanel,
+  type SwitchCorridorMode,
+} from './switchCorridor';
 import { SupabaseProvider } from './providers/supabase';
 import { assertCloudRowsValid } from './validatePayload';
 import { runSyncTxHook } from './txHooks';
@@ -398,33 +408,31 @@ async function countLocalBusinessRows(): Promise<number> {
   return v + r + s + m;
 }
 
-export async function guardUserSwitch(userId: string | undefined): Promise<AccountSwitchGuard> {
-  if (!userId) return { ok: true };
-  const meta = await getSyncMeta();
-  if (!meta.cloudUserId || meta.cloudUserId === userId) return { ok: true };
+export async function resolveSwitchCorridorMode(
+  providerId?: string | null,
+): Promise<SwitchCorridorMode> {
+  if (providerId === 'notion') return 'park';
+  const cfg = await getCloudStorageConfig();
+  return cfg.provider === 'notion' ? 'park' : 'block';
+}
 
-  const parked = await countOutboxForOwner(meta.cloudUserId);
+/**
+ * Account / workspace switch safety.
+ * Supabase (block): refuse switch while local business data or parked outbox exist.
+ * Notion (park · SW2): retain orphan Outbox by ownerUserId; rebind; never mis-push.
+ */
+export async function guardUserSwitch(
+  userId: string | undefined,
+  opts?: { mode?: SwitchCorridorMode; providerId?: string | null },
+): Promise<AccountSwitchGuard> {
+  const mode = opts?.mode ?? (await resolveSwitchCorridorMode(opts?.providerId));
   const localRows = await countLocalBusinessRows();
-  if (parked > 0 || localRows > 0) {
-    return {
-      ok: false,
-      message:
-        `已阻止账号切换：本机 IndexedDB 跨云端账号共享，当前绑定 ${meta.cloudUserId.slice(0, 8)}…，` +
-        `本地业务数据 ${localRows} 条、原账号待同步 ${parked} 条。` +
-        `请先导出 JSON 备份 → 断开云连接 →（如需换号）清空本地业务数据或用「从云端完全替换本地」恢复新账号数据，再连接新账号。` +
-        `切勿在未清空时把本地数据首次上传到另一账号。`,
-    };
-  }
-
-  // Empty local + no parked outbox: safe to rebind cursor only
-  await patchSyncMeta({
-    cloudUserId: userId,
-    serverCursor: undefined,
+  const result = await evaluateWorkspaceSwitch(userId, {
+    mode,
+    localBusinessRows: localRows,
   });
-  return {
-    ok: true,
-    note: `云端账号已切换（${meta.cloudUserId.slice(0, 8)}… → ${userId.slice(0, 8)}…）；本地无业务数据，已重置同步游标。`,
-  };
+  if (!result.ok) return { ok: false, message: result.message };
+  return { ok: true, note: result.note };
 }
 
 /**
@@ -450,7 +458,7 @@ async function ensureAuthMatchesBoundAccount(
     await patchSyncMeta({ status: 'error', lastError: msg });
     return { ok: false, message: msg, verify };
   }
-  const switchGuard = await guardUserSwitch(verify.userId);
+  const switchGuard = await guardUserSwitch(verify.userId, { providerId: provider.id });
   if (!switchGuard.ok) {
     await patchSyncMeta({ status: 'error', lastError: switchGuard.message });
     return { ok: false, message: switchGuard.message, verify };
@@ -468,12 +476,12 @@ export async function verifyConnection(): Promise<SyncActionResult> {
     if (verify.ok) {
       const metaBefore = await getSyncMeta();
       const prevUser = metaBefore.cloudUserId;
-      const switchGuard = await guardUserSwitch(verify.userId);
+      const switchGuard = await guardUserSwitch(verify.userId, { providerId: provider.id });
       if (!switchGuard.ok) {
         await patchSyncMeta({ status: 'error', lastError: switchGuard.message });
         return { ok: false, message: switchGuard.message, verify };
       }
-      // Only bind unbound ops on first connect / same user — never on account switch
+      // Only bind unbound ops on first connect / same user — never on account switch / park switch
       if (verify.userId && (!prevUser || prevUser === verify.userId)) {
         await rebindUnboundOutbox(verify.userId);
       }
@@ -943,6 +951,8 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
       // Successfully written — remove those opIds (newer mid-sync ops have different opIds)
       await removeOutboxItems(push.applied);
       pushed = push.applied.length;
+      // D2-P5: persist delete tombstones in sync_notion_map (Notion only)
+      await recordNotionMapAfterPush(provider, enriched, push.applied);
       // Per-op Gateway errors: never ACK; backoff / fail-closed via markOutboxFailure (§3.5.3)
       const errored = await settlePushErrors(push.errors);
       if (push.conflicts.length) {
@@ -1012,6 +1022,8 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     }
 
     throwIfSyncAborted(signal);
+    // D2-P5: refresh sync_notion_map from pull (alive + tombstone)
+    await recordNotionMapAfterPull(provider, snapshot.rows);
     // Best-effort: remove Storage objects for media tombstones just applied
     // (explicit tombstone — not speculative orphan GC)
     await removeStorageForDeletedMedia(provider, plan.toDelete);
@@ -1280,6 +1292,67 @@ export async function runOrphanMediaCleanup(
   });
 }
 
+async function recordNotionMapAfterPull(
+  provider: CloudProvider,
+  rows: CloudRow[],
+): Promise<void> {
+  if (provider.id !== 'notion') return;
+  const meta = await getSyncMeta();
+  const wk =
+    meta.cloudUserId ||
+    getNotionRuntimeSession()?.workspaceKey ||
+    (await getCloudStorageConfig()).workspaceKey;
+  if (!wk) return;
+  try {
+    await applyCloudRowsToNotionMap(rows, wk);
+  } catch {
+    /* map is best-effort hardening — never fail sync */
+  }
+}
+
+async function recordNotionMapAfterPush(
+  provider: CloudProvider,
+  ops: Array<{ opId: string; entity: string; entityId: string; op: string }>,
+  applied: string[],
+): Promise<void> {
+  if (provider.id !== 'notion') return;
+  const appliedSet = new Set(applied);
+  const meta = await getSyncMeta();
+  const wk =
+    meta.cloudUserId ||
+    getNotionRuntimeSession()?.workspaceKey ||
+    (await getCloudStorageConfig()).workspaceKey;
+  if (!wk) return;
+  try {
+    for (const op of ops) {
+      if (!appliedSet.has(op.opId)) continue;
+      if (op.op === 'delete') {
+        await markNotionMapTombstone({
+          entity: op.entity,
+          appEntityId: op.entityId,
+          workspaceKey: wk,
+        });
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** D2-P5 SW3: explicit discard of a parked (orphan) owner queue. */
+export async function discardOrphanOutboxOwner(input: {
+  ownerUserId: string;
+  confirmToken: string;
+}): Promise<SyncActionResult> {
+  const r = await discardParkedOutboxOwner(input);
+  return { ok: r.ok, message: r.message, pushed: r.removed };
+}
+
+/** D2-P5: orphan Outbox panel data for settings UI. */
+export async function getSwitchCorridorPanel() {
+  return getOrphanOutboxPanel();
+}
+
 export async function disconnectCloud(): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   const metaBefore = await getSyncMeta();
@@ -1314,6 +1387,8 @@ export async function getSyncStatusSummary(): Promise<{
   outboxCount: number;
   outboxReadyCount: number;
   openConflictCount: number;
+  orphanOutboxCount: number;
+  orphanOwners: Array<{ ownerUserId: string; count: number }>;
   config: CloudStorageConfig;
 }> {
   await recoverStaleSyncingStatus();
@@ -1324,11 +1399,14 @@ export async function getSyncStatusSummary(): Promise<{
     : await listOutbox();
   const ready = await listReadyOutbox();
   const openConflictCount = await countOpenConflicts();
+  const panel = await getOrphanOutboxPanel();
   return {
     meta,
     outboxCount: outbox.length,
     outboxReadyCount: ready.length,
     openConflictCount,
+    orphanOutboxCount: panel.orphanTotal,
+    orphanOwners: panel.orphans,
     config,
   };
 }

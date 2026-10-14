@@ -2,6 +2,7 @@ import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
 import { getCloudStorageConfig } from './config';
 import { hasValidNotionRuntimeSession } from './notionSession';
+import { shouldBlockBlindRecreate } from './notionMap';
 import { listOpenConflictKeys } from './conflictStore';
 import { dedupeOutbox } from './merge';
 import {
@@ -171,6 +172,51 @@ export async function listOutboxForUser(cloudUserId: string | undefined): Promis
 export async function countOutboxForOwner(ownerUserId: string): Promise<number> {
   const all = await listOutbox();
   return all.filter((o) => (o.ownerUserId ?? OUTBOX_UNBOUND) === ownerUserId).length;
+}
+
+/**
+ * Ops whose owner is set and differs from the current workspaceKey / cloudUserId.
+ * These must never be flushed while bound to another owner (SW2 isolation).
+ */
+export async function listOrphanOutbox(currentOwnerId: string | undefined): Promise<SyncOutboxItem[]> {
+  const all = await listOutbox();
+  return all.filter((o) => {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    if (owner === OUTBOX_UNBOUND) return false;
+    if (!currentOwnerId) return true;
+    return owner !== currentOwnerId;
+  });
+}
+
+export async function countOrphanOutbox(currentOwnerId: string | undefined): Promise<number> {
+  return (await listOrphanOutbox(currentOwnerId)).length;
+}
+
+/** Summarize orphan queues by ownerUserId for the minimal switch panel. */
+export async function summarizeOrphanOutbox(
+  currentOwnerId: string | undefined,
+): Promise<Array<{ ownerUserId: string; count: number }>> {
+  const orphans = await listOrphanOutbox(currentOwnerId);
+  const map = new Map<string, number>();
+  for (const o of orphans) {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    map.set(owner, (map.get(owner) ?? 0) + 1);
+  }
+  return [...map.entries()].map(([ownerUserId, count]) => ({ ownerUserId, count }));
+}
+
+/**
+ * Explicit discard of one parked owner's queue (SW3).
+ * Exact owner match only — never clears unbound or other owners.
+ * Returns 0 if ownerUserId is empty/unbound (refuse accidental wipe).
+ */
+export async function discardOutboxForExactOwner(ownerUserId: string): Promise<number> {
+  const owner = ownerUserId?.trim();
+  if (!owner || owner === OUTBOX_UNBOUND) return 0;
+  const all = await listOutbox();
+  const mine = all.filter((o) => (o.ownerUserId ?? OUTBOX_UNBOUND) === owner);
+  await removeOutboxItems(mine.map((o) => o.opId));
+  return mine.length;
 }
 
 export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
@@ -383,6 +429,17 @@ export async function enqueueSyncOp(input: {
   mutatedAt?: string;
 }): Promise<void> {
   if (!(await isCloudEnqueueEnabled(input.entity))) return;
+  // D2-P5: refuse upsert that would blindly recreate a tombstoned Notion entity
+  if (input.op === 'upsert') {
+    const meta = await getSyncMeta();
+    const cfg = await getCloudStorageConfig();
+    if (cfg.provider === 'notion') {
+      const wk = meta.cloudUserId ?? cfg.workspaceKey;
+      if (await shouldBlockBlindRecreate(input.entity, input.entityId, wk)) {
+        return;
+      }
+    }
+  }
   await putOutboxItem(makeOutboxItem(input));
 }
 
