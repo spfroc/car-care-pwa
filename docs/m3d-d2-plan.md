@@ -4,7 +4,9 @@
 > **前置**：D0 设计通过 · D1 Worker Gateway 原型 PR #9 已 merge（`a79db99`）· M1 Trash live **PASS**  
 > **权威冻结**：[`m3d-mvp-spec.md`](./m3d-mvp-spec.md) §0/§0.1 · [`m3d-architecture.md`](./m3d-architecture.md) · [`m3d-implementation-spec.md`](./m3d-implementation-spec.md) · [`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md) · D1 风险报告 [`m3d-d1-risk-report.md`](./m3d-d1-risk-report.md)  
 > **本文件职责**：D2 模块边界、与 D1 Worker 契约、验收矩阵、风险、建议 PR 切分与硬门禁。  
-> **冲突时**：以 mvp §0.1 / architecture 为准；本规划不得推翻 O1–O6 / S1–S3 / P1–P4。
+> **产品配套**：[`m3d-d2-product.md`](./m3d-d2-product.md)（MVP 用户故事 US-D2-1..7、产品非目标、验收 A–E）；冲突时以本文件硬门禁 / PR 切片为准。  
+> **冲突时**：以 mvp §0.1 / architecture 为准；本规划不得推翻 O1–O6 / S1–S3 / P1–P4。  
+> **D1 vs D2**：D1 M1 live Trash 证据已 **PASS**（Worker 原型）；D2 仍须**自己的**真实 Notion 工作区集成验收（mock Gateway 仅单测；详见 product §0）。
 
 ---
 
@@ -32,12 +34,17 @@
 
 ### 1.2 非目标（D2 不做）
 
+> 与产品经理清单一致（详见 [`m3d-d2-product.md`](./m3d-d2-product.md) §2）。
+
 - stations / settings / media / learning 的 Notion 同步  
-- 媒体二进制上云；Durable Object；JWT `/auth/*`（D4）  
-- 应用方集中托管 Token / Public OAuth  
-- 字段级三路合并；与 Supabase 双写  
+- 图片 / 媒体二进制同步（上云）；Durable Object；JWT `/auth/*`（D4）  
+- 前端存 secrets（Token / 长期 Gateway Key）；应用方集中托管 Token / Public OAuth  
+- 同时启用 Supabase + Notion（双写）  
+- 正式多租户 Gateway（永久否决 · BYO）  
+- merge 后自动部署测试站/生产站（merge ≠ 部署）  
+- 字段级三路合并；强跨 Worker 一致性  
 - 部署正式 Gateway 或生产 PWA Notion 默认开启  
-- 用 mock Notion **替代** H5 真机验收（单测 mock Gateway **可以**，且应先于真机）
+- 用 mock Notion **替代** H5 真机验收（单测 mock Gateway **可以**，且应先于真机；**仅 mock 绿 ≠ D2 完成**）
 
 ### 1.3 相对 D1 的增量
 
@@ -195,6 +202,18 @@
 | D3.6 | 首次双非空确认 | D3 |
 | DEL* 全矩阵 | 多设备删除边角 | D2 真机至少 ★D/★R；多设备 DEL → D3 |
 
+### 4.4 产品验收 A–E（摘要）
+
+完整文案见 [`m3d-d2-product.md`](./m3d-d2-product.md) §3：
+
+| | 含义 |
+|---|------|
+| **A** | 独立 feature PR；审查后才 merge；分阶段单测→真 Token+测试工作区 E2E；**mock-only ≠ D2 完成** |
+| **B** | PWA 功能（US-D2-1..5、US-D2-7） |
+| **C** | 安全 + 文案（US-D2-6/7） |
+| **D** | 最小真机 E2E 八步（真实 Notion 工作区） |
+| **E** | DoD：单测 + 真 Token E2E 证据 + 独立审查；**≠ 生产开放** |
+
 ---
 
 ## 5. 风险（D2 特有 / 继承）
@@ -219,7 +238,7 @@
 
 | PR | 名称建议 | 内容 | 出口门禁 | 禁区 |
 |----|----------|------|----------|------|
-| **D2-P0** | `docs(m3d): D2 plan` | 本文件 + roadmap 一行「D2 规划中」 | 架构师签收 | 无 `src` |
+| **D2-P0** | `docs(m3d): D2 plan` | 本文件 + [`m3d-d2-product.md`](./m3d-d2-product.md)（US-D2-1..7 / 验收 A–E）+ roadmap | 架构师 + 产品签收 | 无 `src` |
 | **D2-P1** | `test(m3d-d2): NotionGatewayClient + Provider unit` | 客户端 + Provider 骨架；**mock Gateway**；enqueue/媒体/错误码单测 | G3 · D2.1 · U1–U3 · D2.4a | 不接真 Notion；不改设置默认 |
 | **D2-P2** | `feat(m3d-d2): experimental settings + session` | 实验 UI：URL、会话 Key、互斥、媒体文案；冷启动重输 | D2.7 · D2.8 · 文案扫描 | 不默认开启；不部署 |
 | **D2-P3** | `feat(m3d-d2): live sync vehicles/records` | 真机接线；outbox flush；pull/merge；artifacts `live-notion/` | ★C/U/D/R/T · D2.2 · D2.3 · D2.5 · D2.6 · G1/G4 | 无媒体上云；无正式站部署 |
@@ -227,7 +246,7 @@
 | **D2-P5**（可选） | `feat(m3d-d2): sync_notion_map + switch corridor` | map store；旧 Outbox 面板 SW* | SW1–SW4 或明确延期 D3 | 默认不清 Outbox |
 
 **推荐开工顺序**：P0（本 PR）→ P1 → P2 → P3 → P4 →（P5）。  
-**主 Bot / 产品经理**：为 P2–P4 补用户故事与验收标准文案（与本矩阵对齐，不另造冲突语义）。
+**产品经理**：用户故事与验收 A–E 已写入 [`m3d-d2-product.md`](./m3d-d2-product.md)（与本矩阵对齐，不另造冲突语义）；实现 PR 按 US-D2-1..7 对照 §4 / product §4 映射验收。
 
 ---
 
