@@ -22,6 +22,17 @@ function looksLikeServiceRole(key: string): boolean {
   return false;
 }
 
+function assertHttpsUrl(raw: string, label: string): string {
+  try {
+    const u = new URL(raw.trim());
+    if (u.protocol !== 'https:') throw new Error(`${label} 必须使用 https`);
+    return u.toString().replace(/\/+$/, '');
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('https')) throw e;
+    throw new Error(`${label} 无效`);
+  }
+}
+
 /** Direct IDB read — avoids circular import with repositories/settings ↔ outbox. */
 export async function getCloudStorageConfig(): Promise<CloudStorageConfig> {
   const row = await (await getDB()).get('settings', KEY);
@@ -31,8 +42,10 @@ export async function getCloudStorageConfig(): Promise<CloudStorageConfig> {
     provider: (v.provider as CloudProviderId) ?? 'none',
     supabaseUrl: typeof v.supabaseUrl === 'string' ? v.supabaseUrl : undefined,
     supabaseAnonKey: typeof v.supabaseAnonKey === 'string' ? v.supabaseAnonKey : undefined,
+    notionGatewayUrl: typeof v.notionGatewayUrl === 'string' ? v.notionGatewayUrl : undefined,
     notionWorkspaceHint:
       typeof v.notionWorkspaceHint === 'string' ? v.notionWorkspaceHint : undefined,
+    workspaceKey: typeof v.workspaceKey === 'string' ? v.workspaceKey : undefined,
   };
 }
 
@@ -53,11 +66,18 @@ export async function setCloudStorageConfig(cfg: CloudStorageConfig): Promise<vo
       throw new Error('Supabase URL 无效');
     }
   }
+  let notionGatewayUrl: string | undefined;
+  if (cfg.notionGatewayUrl?.trim()) {
+    notionGatewayUrl = assertHttpsUrl(cfg.notionGatewayUrl, 'Notion Gateway URL');
+  }
+  // Whitelist only — never persist bearer / Integration Token / JWT (§3.5.6)
   const value: CloudStorageConfig = {
     provider: cfg.provider,
     supabaseUrl: cfg.supabaseUrl?.trim() || undefined,
     supabaseAnonKey: anon || undefined,
+    notionGatewayUrl,
     notionWorkspaceHint: cfg.notionWorkspaceHint?.trim() || undefined,
+    workspaceKey: cfg.workspaceKey?.trim() || undefined,
   };
   const row: SettingRow = { key: KEY, value, updatedAt: nowISO() };
   await (await getDB()).put('settings', row);

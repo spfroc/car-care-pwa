@@ -21,7 +21,7 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 
 export async function putVehicle(v: Vehicle): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled();
+  const sync = await isCloudEnqueueEnabled('vehicles');
   const outboxItem = sync
     ? await stampOutboxOwner(
         makeOutboxItem({
@@ -46,7 +46,7 @@ export async function putVehicle(v: Vehicle): Promise<void> {
 
 /**
  * Atomically delete a vehicle, all its records, and media that are not shared,
- * plus matching sync_outbox tombstones when cloud is enabled.
+ * plus matching sync_outbox tombstones when cloud is enabled for that entity.
  */
 export async function deleteVehicle(id: string): Promise<void> {
   const db = await getDB();
@@ -74,20 +74,29 @@ export async function deleteVehicle(id: string): Promise<void> {
     }
   }
 
-  const sync = await isCloudEnqueueEnabled();
+  const syncVehicles = await isCloudEnqueueEnabled('vehicles');
+  const syncRecords = await isCloudEnqueueEnabled('records');
+  const syncMedia = await isCloudEnqueueEnabled('media');
+  const syncAny = syncVehicles || syncRecords || syncMedia;
   const mutatedAt = new Date().toISOString();
-  const outboxItems = sync
+  const outboxItems = syncAny
     ? await Promise.all([
-        stampOutboxOwner(makeOutboxItem({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt })),
-        ...rows.map((r) =>
-          stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt })),
-        ),
-        ...[...mediaToDelete].map((mid) =>
-          stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
-        ),
+        ...(syncVehicles
+          ? [stampOutboxOwner(makeOutboxItem({ entity: 'vehicles', entityId: id, op: 'delete', mutatedAt }))]
+          : []),
+        ...(syncRecords
+          ? rows.map((r) =>
+              stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: r.id, op: 'delete', mutatedAt })),
+            )
+          : []),
+        ...(syncMedia
+          ? [...mediaToDelete].map((mid) =>
+              stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
+            )
+          : []),
       ])
     : [];
-  const stores = sync
+  const stores = syncAny
     ? (['vehicles', 'records', 'media', 'sync_outbox'] as const)
     : (['vehicles', 'records', 'media'] as const);
   const tx = db.transaction(stores, 'readwrite');

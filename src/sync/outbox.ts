@@ -1,6 +1,7 @@
 import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
 import { getCloudStorageConfig } from './config';
+import { hasValidNotionRuntimeSession } from './notionSession';
 import { listOpenConflictKeys } from './conflictStore';
 import { dedupeOutbox } from './merge';
 import {
@@ -25,10 +26,23 @@ export function nextRetryDelayMs(attempts: number): number {
   return base + jitter;
 }
 
-export async function isCloudEnqueueEnabled(): Promise<boolean> {
+/**
+ * Whether local writes should enqueue cloud outbox ops.
+ * Pass `entity` so Notion can refuse media/stations/settings (D2.1 / §3.5.5).
+ */
+export async function isCloudEnqueueEnabled(entity?: SyncEntity): Promise<boolean> {
   const cfg = await getCloudStorageConfig();
-  if (cfg.provider !== 'supabase') return false;
-  return Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
+  if (cfg.provider === 'supabase') {
+    return Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
+  }
+  if (cfg.provider === 'notion') {
+    // MVP: vehicles + records only; media never leaves the device via Notion Gateway
+    if (entity === 'media' || entity === 'stations' || entity === 'settings') return false;
+    if (!cfg.notionGatewayUrl?.trim()) return false;
+    // URL alone is insufficient — in-memory session must be valid (§3.5.5 / D2.1)
+    return hasValidNotionRuntimeSession();
+  }
+  return false;
 }
 
 export function makeOutboxItem(input: {
@@ -368,7 +382,7 @@ export async function enqueueSyncOp(input: {
   payload?: unknown;
   mutatedAt?: string;
 }): Promise<void> {
-  if (!(await isCloudEnqueueEnabled())) return;
+  if (!(await isCloudEnqueueEnabled(input.entity))) return;
   await putOutboxItem(makeOutboxItem(input));
 }
 

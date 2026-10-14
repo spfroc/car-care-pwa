@@ -33,7 +33,7 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 
 export async function putRecord(r: CareRecord): Promise<void> {
   const db = await getDB();
-  const sync = await isCloudEnqueueEnabled();
+  const sync = await isCloudEnqueueEnabled('records');
   const outboxItem = sync
     ? await stampOutboxOwner(
         makeOutboxItem({
@@ -88,18 +88,24 @@ export async function deleteRecord(id: string): Promise<void> {
 
   const mediaIds = [...(rec.mediaIds ?? [])];
   const stillReferenced = await mediaStillReferenced(mediaIds, id);
-  const sync = await isCloudEnqueueEnabled();
+  const syncRecords = await isCloudEnqueueEnabled('records');
+  const syncMedia = await isCloudEnqueueEnabled('media');
+  const syncAny = syncRecords || syncMedia;
   const orphanMedia = mediaIds.filter((mid) => !stillReferenced.has(mid));
   const mutatedAt = new Date().toISOString();
-  const outboxItems = sync
+  const outboxItems = syncAny
     ? await Promise.all([
-        stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt })),
-        ...orphanMedia.map((mid) =>
-          stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
-        ),
+        ...(syncRecords
+          ? [stampOutboxOwner(makeOutboxItem({ entity: 'records', entityId: id, op: 'delete', mutatedAt }))]
+          : []),
+        ...(syncMedia
+          ? orphanMedia.map((mid) =>
+              stampOutboxOwner(makeOutboxItem({ entity: 'media', entityId: mid, op: 'delete', mutatedAt })),
+            )
+          : []),
       ])
     : [];
-  const stores = sync
+  const stores = syncAny
     ? (['records', 'media', 'sync_outbox'] as const)
     : (['records', 'media'] as const);
   const tx = db.transaction(stores, 'readwrite');
