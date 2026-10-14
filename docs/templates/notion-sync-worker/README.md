@@ -116,4 +116,4 @@ npm test
 
 - Worker：`car-care-notion-sync-d1-test` · `https://car-care-notion-sync-d1-test.spf-roc.workers.dev`  
 - **非**正式服务；未经独立审查不得当生产使用  
-- `NOTION_TOKEN` 在完成手工 Integration 前为缺失态（`/verify` → 503）
+- 已配置 `NOTION_TOKEN` 时 `/verify` 返回 200；**勿**把 `*-d1-test` Worker 当生产使用
