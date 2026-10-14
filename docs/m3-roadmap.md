@@ -43,3 +43,6 @@ M2 ──► M3-A ──► M3-B ──► M3-C
 - **实现**：`feature/m3c-conflict-ui`（本阶段）；**禁止 merge 后自动部署**；不改正式 Supabase。  
 - **30 天最近删除恢复**：不在本 MVP；标为 M3-C follow-up（M3-C.1）。
 
+## M3-D D2
+
+- 规划中：见 [`m3d-d2-plan.md`](./m3d-d2-plan.md)（2026-10-14；审查前不合并不部署）。
