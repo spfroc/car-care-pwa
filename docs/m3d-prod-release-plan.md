@@ -138,6 +138,9 @@ id = "<PROD_KV_NAMESPACE_ID>"
 
 **CORS 强制项**：`https://car.adobesun.com` 必须在列表中。实现为逗号分隔精确匹配（见 `src/cors.ts`）；未匹配 Origin → 无 ACAO / 业务上 403。
 
+> **若正式 Worker 的 `ALLOWED_ORIGIN` 同时含 `https://car-test.adobesun.com`**：CORS 放宽**不等于**可与 d1-test 共用密钥。  
+> **醒目强调**：`NOTION_TOKEN` / `GATEWAY_API_KEY` / KV / DS **仍须与 d1-test 严格分离**；staging Origin 仅表示浏览器可调正式 Gateway，**禁止**把 d1-test 的 Key 填进生产会话或反之。
+
 ### 2.6 Notion Integration（正式）
 
 1. 在**生产** Notion workspace 创建 Internal Integration（勿复用测试 Integration）。  
@@ -156,25 +159,52 @@ id = "<PROD_KV_NAMESPACE_ID>"
 
 ### 2.8 部署步骤（授权后执行 · 本文档不执行）
 
+> **强制：独立生产配置目录**  
+> **禁止**在 `docs/templates/notion-sync-worker`（或任何已入库、默认值为 d1-test 的模板目录）**就地**改 `name` / 绑定后 `wrangler deploy`。  
+> 就地改名会污染已入库的 d1-test 默认值，并极易把测试 Worker 当生产部署。  
+> 生产配置必须落在：**仓外目录**，或 **gitignore 路径**（例：`docs/templates/notion-sync-worker-prod-local/`，且该路径已在 `.gitignore`）。
+
 ```bash
 # 0) 仅在用户明确授权「部署正式 Gateway」后进行
-cd docs/templates/notion-sync-worker   # 或独立 fork 仓库
-# 1) 复制为生产配置目录 / 改 name — 勿改坏 d1-test 账号下的测试 Worker
+# 1) 从模板复制到独立生产配置目录（仓外或 gitignore 路径）— 禁止就地改模板
+PROD_GW_DIR="${PROD_GW_DIR:?set to out-of-repo or gitignored path}"
+cp -a docs/templates/notion-sync-worker/. "$PROD_GW_DIR/"
+cd "$PROD_GW_DIR"
+# 2) 仅在本目录编辑 wrangler.toml：name / ALLOWED_ORIGIN / DS ids / KV id
+#    （模板目录 docs/templates/notion-sync-worker 保持 d1-test 默认值不动）
 npm install
 npx wrangler kv namespace create car-care-notion-tombstone-prod
-# 2) 编辑正式 wrangler.toml：name / ALLOWED_ORIGIN / DS ids / KV id
 npx wrangler secret put NOTION_TOKEN      # 粘贴正式 Token
 npx wrangler secret put GATEWAY_API_KEY   # 粘贴新 Key
-npx wrangler deploy
-# 3) 验证（密钥来自本地 env，不写文件进仓）
+
+# 3) deploy 前强制核对：打印 name，确认 ≠ *-d1-test 且 ≠ 任何测试 Worker 名
+echo "=== pre-deploy Worker name check ==="
+grep -E '^name\s*=' wrangler.toml
+NAME="$(grep -E '^name\s*=' wrangler.toml | head -1 | sed -E 's/^name\s*=\s*"?([^"]+)"?/\1/')"
+echo "parsed name=[$NAME]"
+case "$NAME" in
+  ""|*d1-test*|*d1_test*)
+    echo "REFUSE: name empty or looks like d1-test — abort deploy"; exit 1 ;;
+  car-care-notion-sync-d1-test|*-test|*-staging|*test*)
+    # 生产名禁止测试角色；若审定名含 test 字样须人工复核后改此 case
+    echo "REFUSE: name=[$NAME] matches a test Worker pattern — abort deploy"; exit 1 ;;
+esac
+# 再人工确认：打印值必须等于审定生产名（例 car-care-notion-sync），且 ≠ 任何已知测试 Worker
+npx wrangler whoami   # 确认 Cloudflare 账号无误（见检查表 A）
+npx wrangler deploy   # 仅当上面 name 核对通过后执行
+
+# 4) 验证（密钥来自本地 env，不写文件进仓）
 curl -sS -H "Authorization: Bearer $GATEWAY_API_KEY" \
   "https://car-care-notion-sync.<account>.workers.dev/health"
 curl -sS -H "Authorization: Bearer $GATEWAY_API_KEY" \
   "https://car-care-notion-sync.<account>.workers.dev/verify"
-# 4) CORS 探针：Origin: https://car.adobesun.com 须 ACAO 回显；evil Origin 不得回显
+# 5) CORS 探针：Origin: https://car.adobesun.com 须 ACAO 回显；evil Origin 不得回显
 ```
 
-**禁止**：对 d1-test 执行「改 ALLOWED_ORIGIN 含 car.adobesun.com 然后宣布生产就绪」。
+**禁止**：
+- 在模板目录就地改 `wrangler.toml` 后 deploy  
+- 对 d1-test 执行「改 ALLOWED_ORIGIN 含 car.adobesun.com 然后宣布生产就绪」  
+- 在 `wrangler deploy` **前**未打印并核对 `name` ≠ `*-d1-test`（及 ≠ 任何测试 Worker 名）
 
 ### 2.9 密钥轮换
 
@@ -185,6 +215,8 @@ curl -sS -H "Authorization: Bearer $GATEWAY_API_KEY" \
 | 3 | 若已启用 D4 JWT：轮换后既有 JWT **全部失效**（须配套 revoke/签发密钥轮换） |
 | 4 | Notion Token 泄露：在 Notion 撤销 Integration → 新建 → `secret put NOTION_TOKEN`；旧 Token 失效 |
 | 5 | 轮换记录只写运维笔记（时间、操作者、原因）；**不**写密钥值 |
+
+**单用户 MVP 已知代价（轮换无双 Key 窗口）**：当前 Gateway 仅支持单一 `GATEWAY_API_KEY`（覆盖即失效旧值），**无**双 Key 并行宽限期。轮换瞬间，所有已打开会话（含多设备）会短暂**全断**直至用户重输新 Key——此为已知可接受代价，非事故。若未来要零中断轮换，须另设计双 Key / 宽限窗口（超出本 MVP）。
 
 验收对齐：D4.3（[`m3d-risks-and-acceptance.md`](./m3d-risks-and-acceptance.md) §2.5）。
 
@@ -311,7 +343,7 @@ nginx -t
 
 | ID | 风险 | 严重度 | 现状 | 发布含义 |
 |----|------|--------|------|----------|
-| **RR-SW** | **SW1–SW4 缺少真实双工作区验收** | **高** | Staging 报告明确 **SKIP (unit-only)**；仅 `notion-d2-p5.test.ts` 19/19 | 生产发布前应补：两个真实 Notion workspace + 正式/预发 Gateway 的断开/切换/丢弃/切回 flush；**或**用户书面接受「切换走廊仅有单测、无双库 E2E」 |
+| **RR-SW** | **SW1–SW4 缺少真实双工作区验收** | **高** | Staging 报告明确 **SKIP (unit-only)**；仅 `notion-d2-p5.test.ts` 19/19 | 生产发布前应补：两个真实 Notion workspace + 正式/预发 Gateway 的断开/切换/丢弃/切回 flush；**或**用户按 §8 G5 模板**原样确认**「SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险」 |
 | **RR-IDB** | **离线 IDB 探针异常** | 中（非阻断同步主路径） | car-test E2E：`offline.idb_probe` → `IDB.databases` **SecurityError**（离线 context）；**未**清用户 IDB；双向同步 / reonline 仍 PASS | 属探针/自动化环境限制嫌疑；生产前建议在真实浏览器离线场景手工确认 IDB 读写；**不得**为「修探针」而清用户 Outbox |
 | R2 | Gateway 无原子 LWW | 高（已知架构） | 尽力先读后写 + M3-C | 产品承诺不得写「强一致」 |
 | R10 | 双开撕裂 | 高 | 互斥已实现 | 保持单一 provider |
@@ -329,8 +361,16 @@ nginx -t
 | G2 Gateway | 正式 Worker 独立资源；CORS 含 `https://car.adobesun.com`；verify PASS；**非** d1-test |
 | G3 密钥 | Secrets 仅 CF；扫描 PR/仓无 Token |
 | G4 前端 | tip 批准；测试绿；生产备份完成 |
-| G5 风险 | RR-SW / RR-IDB 已披露；补验完成 **或** 用户接受 |
+| G5 风险 | RR-SW / RR-IDB 已披露；补验完成 **或** 用户按下方模板**原样确认**接受 |
 | G6 授权 | 用户明示「部署 car.adobesun.com」+（若同批）「部署正式 Gateway」 |
+
+**G5「带伤上线」书面接受模板（须原样确认，不可改写后算接受）**
+
+用户须在授权指令中**原样**包含（可另附签名/日期）以下短句，否则「用户接受」**不可执行**、G5 = No-Go：
+
+> 我确认：SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险。同意在此条件下带伤上线。
+
+（英译备查，中文原句为准：*I confirm SW1–SW4 have no real dual-workspace E2E; I accept switch-corridor unit-test-only risk; I agree to ship with these known gaps.*）
 
 任一 No-Go → **停止**；不得用 d1-test 顶替 G2。
 

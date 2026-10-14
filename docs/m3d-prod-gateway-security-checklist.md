@@ -21,6 +21,8 @@
 | A6 | 生产 Integration **未** Share 到测试库；测试 Integration **未** Share 到生产库 | ☐ |
 | A7 | `GATEWAY_API_KEY` 为新熵；与 d1-test / 任何已泄露演示 Key 不同 | ☐ |
 | A8 | `GATEWAY_VERSION` 使用生产串（如 `m3d-prod-1.0.0`），便于与 `m3d-d1-0.1.1` 区分 | ☐ |
+| A9 | **deploy 前**：在**独立生产配置目录**（仓外或 gitignore；**非** `docs/templates/notion-sync-worker` 就地）执行 `npx wrangler whoami`，确认账号无误 | ☐ |
+| A10 | **deploy 前**：打印并核对 `wrangler.toml` 的 `name` = 审定生产名，且 **≠** `*-d1-test`、**≠** `car-care-notion-sync-d1-test`、**≠** 任何测试 Worker 名后，才执行 `wrangler deploy` | ☐ |
 
 ---
 
@@ -33,7 +35,7 @@
 | B3 | 仓库 / PR / artifacts / issue 评论中 **无** Token、API Key、`.dev.vars` 真值 | ☐ |
 | B4 | `wrangler.toml`（若提交）无 secret 字段；生产 DS/KV 若不宜公开可留本地覆盖 | ☐ |
 | B5 | 健康/错误响应抽样：无 Token / Key 回显 | ☐ |
-| B6 | 密钥轮换SOP已理解：覆盖 secret → 旧 Key 401 → 用户重输（见总案 §2.9） | ☐ |
+| B6 | 密钥轮换SOP已理解：覆盖 secret → 旧 Key 401 → 用户重输（见总案 §2.9）；单用户 MVP **无双 Key 窗口**，多设备会短暂全断会话（已知代价） | ☐ |
 | B7 | 密码管理器已保存生产 Key/Token 备份位置（离线安全介质）；**不**存 git | ☐ |
 
 ---
@@ -49,6 +51,7 @@
 | C5 | 无 Bearer / 错 Bearer → **401**（`/health` `/verify` `/sync/*`） | ☐ |
 | C6 | 仅 HTTPS 对外（workers.dev 或自定义域）；无 HTTP 明文生产入口 | ☐ |
 | C7 | （可选）若正式 Worker 同时服务 staging：列表可含 `https://car-test.adobesun.com`；仍禁止 `*` | ☐ |
+| C8 | **醒目**：若 CORS 同时含 car-test，**密钥仍须与 d1-test 严格分离**（Token / Gateway Key / KV / DS 均不可与 d1-test 共用）；CORS 放宽 ≠ 可混用测试密钥 | ☐ |
 
 ---
 
@@ -97,17 +100,31 @@
 | G1 | **SW1–SW4 缺少真实双工作区验收**（仅 unit）；不得宣称双工作区 E2E PASS | ☐ |
 | G2 | **离线 IDB 探针异常**（`IDB.databases` SecurityError @ car-test）；主同步路径曾 PASS，但仍须手工关注 | ☐ |
 | G3 | Gateway LWW 弱于 Supabase RPC；竞态靠 M3-C，不承诺强一致 | ☐ |
-| G4 | 未接受 G1/G2 前强行生产 → **No-Go**（除非用户书面接受带伤上线） | ☐ |
+| G4 | 未接受 G1/G2 前强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
+
+**G4「带伤上线」书面接受模板（须原样确认）**
+
+勾选 G4「用户接受」**仅当**用户授权原文中含以下短句（一字不改；缺任一项则 G4 不可勾、视为未接受）：
+
+> 我确认：SW1–SW4 无真实双工作区 E2E；接受切换走廊仅单测风险。同意在此条件下带伤上线。
+
+用户确认原文粘贴处：
+
+> _______________________________________________________________
 
 ---
 
 ## H. 明确禁止（违规即失败）
 
 - ❌ 将 d1-test Worker 填入生产 PWA Gateway URL  
+- ❌ 在 `docs/templates/notion-sync-worker`（已入库 d1-test 默认值）就地改名后 `wrangler deploy`  
+- ❌ `wrangler deploy` 前未打印核对 `name` ≠ `*-d1-test` / 测试 Worker 名  
 - ❌ 把测试 DS/KV/Token 复制进正式 `wrangler.toml` 并 deploy  
+- ❌ 正式 Worker CORS 含 car-test 时仍与 d1-test **共用**密钥  
 - ❌ 密钥进 git / PR / 聊天明文  
 - ❌ 为「修 IDB 探针」清除用户 Outbox / IndexedDB  
-- ❌ 本检查表勾选完成 ≠ 已获生产部署授权（仍须用户明示）
+- ❌ 本检查表勾选完成 ≠ 已获生产部署授权（仍须用户明示）  
+- ❌ 改写 G4 接受短句后仍勾「用户接受」（必须原样确认）
 
 ---
 
