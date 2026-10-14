@@ -34,6 +34,54 @@ export function formatBytes(n: number): string {
 
 export { WARN_BYTES };
 
+/** Keys that must never appear in car-care-export (C3 / H8). */
+const EXPORT_SECRET_KEYS = new Set([
+  'bearer',
+  'apiKey',
+  'gatewayApiKey',
+  'gateway_api_key',
+  'GATEWAY_API_KEY',
+  'notionToken',
+  'notion_token',
+  'NOTION_TOKEN',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'jwt',
+  'password',
+  'secret',
+]);
+
+/**
+ * Strip session secrets from settings before JSON export.
+ * Whitelists CloudStorageConfig fields; drops any accidental secret keys (C3 / §3.5.6).
+ */
+export function sanitizeSettingsForExport(
+  settings: SettingRow[],
+): SettingRow[] {
+  return settings.map((row) => {
+    if (row.key !== 'cloudStorage' || !row.value || typeof row.value !== 'object') {
+      return row;
+    }
+    const v = row.value as Record<string, unknown>;
+    const cleaned: Record<string, unknown> = {};
+    if (typeof v.provider === 'string') cleaned.provider = v.provider;
+    if (typeof v.supabaseUrl === 'string') cleaned.supabaseUrl = v.supabaseUrl;
+    if (typeof v.supabaseAnonKey === 'string') cleaned.supabaseAnonKey = v.supabaseAnonKey;
+    if (typeof v.notionGatewayUrl === 'string') cleaned.notionGatewayUrl = v.notionGatewayUrl;
+    if (typeof v.notionWorkspaceHint === 'string') {
+      cleaned.notionWorkspaceHint = v.notionWorkspaceHint;
+    }
+    if (typeof v.workspaceKey === 'string') cleaned.workspaceKey = v.workspaceKey;
+    for (const k of Object.keys(v)) {
+      if (EXPORT_SECRET_KEYS.has(k)) continue;
+      // already whitelisted above; ignore unknown non-secret extras
+    }
+    return { ...row, value: cleaned };
+  });
+}
+
+
 export async function exportData(includeImages: boolean): Promise<{ json: string; size: number }> {
   const db = await getDB();
   const vehicles = await db.getAll('vehicles');
@@ -76,7 +124,7 @@ export async function exportData(includeImages: boolean): Promise<{ json: string
       ? records
       : records.map((r) => ({ ...r, mediaIds: [] })),
     stations,
-    settings,
+    settings: sanitizeSettingsForExport(settings),
     media: mediaOut,
     meta: meta.map((m) => ({ key: m.key, value: m.value, updatedAt: nowISO() })),
     learning,

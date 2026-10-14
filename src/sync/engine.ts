@@ -43,7 +43,7 @@ import {
 import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
-import { getNotionRuntimeSession } from './notionSession';
+import { clearNotionRuntimeSession, getNotionRuntimeSession } from './notionSession';
 import { SupabaseProvider } from './providers/supabase';
 import { assertCloudRowsValid } from './validatePayload';
 import { runSyncTxHook } from './txHooks';
@@ -1223,6 +1223,8 @@ export async function disconnectCloud(): Promise<SyncActionResult> {
   } catch {
     /* ignore */
   }
+  // Defense in depth: always drop Notion session even if resolveProvider was null (D2 §3.5.5)
+  clearNotionRuntimeSession();
   await clearCloudStorageConfig();
   // Keep pending outbox so same-account reconnect can resume sync
   await patchSyncMeta({
