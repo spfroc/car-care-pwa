@@ -1,3 +1,4 @@
+// SUPERSEDED by runnable *.ts in this directory (D1). Kept for design diff.
 /**
  * PSEUDOCODE — PayloadJson fail-closed encoding (architecture §3.5 / O3).
  * NEVER silently truncate.

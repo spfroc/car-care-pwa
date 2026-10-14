@@ -1,0 +1,6 @@
+# Copy to .dev.vars (gitignored). NEVER commit real values.
+NOTION_TOKEN=secret_or_ntn_REPLACE_ME
+GATEWAY_API_KEY=replace-with-long-random-string
+ALLOWED_ORIGIN=http://localhost:5173
+VEHICLES_DATA_SOURCE_ID=
+RECORDS_DATA_SOURCE_ID=

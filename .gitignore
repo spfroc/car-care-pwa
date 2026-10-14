@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets / local env
+.dev.vars
+.env
+*.pem
+
+# Worker template install artifacts (keep sources)
+docs/templates/notion-sync-worker/node_modules/
+docs/templates/notion-sync-worker/dist/
+docs/templates/notion-sync-worker/.wrangler/
