@@ -1,0 +1,160 @@
+{
+  "status": "PASS",
+  "reason": "D2.6 live reject + ★F cloud_newer/keep_local LWW",
+  "started": "2026-10-14T08:25:20.447Z",
+  "ended": "2026-10-14T08:25:26.046Z",
+  "timezone": "Asia/Shanghai",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFingerprint": "91dee0d48d59",
+  "workspaceKeyFingerprint": "c647ac0368ff",
+  "gates": {
+    "G1": true,
+    "D2.6": true,
+    "starF": true
+  },
+  "d26LiveStatus": "PASS",
+  "d26WorkerProbeOk": true,
+  "steps": {
+    "G1.health": {
+      "ok": true,
+      "summary": "http=200 version=m3d-d1-0.1.1",
+      "http": 200,
+      "version": "m3d-d1-0.1.1",
+      "at": "2026-10-14T08:25:20.619Z"
+    },
+    "G1.verify": {
+      "ok": true,
+      "summary": "http=200 wk=c647ac0368ff bot=grok bot",
+      "http": 200,
+      "workspaceKeyFingerprint": "c647ac0368ff",
+      "botName": "grok bot",
+      "at": "2026-10-14T08:25:20.870Z"
+    },
+    "D2.6.reject_media": {
+      "ok": true,
+      "summary": "applied=false unsupported=true",
+      "http": 200,
+      "applied": [],
+      "errors": [
+        {
+          "id": "op-media-d2p4-1791966320447",
+          "entity": "media",
+          "code": "unsupported_entity",
+          "message": "entity media not supported (vehicles|records only)",
+          "retryable": false
+        }
+      ],
+      "at": "2026-10-14T08:25:21.038Z"
+    },
+    "D2.6.reject_stations": {
+      "ok": true,
+      "summary": "applied=false unsupported=true",
+      "http": 200,
+      "applied": [],
+      "errors": [
+        {
+          "id": "op-stations-d2p4-1791966320447",
+          "entity": "stations",
+          "code": "unsupported_entity",
+          "message": "entity stations not supported (vehicles|records only)",
+          "retryable": false
+        }
+      ],
+      "at": "2026-10-14T08:25:21.220Z"
+    },
+    "D2.6.reject_settings": {
+      "ok": true,
+      "summary": "applied=false unsupported=true",
+      "http": 200,
+      "applied": [],
+      "errors": [
+        {
+          "id": "op-settings-d2p4-1791966320447",
+          "entity": "settings",
+          "code": "unsupported_entity",
+          "message": "entity settings not supported (vehicles|records only)",
+          "retryable": false
+        }
+      ],
+      "at": "2026-10-14T08:25:21.363Z"
+    },
+    "starF.seed_cloud": {
+      "ok": true,
+      "summary": "applied=true",
+      "http": 200,
+      "applied": [
+        "op-c-d2p4-1791966320447"
+      ],
+      "conflicts": [],
+      "at": "2026-10-14T08:25:22.187Z"
+    },
+    "starF.bump_cloud": {
+      "ok": true,
+      "summary": "applied=true",
+      "http": 200,
+      "applied": [
+        "op-bump-d2p4-1791966320447"
+      ],
+      "at": "2026-10-14T08:25:23.299Z"
+    },
+    "starF.cloud_newer": {
+      "ok": true,
+      "summary": "cloud_newer=true notApplied=true",
+      "http": 200,
+      "applied": [],
+      "conflicts": [
+        {
+          "id": "op-stale-d2p4-1791966320447",
+          "entity": "vehicles",
+          "reason": "cloud_newer",
+          "attemptedAt": "2026-10-14T08:24:23.299Z",
+          "cloudRow": {
+            "entity": "vehicles",
+            "id": "veh-f-d2p4-1791966320447",
+            "payload": {
+              "bodyType": "SEDAN",
+              "id": "veh-f-d2p4-1791966320447",
+              "updatedAt": "2026-10-14T08:25:24.187Z",
+              "deviceId": "live-p4-b",
+              "name": "P4-Cloud-Newer",
+              "plate": "F4",
+              "energyType": "ICE",
+              "archived": false
+            },
+            "updatedAt": "2026-10-14T08:25:24.187Z",
+            "deletedAt": null,
+            "deviceId": "live-p4-b"
+          }
+        }
+      ],
+      "cloudRowId": "veh-f-d2p4-1791966320447",
+      "cloudUpdatedAt": "2026-10-14T08:25:24.187Z",
+      "at": "2026-10-14T08:25:23.879Z"
+    },
+    "starF.keep_local_lww": {
+      "ok": true,
+      "summary": "applied=true",
+      "http": 200,
+      "applied": [
+        "op-keep-d2p4-1791966320447"
+      ],
+      "conflicts": [],
+      "at": "2026-10-14T08:25:24.816Z"
+    },
+    "starF.cleanup_delete": {
+      "ok": true,
+      "summary": "applied=true",
+      "http": 200,
+      "applied": [
+        "op-del-d2p4-1791966320447"
+      ],
+      "at": "2026-10-14T08:25:26.046Z"
+    }
+  },
+  "notes": [
+    "D2.6: Worker redeployed with unsupported_entity whitelist (media/stations/settings).",
+    "★F: Gateway returns cloud_newer (non-ACK); keep_local path proven via LWW bump applied.",
+    "M3-C open/keep_local/take_cloud lock-held UX covered by unit notion-d2-p4.test.ts.",
+    "d1-test is DEV only — not production Gateway. No PWA deploy."
+  ]
+}

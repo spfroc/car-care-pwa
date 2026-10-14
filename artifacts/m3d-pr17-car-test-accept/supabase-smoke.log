@@ -1,0 +1,53 @@
+PASS auth.signIn dee8546c-3fc8-465b-8e17-66bbff0e9c45
+PASS table.probe rows=17
+PASS rpc.lww.apply applied
+PASS rpc.lww.skip_older skipped_cloud_newer
+PASS rpc.lww.apply_newer applied
+PASS cross_device_ish.pull name=DeviceB device=device-b
+PASS rls.block_anon_insert new row violates row-level security policy for table "car_care_rows"
+PASS cleanup deleted smoke-v1
+{
+  "summary": [
+    {
+      "name": "auth.signIn",
+      "ok": true,
+      "detail": "dee8546c-3fc8-465b-8e17-66bbff0e9c45"
+    },
+    {
+      "name": "table.probe",
+      "ok": true,
+      "detail": "rows=17"
+    },
+    {
+      "name": "rpc.lww.apply",
+      "ok": true,
+      "detail": "applied"
+    },
+    {
+      "name": "rpc.lww.skip_older",
+      "ok": true,
+      "detail": "skipped_cloud_newer"
+    },
+    {
+      "name": "rpc.lww.apply_newer",
+      "ok": true,
+      "detail": "applied"
+    },
+    {
+      "name": "cross_device_ish.pull",
+      "ok": true,
+      "detail": "name=DeviceB device=device-b"
+    },
+    {
+      "name": "rls.block_anon_insert",
+      "ok": true,
+      "detail": "new row violates row-level security policy for table \"car_care_rows\""
+    },
+    {
+      "name": "cleanup",
+      "ok": true,
+      "detail": "deleted smoke-v1"
+    }
+  ],
+  "exit": 0
+}

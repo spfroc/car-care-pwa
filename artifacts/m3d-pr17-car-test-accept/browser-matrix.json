@@ -1,0 +1,120 @@
+{
+  "status": "PASS",
+  "kind": "real-browser-E2E-minimal",
+  "preview": "https://car-test.adobesun.com",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFp": "91dee0d48d59",
+  "steps": [
+    {
+      "id": "boot.settings",
+      "ok": true,
+      "detail": "https://car-test.adobesun.com/settings",
+      "at": "2026-10-14T08:26:10.046Z"
+    },
+    {
+      "id": "ui.select_notion",
+      "ok": true,
+      "detail": "",
+      "at": "2026-10-14T08:26:10.597Z"
+    },
+    {
+      "id": "ui.save_gateway_url",
+      "ok": true,
+      "detail": "keyFp=91dee0d48d59",
+      "at": "2026-10-14T08:26:11.058Z"
+    },
+    {
+      "id": "browser.verify",
+      "ok": true,
+      "detail": "verify200=1 bodyHasSession=true",
+      "at": "2026-10-14T08:26:11.634Z"
+    },
+    {
+      "id": "ui.vehicle_create",
+      "ok": true,
+      "detail": "url=https://car-test.adobesun.com/vehicles/a3099303-7458-426a-b175-ae4e754d566a hasName=true",
+      "at": "2026-10-14T08:26:13.943Z"
+    },
+    {
+      "id": "browser.bidirectional_sync",
+      "ok": true,
+      "detail": "[{\"path\":\"/sync/push\",\"status\":200,\"t\":1791966375825},{\"path\":\"/sync/pull?entities=vehicles,records\",\"status\":200,\"t\":1791966376772}]",
+      "at": "2026-10-14T08:26:16.879Z"
+    },
+    {
+      "id": "api.pull_sees_browser_vehicle",
+      "ok": true,
+      "detail": "rows=24",
+      "at": "2026-10-14T08:26:17.475Z"
+    },
+    {
+      "id": "api.payload_name_plate_roundtrip",
+      "ok": true,
+      "detail": "name=D2E2E-mv7uidki plate=T7UIE3I",
+      "at": "2026-10-14T08:26:17.475Z"
+    },
+    {
+      "id": "offline.shell_reachable",
+      "ok": true,
+      "detail": "setOffline=true",
+      "at": "2026-10-14T08:26:18.673Z"
+    },
+    {
+      "id": "offline.idb_probe",
+      "ok": false,
+      "detail": "{\"err\":\"Error: page.evaluate: SecurityError: Failed to execute 'databases' on 'IDBFactory': Access to the IndexedDB API is denied in this context.\\n    at eval (eval at evaluate (:370:30), <anonymous>",
+      "at": "2026-10-14T08:26:18.681Z"
+    },
+    {
+      "id": "offline.reonline_sync",
+      "ok": true,
+      "detail": "[{\"path\":\"/sync/pull?entities=vehicles,records\",\"status\":200,\"t\":1791966380504}]",
+      "at": "2026-10-14T08:26:21.986Z"
+    },
+    {
+      "id": "browser.screenshot",
+      "ok": true,
+      "detail": "browser-smoke.png",
+      "at": "2026-10-14T08:26:22.117Z"
+    }
+  ],
+  "netSample": [
+    {
+      "path": "/verify",
+      "status": 200,
+      "t": 1791966371403
+    },
+    {
+      "path": "/verify",
+      "status": 200,
+      "t": 1791966374926
+    },
+    {
+      "path": "/sync/push",
+      "status": 200,
+      "t": 1791966375825
+    },
+    {
+      "path": "/sync/pull?entities=vehicles,records",
+      "status": 200,
+      "t": 1791966376772
+    },
+    {
+      "path": "/verify",
+      "status": 200,
+      "t": 1791966379684
+    },
+    {
+      "path": "/sync/pull?entities=vehicles,records",
+      "status": 200,
+      "t": 1791966380504
+    }
+  ],
+  "hardBans": {
+    "noDeploy": false,
+    "stagingOnly": true,
+    "prodUntouched": true,
+    "d1TestOnly": true,
+    "corsOrigin": "https://car-test.adobesun.com (+localhost:5173 allowlist)"
+  }
+}

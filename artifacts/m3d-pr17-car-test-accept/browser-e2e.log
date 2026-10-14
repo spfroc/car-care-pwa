@@ -1,0 +1,13 @@
+PASS boot.settings https://car-test.adobesun.com/settings
+PASS ui.select_notion 
+PASS ui.save_gateway_url keyFp=91dee0d48d59
+PASS browser.verify verify200=1 bodyHasSession=true
+PASS ui.vehicle_create url=https://car-test.adobesun.com/vehicles/a3099303-7458-426a-b175-ae4e754d566a hasName=true
+PASS browser.bidirectional_sync [{"path":"/sync/push","status":200,"t":1791966375825},{"path":"/sync/pull?entities=vehicles,records","status":200,"t":1791966376772}]
+PASS api.pull_sees_browser_vehicle rows=24
+PASS api.payload_name_plate_roundtrip name=D2E2E-mv7uidki plate=T7UIE3I
+PASS offline.shell_reachable setOffline=true
+FAIL offline.idb_probe {"err":"Error: page.evaluate: SecurityError: Failed to execute 'databases' on 'IDBFactory': Access to the IndexedDB API is denied in this context.\n    at eval (eval at evaluate (:370:30), <anonymous>
+PASS offline.reonline_sync [{"path":"/sync/pull?entities=vehicles,records","status":200,"t":1791966380504}]
+PASS browser.screenshot browser-smoke.png
+STATUS PASS
