@@ -1,0 +1,6 @@
+BLOCKED SW1 BLOCKED — 无第二工作区 Gateway；不单测冒充 live
+BLOCKED SW2 BLOCKED — 需要不同 workspaceKey 的 Gateway B
+BLOCKED SW3 BLOCKED — 依赖 SW2 park 队列
+BLOCKED SW4 BLOCKED — 依赖切回 Gateway A flush
+PASS SUPPORT_verify_A status=200 wkFp=c647ac0368ff version=?
+STATUS BLOCKED — gaps written

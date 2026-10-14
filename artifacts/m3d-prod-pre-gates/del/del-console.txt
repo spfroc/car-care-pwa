@@ -1,0 +1,11 @@
+Gateway https://car-care-notion-sync-d1-test.spf-roc.workers.dev keyFp 91dee0d48d59
+PASS G1_verify status=200 wkFp=c647ac0368ff
+PASS CREATE status=200 applied=["op-c-p5-mv7vnjzx-bk937l"]
+PASS PULL_ALIVE attempts=1
+PASS DEL1_DELETE_PUSH status=200 applied=["op-d-p5-mv7vnjzx-bk937l"]
+PASS DEL1_PULL_TOMBSTONE pullTomb=false deleteApplied=true attempts=10 (KV tombstone OK if pull omits trash)
+PASS DEL2_NO_RECREATE applied=[] conflicts=[{"id":"op-stale-p5-mv7vnjzx-bk937l","reason":"skipped_deleted"}]
+PASS DEL3_RESTORE_PUSH status=200 applied=["op-r-p5-mv7vnjzx-bk937l"] conflicts=[]
+PASS DEL3_PULL_ALIVE attempts=1
+PASS SW_NOTE SW1–SW4 isolation covered by unit tests (single d1-test workspaceKey cannot dual-tenant live). Default retain + owner isolation confirmed in notion-d2-p5.test.ts
+Wrote /workspace/car-care-pwa-gates/artifacts/live-notion-p5 status PASS

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.3 /workspace/car-care-pwa-gates
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  17:01:44
+   Duration  451ms (transform 66%, import 22%, tests 11%, worker 1%)
+
