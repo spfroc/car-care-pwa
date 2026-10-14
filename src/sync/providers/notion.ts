@@ -1,6 +1,7 @@
 /**
- * Notion CloudProvider — delegates to NotionGatewayClient (D2-P1 skeleton).
+ * Notion CloudProvider — delegates to NotionGatewayClient (D2-P3 live wiring).
  * Media object store is intentionally null (no Notion media sync in D2).
+ * Vehicles + records only; AbortSignal forwarded to Gateway fetch.
  */
 
 import type { CloudProvider } from './types';
@@ -14,7 +15,7 @@ import {
 import { NotionGatewayClient, type GatewayFetch } from './notionGatewayClient';
 
 export class NotionNotImplementedError extends Error {
-  constructor(message = 'Notion sync is not implemented yet. See docs/notion-sync-feasibility.md') {
+  constructor(message = 'Notion Gateway 未就绪。请配置 URL 并输入会话 API Key。见 docs/m3d-d2-plan.md') {
     super(message);
     this.name = 'NotionNotImplementedError';
   }

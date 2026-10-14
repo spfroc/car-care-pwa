@@ -113,12 +113,12 @@ export class MemoryCloudProvider implements CloudProvider {
     return `${entity}:${id}`;
   }
 
-  async verify(): Promise<VerifyResult> {
+  async verify(_signal?: AbortSignal): Promise<VerifyResult> {
     if (this.offline) return { ok: false, error: 'offline' };
     return { ok: true, userId: this.userId, email: 'test@example.com', cloudRowCount: this.rows.size };
   }
 
-  async pullAll(): Promise<CloudSnapshot> {
+  async pullAll(_signal?: AbortSignal): Promise<CloudSnapshot> {
     if (this.offline) throw new Error('offline');
     const all = [...this.rows.values()].sort((a, b) =>
       a.entity === b.entity ? a.id.localeCompare(b.id) : a.entity.localeCompare(b.entity),
@@ -127,7 +127,7 @@ export class MemoryCloudProvider implements CloudProvider {
   }
 
   /** Atomic LWW — skipped_cloud_newer is conflict-only (not applied). */
-  async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
+  async pushOps(ops: SyncOutboxItem[], _signal?: AbortSignal): Promise<PushResult> {
     this.pushCallCount += 1;
     if (this.pushGate) await this.pushGate;
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
@@ -164,7 +164,7 @@ export class MemoryCloudProvider implements CloudProvider {
   }
 
   /** First upload also uses LWW — never unconditional overwrite of cloud-newer. */
-  async pushSnapshot(rows: CloudRow[]): Promise<PushResult> {
+  async pushSnapshot(rows: CloudRow[], _signal?: AbortSignal): Promise<PushResult> {
     if (this.offline) return { applied: [], conflicts: [], error: 'offline' };
     const ops: SyncOutboxItem[] = rows.map((r) => ({
       opId: `${r.entity}:${r.id}`,

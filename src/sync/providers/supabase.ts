@@ -74,7 +74,7 @@ export class SupabaseProvider implements CloudProvider {
     return { ok: false, error: error?.message ?? '登录失败' };
   }
 
-  async verify(): Promise<VerifyResult> {
+  async verify(_signal?: AbortSignal): Promise<VerifyResult> {
     const { data: userData, error: userError } = await this.client.auth.getUser();
     if (userError) return { ok: false, error: userError.message };
     const user = userData.user;
@@ -100,7 +100,7 @@ export class SupabaseProvider implements CloudProvider {
     };
   }
 
-  async pullAll(): Promise<CloudSnapshot> {
+  async pullAll(_signal?: AbortSignal): Promise<CloudSnapshot> {
     const user = await this.requireUser();
     const rows: CloudRow[] = [];
     let from = 0;
@@ -127,7 +127,7 @@ export class SupabaseProvider implements CloudProvider {
    * Push via DB-side atomic LWW RPC (no client read-then-write TOCTOU).
    * skipped_cloud_newer goes to conflicts only — NOT applied (so outbox/concurrent ops stay safe).
    */
-  async pushOps(ops: SyncOutboxItem[]): Promise<PushResult> {
+  async pushOps(ops: SyncOutboxItem[], _signal?: AbortSignal): Promise<PushResult> {
     await this.requireUser();
     const applied: string[] = [];
     const conflicts: PushResult['conflicts'] = [];
@@ -183,7 +183,7 @@ export class SupabaseProvider implements CloudProvider {
    * First upload / snapshot: DB-side LWW per row (never unconditional overwrite of cloud-newer).
    * applied keys are `entity:id` for ackOutboxCoveredByUpload.
    */
-  async pushSnapshot(rows: CloudRow[]): Promise<PushResult> {
+  async pushSnapshot(rows: CloudRow[], _signal?: AbortSignal): Promise<PushResult> {
     const ops: SyncOutboxItem[] = rows.map((r) => ({
       opId: `${r.entity}:${r.id}`,
       entity: r.entity,

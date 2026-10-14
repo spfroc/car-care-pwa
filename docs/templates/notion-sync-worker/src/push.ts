@@ -93,6 +93,17 @@ async function applyOne(
   const outboxId = item.id;
   const entity = item.entity;
   const appEntityId = item.entityId;
+  if (entity !== 'vehicles' && entity !== 'records') {
+    result.errors = result.errors || [];
+    result.errors.push({
+      id: outboxId,
+      entity,
+      code: 'unsupported_entity',
+      message: `entity ${String(entity)} not supported (vehicles|records only)`,
+      retryable: false,
+    });
+    return;
+  }
   const ds = dataSourceId(env, entity);
 
   const slim = slimPayload(entity, item.payload);

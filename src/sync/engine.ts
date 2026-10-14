@@ -53,6 +53,7 @@ import type {
   CloudStorageConfig,
   LocalSnapshot,
   MergeResult,
+  PushResult,
   SyncEntity,
   VerifyResult,
 } from './types';
@@ -143,8 +144,7 @@ export async function resolveProvider(): Promise<CloudProvider | null> {
     });
   }
   if (cfg.provider === 'notion') {
-    // Skeleton: construct only when URL present; missing session → provider still
-    // constructed but verify/pushOps refuse until Key is entered (P2 settings).
+    // Construct when URL present; missing session → verify/pushOps refuse until Key (P2/P3).
     if (!cfg.notionGatewayUrl?.trim()) return null;
     return new NotionProvider({
       gatewayUrl: cfg.notionGatewayUrl,
@@ -153,6 +153,35 @@ export async function resolveProvider(): Promise<CloudProvider | null> {
     });
   }
   return null;
+}
+
+
+/** Notion Gateway MVP entities — never push stations/settings/media (D2 H2/H4). */
+const NOTION_SYNC_ENTITIES = new Set(['vehicles', 'records']);
+
+function filterOpsForProvider<T extends { entity: string }>(
+  provider: CloudProvider,
+  ops: T[],
+): T[] {
+  if (provider.id !== 'notion') return ops;
+  return ops.filter((o) => NOTION_SYNC_ENTITIES.has(o.entity));
+}
+
+function filterRowsForProvider(provider: CloudProvider, rows: CloudRow[]): CloudRow[] {
+  if (provider.id !== 'notion') return rows;
+  return rows.filter((r) => NOTION_SYNC_ENTITIES.has(r.entity));
+}
+
+/** Settle Gateway errors[] per-op: never ACK; backoff via markOutboxFailure (§3.5.3). */
+async function settlePushErrors(
+  errors: NonNullable<PushResult['errors']> | undefined,
+): Promise<number> {
+  if (!errors?.length) return 0;
+  for (const e of errors) {
+    const msg = e.code ? `[${e.code}] ${e.message}` : e.message;
+    await markOutboxFailure(e.opId, msg);
+  }
+  return errors.length;
 }
 
 export async function readLocalSnapshot(): Promise<LocalSnapshot> {
@@ -406,10 +435,11 @@ export async function guardUserSwitch(userId: string | undefined): Promise<Accou
  */
 async function ensureAuthMatchesBoundAccount(
   provider: CloudProvider,
+  signal?: AbortSignal,
 ): Promise<SyncActionResult | null> {
   let verify: VerifyResult;
   try {
-    verify = await provider.verify();
+    verify = await provider.verify(signal);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await patchSyncMeta({ status: 'error', lastError: msg });
@@ -695,7 +725,7 @@ async function escalatePullPlan(
 async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
-  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  const authBlock = await ensureAuthMatchesBoundAccount(provider, signal);
   if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
@@ -703,16 +733,17 @@ async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActi
     const snap = await readLocalSnapshot();
     const mediaStore = provider.getMediaObjectStore?.() ?? null;
     const userId = (await provider.getAuthUserId?.()) ?? (await getSyncMeta()).cloudUserId;
-    const rows = await localSnapshotToCloudRows(snap, { mediaStore, userId });
+    const allRows = await localSnapshotToCloudRows(snap, { mediaStore, userId });
+    const rows = filterRowsForProvider(provider, allRows);
     throwIfSyncAborted(signal);
-    const result = await provider.pushSnapshot(rows);
+    const result = await provider.pushSnapshot(rows, signal);
     // In-flight result is uncertain after lease loss — never ACK/delete outbox.
     if (signal.aborted) {
       throw new SyncLeaseLostError(
         '同步锁已超时并被其他标签页接管；上传结果不确定，队列未确认删除，请重试。',
       );
     }
-    if (result.error && !result.applied.length && !result.conflicts.length) {
+    if (result.error && !result.applied.length && !result.conflicts.length && !result.errors?.length) {
       await patchSyncMeta({ status: 'error', lastError: result.error });
       return { ok: false, message: `首次上传失败：${result.error}`, pushed: 0 };
     }
@@ -723,6 +754,7 @@ async function firstUploadToCloudUnlocked(signal: AbortSignal): Promise<SyncActi
     const acked = await ackOutboxCoveredByUpload(
       uploadedOk.map((r) => ({ entity: r.entity, id: r.id, updatedAt: r.updatedAt })),
     );
+    await settlePushErrors(result.errors);
     if (result.conflicts.length) {
       throwIfSyncAborted(signal);
       await handlePushConflicts(result.conflicts, { localRows: rows });
@@ -761,12 +793,12 @@ async function restoreFromCloudUnlocked(
 ): Promise<SyncActionResult> {
   const provider = await resolveProvider();
   if (!provider) return { ok: false, message: '未配置云存储' };
-  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  const authBlock = await ensureAuthMatchesBoundAccount(provider, signal);
   if (authBlock) return authBlock;
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     throwIfSyncAborted(signal);
-    const snapshot = await provider.pullAll();
+    const snapshot = await provider.pullAll(signal);
     if (signal.aborted) {
       throw new SyncLeaseLostError(
         '同步锁已超时并被其他标签页接管；拉取结果不确定，未合并本地，请重试。',
@@ -867,25 +899,31 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
     return { ok: false, message: '当前离线，变更已留在队列，联网后重试' };
   }
 
-  const authBlock = await ensureAuthMatchesBoundAccount(provider);
+  const authBlock = await ensureAuthMatchesBoundAccount(provider, signal);
   if (authBlock) return authBlock;
 
   await patchSyncMeta({ status: 'syncing', lastError: undefined });
   try {
     throwIfSyncAborted(signal);
     const ready = await listReadyOutbox();
-    const enriched = await enrichOutboxPayloads(ready, provider);
+    const enrichedAll = await enrichOutboxPayloads(ready, provider);
+    const enriched = filterOpsForProvider(provider, enrichedAll);
     let pushed = 0;
     if (enriched.length) {
       throwIfSyncAborted(signal);
-      const push = await provider.pushOps(enriched);
+      const push = await provider.pushOps(enriched, signal);
       // Lease lost during/after in-flight push: result uncertain — NEVER delete outbox.
       if (signal.aborted) {
         throw new SyncLeaseLostError(
           '同步锁已超时并被其他标签页接管；推送结果不确定，队列未确认删除，请重试。',
         );
       }
-      if (push.error && !push.applied.length && !push.conflicts.length) {
+      if (
+        push.error &&
+        !push.applied.length &&
+        !push.conflicts.length &&
+        !push.errors?.length
+      ) {
         for (const op of enriched) await markOutboxFailure(op.opId, push.error);
         await patchSyncMeta({ status: 'error', lastError: push.error });
         return { ok: false, message: `推送失败：${push.error}` };
@@ -894,6 +932,8 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
       // Successfully written — remove those opIds (newer mid-sync ops have different opIds)
       await removeOutboxItems(push.applied);
       pushed = push.applied.length;
+      // Per-op Gateway errors: never ACK; backoff / fail-closed via markOutboxFailure (§3.5.3)
+      const errored = await settlePushErrors(push.errors);
       if (push.conflicts.length) {
         throwIfSyncAborted(signal);
         await handlePushConflicts(push.conflicts, {
@@ -902,14 +942,28 @@ async function bidirectionalSyncUnlocked(signal: AbortSignal): Promise<SyncActio
       }
       if (push.error) {
         throwIfSyncAborted(signal);
-        const done = new Set([...push.applied, ...push.conflicts.map((c) => c.opId)]);
+        const done = new Set([
+          ...push.applied,
+          ...push.conflicts.map((c) => c.opId),
+          ...(push.errors ?? []).map((e) => e.opId),
+        ]);
         const remaining = enriched.filter((o) => !done.has(o.opId));
         for (const op of remaining) await markOutboxFailure(op.opId, push.error);
+      } else if (errored && !push.applied.length && !push.conflicts.length) {
+        await patchSyncMeta({
+          status: 'error',
+          lastError: push.errors?.[0]?.message ?? '推送部分失败',
+        });
+        return {
+          ok: false,
+          message: `推送失败：${errored} 条错误（未 ACK）`,
+          pushed: 0,
+        };
       }
     }
 
     throwIfSyncAborted(signal);
-    const snapshot = await provider.pullAll();
+    const snapshot = await provider.pullAll(signal);
     if (signal.aborted) {
       throw new SyncLeaseLostError(
         '同步锁已超时并被其他标签页接管；拉取结果不确定，未合并本地，请重试。',
@@ -1067,7 +1121,7 @@ export async function migrateCloudLegacyMedia(
   }
 
   if (signal) throwIfSyncAborted(signal);
-  const snapshot = await provider.pullAll();
+  const snapshot = await provider.pullAll(signal);
   let migrated = 0;
   let skipped = 0;
   let failed = 0;
@@ -1098,18 +1152,21 @@ export async function migrateCloudLegacyMedia(
       });
       // After verify, before RPC that writes cloud refs
       if (signal) throwIfSyncAborted(signal);
-      const push = await provider.pushOps([
-        {
-          opId: `migrate-media-${row.id}`,
-          entity: 'media',
-          entityId: row.id,
-          op: 'upsert',
-          payload: v2,
-          mutatedAt: nowISO(), // newer than legacy so LWW applies
-          attempts: 0,
-          nextRetryAt: nowISO(),
-        },
-      ]);
+      const push = await provider.pushOps(
+        [
+          {
+            opId: `migrate-media-${row.id}`,
+            entity: 'media',
+            entityId: row.id,
+            op: 'upsert',
+            payload: v2,
+            mutatedAt: nowISO(), // newer than legacy so LWW applies
+            attempts: 0,
+            nextRetryAt: nowISO(),
+          },
+        ],
+        signal,
+      );
       // In-flight RPC uncertain if lease lost — do not count as migrated success path for next images
       if (signal?.aborted) {
         throw new SyncLeaseLostError(
@@ -1137,7 +1194,7 @@ export async function migrateCloudLegacyMedia(
 
   if (signal) throwIfSyncAborted(signal);
   // Re-count remaining legacy after this pass (source of truth for retry)
-  const after = await provider.pullAll();
+  const after = await provider.pullAll(signal);
   let unmigrated = 0;
   for (const row of after.rows) {
     if (row.entity !== 'media' || row.deletedAt) continue;

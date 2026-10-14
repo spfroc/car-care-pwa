@@ -1,0 +1,15 @@
+> car-care-pwa@0.0.0 test
+> vitest run
+
+
+ RUN  v5.0.3 /workspace/car-care-pwa/app
+
+
+ Test Files  29 passed | 3 skipped (32)
+      Tests  312 passed | 5 skipped (317)
+   Start at  15:12:38
+   Duration  1.50s (transform 42%, import 30%, tests 26%, worker 3%)
+
+    Isolate  32 workers spawned · ~150ms startup each (spawn + environment, per file)
+             at least ~535ms faster with isolate: false — reuses workers across files instead of one per file
+

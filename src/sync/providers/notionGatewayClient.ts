@@ -330,12 +330,29 @@ export class NotionGatewayClient {
   }
 
   async pushOps(ops: SyncOutboxItem[], signal?: AbortSignal): Promise<PushResult> {
+    // D2 H2/H4: Gateway MVP is vehicles+records only — never send media/stations/settings.
+    const allowed = ops.filter((o) => o.entity === 'vehicles' || o.entity === 'records');
+    const rejected = ops.filter((o) => o.entity !== 'vehicles' && o.entity !== 'records');
+    const rejectedErrors: NonNullable<PushResult['errors']> = rejected.map((o) => ({
+      opId: o.opId,
+      entity: o.entity,
+      code: 'unsupported_entity',
+      message: `Notion Gateway 不同步 ${o.entity}（D2 仅 vehicles/records；媒体不出箱）`,
+      retryable: false,
+    }));
+    if (!allowed.length) {
+      return { applied: [], conflicts: [], errors: rejectedErrors.length ? rejectedErrors : undefined };
+    }
     try {
       const { body } = await this.request('POST', '/sync/push', {
-        body: { ops: mapOutboxForGateway(ops) },
+        body: { ops: mapOutboxForGateway(allowed) },
         signal,
       });
-      return adaptGatewayPushResult((body ?? {}) as GatewayPushResultRaw);
+      const adapted = adaptGatewayPushResult((body ?? {}) as GatewayPushResultRaw);
+      if (rejectedErrors.length) {
+        adapted.errors = [...(adapted.errors ?? []), ...rejectedErrors];
+      }
+      return adapted;
     } catch (e) {
       if (e instanceof NotionGatewayError && e.code === 'aborted') {
         // Abort must not ACK — empty applied
@@ -346,13 +363,16 @@ export class NotionGatewayClient {
           applied: [],
           conflicts: [],
           error: e.message,
-          errors: ops.map((op) => ({
-            opId: op.opId,
-            entity: op.entity,
-            code: e.code,
-            message: e.message,
-            retryable: e.retryable,
-          })),
+          errors: [
+            ...allowed.map((op) => ({
+              opId: op.opId,
+              entity: op.entity,
+              code: e.code,
+              message: e.message,
+              retryable: e.retryable,
+            })),
+            ...rejectedErrors,
+          ],
         };
       }
       throw e;
@@ -360,9 +380,10 @@ export class NotionGatewayClient {
   }
 
   async pushSnapshot(rows: CloudRow[], signal?: AbortSignal): Promise<PushResult> {
+    const allowed = rows.filter((r) => r.entity === 'vehicles' || r.entity === 'records');
     try {
       const { body } = await this.request('POST', '/sync/snapshot', {
-        body: { rows },
+        body: { rows: allowed },
         signal,
       });
       return adaptGatewayPushResult((body ?? {}) as GatewayPushResultRaw);
