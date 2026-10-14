@@ -9,8 +9,8 @@
 | **M2** | 用户自有云（行同步 + outbox） | ✅ 已上线 | Supabase 行表、LWW、设置 UI、账号切换安全 |
 | **M3-A** | 媒体私有 Storage | ✅ 已上线（生产静态） | base64→Storage、RLS bucket、迁移/孤儿 GC 策略 |
 | **M3-B** | 多标签锁 · BG Sync 增强 · Outbox  Harden | ✅ 已上线（生产 d7dd681 / car.adobesun.com；car-test 同版本） | Web Locks / lease、BG Sync 可选、关页/并发不丢队列 |
-| **M3-C** | 冲突合并 UI + 双端体验 | 🚧 feature 实现中（未部署） | 仅 vehicles+records 手动解决；二选一；删改二次确认；30 天回收站 → follow-up。规格：[`m3c-mvp-frozen-spec.md`](./m3c-mvp-frozen-spec.md) · 架构：[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md) · 验收：[`m3c-dual-device-acceptance.md`](./m3c-dual-device-acceptance.md) |
-| **M3-D** | Notion（或其它 adapter） | 📝 设计通过 · 实现规格已起草（docs-only；PR #8；三轮闭合通过 `fea4686`；**未 merge**） | 规格/架构/风险/BYO/审查/实现规格：`m3d-mvp-spec.md` · `m3d-architecture.md` · `m3d-notion-byo-architecture.md` · `m3d-risks-and-acceptance.md` · `m3d-architecture-review-round2.md` · `m3d-implementation-spec.md`；模板：`docs/templates/notion-sync-worker/`；可行性 stub：`notion-sync-feasibility.md`；仍禁止业务 src / 真 API / 生产 |
+| **M3-C** | 冲突合并 UI + 双端体验 | ✅ 已合入 main（`9b64a2b` / PR #7；open/keep/take 可用） | 仅 vehicles+records 手动解决；二选一；删改二次确认；30 天回收站 → follow-up。规格：[`m3c-mvp-frozen-spec.md`](./m3c-mvp-frozen-spec.md) · 架构：[`m3c-conflict-ui-architecture.md`](./m3c-conflict-ui-architecture.md) · 验收：[`m3c-dual-device-acceptance.md`](./m3c-dual-device-acceptance.md) |
+| **M3-D** | Notion（或其它 adapter） | 📝 设计通过 · D1 Worker 原型已 merge（PR #9 · M1 Trash live PASS）· **D2 规划中**（docs PR #10；审查前不合并不部署） | 规格/架构：`m3d-mvp-spec.md` · `m3d-architecture.md` · `m3d-implementation-spec.md` · …；D2：[`m3d-d2-plan.md`](./m3d-d2-plan.md) · [`m3d-d2-product.md`](./m3d-d2-product.md)；模板：`docs/templates/notion-sync-worker/`；仍禁止业务 src 实现 PR 前合入 / 生产默认开启 / secrets 入库 |
 
 ## 明确不在 M3-B
 
@@ -40,6 +40,12 @@ M2 ──► M3-A ──► M3-B ──► M3-C
 ## M3-C 冻结备注（2026-10-12）
 
 - 产品规格已冻结，见 `docs/m3c-mvp-frozen-spec.md`（用户批准）。  
-- **实现**：`feature/m3c-conflict-ui`（本阶段）；**禁止 merge 后自动部署**；不改正式 Supabase。  
+- **实现**：已合入 **main**（merge `9b64a2b` / PR #7）；`openConflict` / `keep_local` / `take_cloud` 可供 M3-D D2-P4 复用。  
 - **30 天最近删除恢复**：不在本 MVP；标为 M3-C follow-up（M3-C.1）。
 
+## M3-D D2
+
+- 规划中（docs-only · PR #10 · 审查前不合并不部署）：架构 [`m3d-d2-plan.md`](./m3d-d2-plan.md)（含 **§3.5 前端契约适配**）· 产品 [`m3d-d2-product.md`](./m3d-d2-product.md)（US-D2-1..7 · 验收 A–E · §1.1）。  
+- D1 Gateway 原型已 merge（PR #9）；M1 Trash live **PASS**。D2 仍须自有真实 Notion 工作区集成验收（mock Gateway 仅单测）。  
+- D2-P4 依赖 main 上已合并的 M3-C（`9b64a2b`）。  
+- **禁止**：业务 `src/**` 变更、merge 后自动部署、secrets 入库。
