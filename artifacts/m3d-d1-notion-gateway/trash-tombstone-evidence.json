@@ -1,9 +1,116 @@
 {
-  "testedAt": "2026-10-13T13:13:00+08:00",
+  "testedAt": "2026-10-14T13:48:20+08:00",
+  "liveFixtureStatus": "PASS",
+  "gatewayBase": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "appEntityId": "veh-trash-m1-1791956900358",
+  "steps": {
+    "verify": {
+      "http": 200,
+      "ok": true,
+      "botName": "grok bot",
+      "vehiclesDs": "68e70331-99b5-47b2-bdb7-718963029c62",
+      "recordsDs": "dee1f83b-e9ec-4276-a68d-ffc9310473df"
+    },
+    "upsert": {
+      "http": 200,
+      "applied": [
+        "out-upsert-1791956900358"
+      ],
+      "conflicts": [],
+      "errors": []
+    },
+    "dsQueryAfterUpsert": {
+      "http": 200,
+      "resultCount": 1
+    },
+    "delete": {
+      "http": 200,
+      "applied": [
+        "out-delete-1791956900358"
+      ],
+      "conflicts": [],
+      "errors": []
+    },
+    "retrieveAfterDelete": {
+      "http": 200,
+      "in_trash": true,
+      "AppEntityId": "veh-trash-m1-1791956900358",
+      "AppDeletedAt": "2026-10-14T05:48:20.358Z",
+      "AppUpdatedAt": "2026-10-14T05:48:20.358Z"
+    },
+    "dsQueryAfterDelete": {
+      "http": 200,
+      "resultCount": 0,
+      "anyInTrashInResults": false,
+      "note": "Default DS query should omit trashed pages"
+    },
+    "retrieveStillSeesTombstone": {
+      "http": 200,
+      "in_trash": true,
+      "AppDeletedAt": "2026-10-14T05:48:20.358Z"
+    },
+    "pullAfterDelete": {
+      "http": 200,
+      "rowFound": true,
+      "deletedAt": "2026-10-14T05:48:20.358Z",
+      "updatedAt": "2026-10-14T05:48:20.358Z"
+    },
+    "staleUpsert": {
+      "http": 200,
+      "applied": [],
+      "conflicts": [
+        {
+          "id": "out-stale-upsert-1791956900358",
+          "entity": "vehicles",
+          "reason": "skipped_deleted",
+          "attemptedAt": "2026-10-14T05:46:20.358Z"
+        }
+      ],
+      "errors": [],
+      "skippedDeleted": true
+    },
+    "retrieveAfterStaleUpsert": {
+      "http": 200,
+      "in_trash": true,
+      "AppDeletedAt": "2026-10-14T05:48:20.358Z",
+      "Name": "Trash M1 1791956900358"
+    },
+    "kvInference": {
+      "dsQueryHidden": true,
+      "retrieveSeesTombstone": true,
+      "pullMergedTombstone": true,
+      "antiResurrectionViaSkippedDeleted": true,
+      "note": "Worker delete path puts TOMBSTONE_KV; stale upsert skipped_deleted requires tombstone presence (KV and/or retrieve).",
+      "kvDirectRead": true
+    },
+    "tombstoneKvDirect": {
+      "namespaceId": "6ae5cb6d1309453db197b6ce8217e419",
+      "found": true,
+      "keyPattern": "tomb:<workspaceKey>:vehicles:veh-trash-m1-1791956900358",
+      "record": {
+        "entity": "vehicles",
+        "appEntityId": "veh-trash-m1-1791956900358",
+        "pageId": "3f9620fb-d01f-8151-8783-fbbbeaf1a17c",
+        "deletedAt": "2026-10-14T05:48:20.358Z",
+        "updatedAt": "2026-10-14T05:48:20.358Z",
+        "hasWorkspaceKey": true
+      },
+      "note": "Direct Workers KV GET after Gateway delete; workspaceKey omitted from evidence."
+    }
+  },
+  "m1": {
+    "deleteInTrashAndAppDeletedAt": "PASS",
+    "kvMappingAndRetrieveSeesTombstone": "PASS",
+    "expiredUpsertSkippedDeleted": "PASS"
+  },
+  "workspaceKeyFingerprint": "c647ac0368ff",
+  "pageId": "3f9620fb-d01f-8151-8783-fbbbeaf1a17c",
+  "conclusion": "Live PATCH in_trash + AppDeletedAt + DS hide + retrieve tombstone + skipped_deleted anti-resurrection confirmed via Gateway.",
   "sources": [
     "https://developers.notion.com/reference/query-a-data-source",
     "https://developers.notion.com/reference/post-search",
-    "https://developers.notion.com/guides/get-started/upgrade-guide-2026-03-11"
+    "https://developers.notion.com/guides/get-started/upgrade-guide-2026-03-11",
+    "live Gateway https://car-care-notion-sync-d1-test.spf-roc.workers.dev"
   ],
   "docFindings": {
     "dataSourceQueryDefault": "Returns non-archived pages; is_archived selects archive partition. in_trash is NOT a supported query body parameter on data source query.",
@@ -11,20 +118,18 @@
     "trashMutation": "PATCH /v1/pages/{id} with in_trash:true (Notion-Version 2026-03-11).",
     "retrieveTrashed": "Retrieve a page by id can return in_trash:true when the integration still has access."
   },
-  "liveFixtureStatus": "BLOCKED for Integration-token path: environment has Notion MCP (user OAuth) and Cloudflare account, but NO Notion Internal Integration Token (ntn_/secret_) available to put in Worker Secret or call PATCH in_trash / DS query as the bot.",
-  "mcpLimitation": "Notion MCP exposes restore_pages but no trash/delete page tool; cannot move fixture to Trash via MCP alone.",
   "designImplemented": {
     "dualTrack": "delete → in_trash:true AND AppDeletedAt rich_text",
     "userOwnedTombstoneMap": "Workers KV binding TOMBSTONE_KV stores AppEntityId→pageId+deletedAt on user account (not app-central). put on delete; merge into pull; retrieve by pageId when DS query misses trash rows.",
     "antiResurrection": "tombstone presence + mutatedAt <= deletedAt → conflict skipped_deleted; never create second page",
     "kvNamespaceCreated": "6ae5cb6d1309453db197b6ce8217e419 (car-care-notion-tombstone-test)"
   },
-  "minimalManualStepsToUnblockLiveTrashTest": [
-    "1. Open https://www.notion.so/my-integrations → New integration in workspace 鹏飞 孙's Notion",
-    "2. Copy Internal Integration Token",
-    "3. Share databases M3D D1 Vehicles + M3D D1 Records with that integration",
-    "4. wrangler secret put NOTION_TOKEN  (or CF dashboard Secrets) on car-care-notion-sync-d1-test — DO NOT commit",
-    "5. curl -X POST Gateway /sync/push delete op for veh-tombstone-001; then query AppEntityId; confirm KV map + retrieve still see tombstone; confirm stale upsert returns skipped_deleted"
-  ],
-  "conclusionPendingToken": "Per official docs, DS query alone is insufficient for trash rows → user-owned KV tombstone map is REQUIRED for MVP anti-resurrection. Live PATCH confirmation awaits Integration Token."
+  "hardGateM1": {
+    "status": "CLOSED",
+    "bullets": {
+      "1_push_delete_in_trash_and_AppDeletedAt": "PASS",
+      "2_KV_mapping_DS_hide_retrieve_tombstone": "PASS",
+      "3_expired_upsert_skipped_deleted": "PASS"
+    }
+  }
 }

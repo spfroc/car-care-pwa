@@ -1,10 +1,17 @@
 {
-  "note": "Page created with AppDeletedAt set while still alive in DS (property tombstone). Gateway treats appDeletedAt as tombstone even before in_trash.",
-  "page": {
+  "note": "Property tombstone (AppDeletedAt set while page may still be queryable) remains a Gateway rule. Live Trash API closed-loop is in trash-tombstone-evidence.json (M1 PASS 2026-10-14).",
+  "propertyTombstoneExample": {
     "url": "https://app.notion.com/p/3f8620fbd01f81f4b63bf0d9c7fa4e39",
     "AppEntityId": "veh-tombstone-001",
     "AppUpdatedAt": "2026-10-13T04:00:00.000Z",
     "AppDeletedAt": "2026-10-13T04:30:00.000Z"
   },
-  "gatewayRule": "presenceFrom: appDeletedAt set → kind tombstone; stale upsert → skipped_deleted"
+  "liveTrashClosedLoop": {
+    "AppEntityId": "veh-trash-m1-1791956900358",
+    "pageId": "3f9620fb-d01f-8151-8783-fbbbeaf1a17c",
+    "in_trash": true,
+    "AppDeletedAt": "2026-10-14T05:48:20.358Z",
+    "evidence": "artifacts/m3d-d1-notion-gateway/trash-tombstone-evidence.json"
+  },
+  "gatewayRule": "presenceFrom: appDeletedAt or in_trash → kind tombstone; stale upsert → skipped_deleted"
 }

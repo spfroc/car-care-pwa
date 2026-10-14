@@ -8,6 +8,19 @@
 
 伪代码文件 `src/*.pseudo.ts` 保留作设计对照；可运行实现为 `src/*.ts`（`index.ts` 为入口）。
 
+
+## ⚠️ Fork 必换 ID（可见警告）
+
+本目录 `wrangler.toml` 里的 **`VEHICLES_DATA_SOURCE_ID` / `RECORDS_DATA_SOURCE_ID` / `TOMBSTONE_KV` id** 仅属于 disposable 测试 Worker `car-care-notion-sync-d1-test`。
+
+**Fork / 复制后必须**：
+
+1. 在你自己的 Notion 建库并 Share 给 Integration，填入**你的** Data Source ID  
+2. `wrangler kv namespace create …` 建**你的** KV，替换 `[[kv_namespaces]].id`  
+3. `wrangler secret put NOTION_TOKEN` / `GATEWAY_API_KEY`（永不 commit）
+
+直接沿用测试 ID 会导致写错 workspace 或 KV 串租。详见 `wrangler.toml` 顶部横幅注释。
+
 ## 你需要准备什么
 
 | 项 | 说明 |
@@ -48,8 +61,9 @@ npm install
 npx wrangler kv namespace create car-care-notion-tombstone
 # 把返回的 id 写入 wrangler.toml [[kv_namespaces]] id=
 
-# 3) 配置非密 vars（Origin、Data Source ID）
+# 3) 配置非密 vars（Origin、Data Source ID）—— FORK MUST REPLACE 测试 ID
 #    编辑 wrangler.toml [vars] ALLOWED_ORIGIN / VEHICLES_DATA_SOURCE_ID / RECORDS_DATA_SOURCE_ID
+#    以及 [[kv_namespaces]] id=（勿沿用 d1-test 的 DS/KV）
 
 # 4) Secrets（永不 commit）
 cp .dev.vars.example .dev.vars   # 仅本地 wrangler dev
@@ -64,6 +78,13 @@ curl -H "Authorization: Bearer $GATEWAY_API_KEY" https://<your-worker>.workers.d
 ```
 
 Node.js **≥ 22**（当前 wrangler 要求）。
+
+
+## PayloadJson / rich_text 长度
+
+`src/notion.ts` 的 `rt()` 对写入 Notion 的 rich_text 使用 `content.slice(0, 2000)`，这是 **Notion rich_text 单段硬上限的防护性截断**（避免 API 直接 400）。
+
+**业务层失败闭合**：`encodePayloadJson` 在 UTF-16 长度 > 2000 时返回失败；`push` 对 upsert 发 `payload_too_large`（`retryable: false`），**拒绝静默截断业务载荷**。勿把 `rt()` 的 slice 当成「可以随便超长、Gateway 会悄悄砍」的产品行为。
 
 ## 本地单测（无需 Notion）
 
