@@ -1,0 +1,84 @@
+{
+  "status": "PASS",
+  "kind": "real-browser-E2E-minimal",
+  "preview": "http://localhost:5173",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFp": "91dee0d48d59",
+  "steps": [
+    {
+      "id": "boot.settings",
+      "ok": true,
+      "detail": "http://localhost:5173/settings",
+      "at": "2026-10-14T08:03:33.246Z"
+    },
+    {
+      "id": "ui.select_notion",
+      "ok": true,
+      "detail": "",
+      "at": "2026-10-14T08:03:33.792Z"
+    },
+    {
+      "id": "ui.save_gateway_url",
+      "ok": true,
+      "detail": "keyFp=91dee0d48d59",
+      "at": "2026-10-14T08:03:34.260Z"
+    },
+    {
+      "id": "browser.verify",
+      "ok": true,
+      "detail": "verify200=1 bodyHasSession=true",
+      "at": "2026-10-14T08:03:34.840Z"
+    },
+    {
+      "id": "ui.vehicle_create",
+      "ok": true,
+      "detail": "url=http://localhost:5173/vehicles/b131e857-06a7-4c8e-b13c-2a327c6db2c2 hasName=true",
+      "at": "2026-10-14T08:03:37.027Z"
+    },
+    {
+      "id": "browser.bidirectional_sync",
+      "ok": true,
+      "detail": "[{\"path\":\"/sync/push\",\"status\":200,\"t\":1791965019148},{\"path\":\"/sync/pull?entities=vehicles,records\",\"status\":200,\"t\":1791965020004}]",
+      "at": "2026-10-14T08:03:40.114Z"
+    },
+    {
+      "id": "api.pull_sees_browser_vehicle",
+      "ok": false,
+      "detail": "rows=19",
+      "at": "2026-10-14T08:03:40.673Z"
+    },
+    {
+      "id": "browser.screenshot",
+      "ok": true,
+      "detail": "browser-smoke.png",
+      "at": "2026-10-14T08:03:40.799Z"
+    }
+  ],
+  "netSample": [
+    {
+      "path": "/verify",
+      "status": 200,
+      "t": 1791965014777
+    },
+    {
+      "path": "/verify",
+      "status": 200,
+      "t": 1791965017796
+    },
+    {
+      "path": "/sync/push",
+      "status": 200,
+      "t": 1791965019148
+    },
+    {
+      "path": "/sync/pull?entities=vehicles,records",
+      "status": 200,
+      "t": 1791965020004
+    }
+  ],
+  "hardBans": {
+    "noDeploy": true,
+    "d1TestOnly": true,
+    "corsOrigin": "http://localhost:5173"
+  }
+}
