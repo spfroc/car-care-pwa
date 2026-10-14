@@ -22,7 +22,23 @@
 
 ## 1. MVP 用户故事（US-D2-1..7）
 
-> 实现落点与门禁见 [`m3d-d2-plan.md`](./m3d-d2-plan.md) §2 / §4 / §6（D2-P1..P4）。冲突语义复用既有 M3-C，不另造。
+> 实现落点与门禁见 [`m3d-d2-plan.md`](./m3d-d2-plan.md) §2 / §4 / §6（D2-P1..P4）。冲突语义复用既有 M3-C，不另造。  
+> **前端契约适配（条件通过 must-fix）**：[`m3d-d2-plan.md`](./m3d-d2-plan.md) **§3.5**（Verify / PushResult / errors / AbortSignal / 会话 / 持久白名单 / M3-C 依赖）；摘要见下 §1.1。
+
+### 1.1 前端契约适配（交叉链接）
+
+完整硬表见 [`m3d-d2-plan.md`](./m3d-d2-plan.md) **§3.5**。产品验收时至少确认：
+
+| 主题 | 用户可感知 / 验收含义 |
+|------|------------------------|
+| Verify | `workspaceKey` → 云端身份（Outbox owner）；`dataSources` 仅诊断 |
+| Push / 冲突 | Gateway `conflicts[].id` 对上本地队列；`skipped_deleted` / `ambiguous_race` **不算**同步成功 |
+| 错误 / 限流 | 过大载荷失败可读；429/503 稍后重试；**不**静默丢队列 |
+| 中止 | 同步超时打断后须可重试；不误报已同步 |
+| 会话 | 冷启动重输 Key；401 / 断开 / 退出清会话；无会话不同步 |
+| 持久 | 仅 URL（等）进设置；**无** Token / 长期 Key |
+| M3-C | 冲突仍走现有 keep/take（main 已合并 M3-C） |
+| 文案 | 401≠403 Origin；本地开发须配 CORS Origin |
 
 ### US-D2-1 · 实验设置 + Gateway URL + 运行时 API Key + 校验
 
@@ -33,8 +49,9 @@
 | 验收要点 | 对齐 |
 |----------|------|
 | Gateway URL 可持久；API Key **仅会话内存**；冷启动须重输 | plan D2.8 · H8 |
-| `/verify` 成功后拿到 `workspaceKey` 供 Outbox `ownerUserId` | plan §3.2 |
-| 401 → 清内存会话并提示重输 | plan §3.1 |
+| `/verify` 成功后 `workspaceKey` → `VerifyResult.userId` / Outbox `ownerUserId` | plan §3.2 · **§3.5.1** |
+| 401 → 清内存会话并提示重输；**403 Origin** 提示配 CORS（非换 Key） | plan §3.1 · **§3.5.8** |
+| 冷启动须重输 Key；`sessionStorage` 可选且≠长期持久 | plan D2.8 · **§3.5.5** |
 | 实验折叠；默认不开启 Notion | D2-P2 禁区 |
 
 ### US-D2-2 · 首次上传车辆与记录；同 AppEntityId 不双页
@@ -69,9 +86,9 @@
 
 | 验收要点 | 对齐 |
 |----------|------|
-| `cloud_newer` → open conflict；keep/take 持锁 | plan ★F · D2-P4 |
-| **无** Notion 专用冲突分支；同形 `PushResult` | plan §2.1 · §3.3 |
-| `skipped_deleted` / `ambiguous_race` **禁止**当成功 ACK | plan §3.3 |
+| `cloud_newer` → open conflict；keep/take 持锁（依赖 main M3-C `9b64a2b`） | plan ★F · D2-P4 · **§3.5.7** |
+| **无** Notion 专用冲突分支；`id→opId` + 同形 `PushResult` | plan §2.1 · §3.3 · **§3.5.2** |
+| `skipped_deleted` / `ambiguous_race` **禁止**当成功 ACK | plan §3.3 · **§3.5.2** |
 
 ### US-D2-5 · Notion 与 Supabase 互斥；切 Notion 不改 Supabase 项目数据
 
@@ -209,3 +226,4 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-10-14 | 产品经理交付 US-D2-1..7、非目标、验收 A–E；并入 docs PR #10；明确 D1 M1 PASS ≠ D2 完成 |
+| 2026-10-14 | 条件通过 must-fix：交叉链接 plan §3.5 前端契约适配；§1.1 摘要；US-D2-1/4 对齐 |

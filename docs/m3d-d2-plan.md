@@ -85,11 +85,11 @@
 
 | 模块 | 建议路径 | 边界 |
 |------|----------|------|
-| Gateway HTTP 客户端 | `src/sync/providers/notionGatewayClient.ts` | 只懂 URL/Bearer/超时/429 退避/错误码 → `PushResult`/`VerifyResult`；**无** Notion SDK |
-| NotionProvider | `src/sync/providers/notion.ts` | 实现 `CloudProvider`；委托客户端；`getMediaObjectStore() → null` |
-| 会话类型 | `src/sync/types.ts` | 可持久：`notionGatewayUrl`、`notionWorkspaceHint`、`workspaceKey`；**类型禁止** secret 字段；`NotionRuntimeSession` 仅内存 |
-| Outbox | `src/sync/outbox.ts` | `isCloudEnqueueEnabled()` 含 `'notion'`；flush 仅 `ownerUserId === workspaceKey` |
-| Engine | `src/sync/engine.ts` | `resolveProvider('notion')`；与 supabase **互斥** |
+| Gateway HTTP 客户端 | `src/sync/providers/notionGatewayClient.ts` | 只懂 URL/Bearer/超时/429 退避/错误码 → `PushResult`/`VerifyResult`；方法带 `signal?: AbortSignal`；**无** Notion SDK |
+| NotionProvider | `src/sync/providers/notion.ts` | 实现 `CloudProvider`；委托客户端；§3.5 适配；`getMediaObjectStore() → null` |
+| 会话类型 | `src/sync/types.ts` + `config.ts` | 可持久：`notionGatewayUrl`、`notionWorkspaceHint`、`workspaceKey`；**类型禁止** secret；`NotionRuntimeSession` 仅内存；**白名单**读写对齐 §3.5.6 |
+| Outbox | `src/sync/outbox.ts` | `isCloudEnqueueEnabled` 含 `'notion'` **且**有效会话；flush 仅 `ownerUserId === workspaceKey` |
+| Engine | `src/sync/engine.ts` | `resolveProvider('notion')` 注入 URL+session；与 supabase **互斥**；锁 signal 下传 |
 | notion map（建议） | `src/sync/notionMap.ts` + IDB store | `(entity, appEntityId) → { pageId, workspaceKey, tombstone? }`；防 UI 硬删后盲目 recreate |
 | 冲突 | `merge` / `conflictDetect` / `conflictResolve` | **无 Notion 专用分支**；消费同形 `CloudRow` / `PushResult` |
 | 设置 UI | `DataStorageSettings.tsx` + i18n | 实验折叠；URL + 会话 Key；媒体说明；旧 Outbox 面板（可 D2b） |
@@ -144,11 +144,111 @@
 | `errors[].retryable` | 429/5xx → outbox 退避；不 ACK |
 | `payload_too_large` | 失败闭合；用户可读 |
 
+> **字段级 must-fix**（`id→opId`、`workspaceKey→userId`、`errors[]`、AbortSignal、会话、持久白名单、M3-C 依赖）：见 **§3.5 前端契约适配**。
+
 ### 3.4 删除 / 重试走廊（继承 D1 M1）
 
 1. delete → Gateway 双轨 + KV  
 2. Trash 成功而 KV put 失败 → **不 ACK**；客户端 **幂等重试** 同一 delete（D1 风险报告残余）  
 3. 过期 upsert → `skipped_deleted`；禁止复活  
+
+### 3.5 前端契约适配（条件通过 · must-fix）
+
+> 本节把 Gateway JSON（[`CONTRACT.md`](./templates/notion-sync-worker/CONTRACT.md)）接到现有 `CloudProvider` / `PushResult` / Outbox / M3-C。实现 PR（D2-P1..P4）必须对齐；产品侧交叉见 [`m3d-d2-product.md`](./m3d-d2-product.md) §1.1。  
+> §3.3 为摘要；**字段级映射以本小节为准**。
+
+#### 3.5.1 Verify 适配
+
+| Gateway `/verify` | PWA |
+|-------------------|-----|
+| `workspaceKey` | → `VerifyResult.userId`（作 `sync_meta.cloudUserId` / Outbox `ownerUserId`） |
+| `ok` / 失败 `error` | → `VerifyResult.ok` / `error` |
+| `botName?` | 可选展示（可映射 `email` 或设置文案；非硬依赖） |
+| `dataSources?` | **仅诊断**（设置页提示 DS 已绑）；**不**写入业务权威、**不**替代 `workspaceKey` |
+
+`verify` 成功后：`patchSyncMeta({ cloudUserId: verify.userId })`；enqueue / flush 仅 `ownerUserId === workspaceKey`（= `userId`）。
+
+#### 3.5.2 PushResult 适配表
+
+Gateway `POST /sync/push` → 引擎消费的 `PushResult`：
+
+| Gateway 字段 | → PWA `PushResult` | 规则 |
+|--------------|-------------------|------|
+| `applied[]`（outbox id） | `applied: string[]`（opId） | 仅这些 op **ACK** / `removeOutboxItems` |
+| `conflicts[].id` | `conflicts[].opId` | **必须** `id → opId`；引擎按 opId 关联 outbox |
+| `conflicts[].entity` | `conflicts[].entity` | 透传；缺省时上层不得臆造成功 |
+| `conflicts[].reason` | `conflicts[].reason` | `cloud_newer` → M3-C `openConflict`；见下 |
+| `conflicts[].attemptedAt` | `conflicts[].attemptedAt` | 透传（防误删较新 mid-sync op） |
+| `conflicts[].cloudRow?` | 透传或映射 | 优先填入冲突快照；可派生 `entityId` / `cloudUpdatedAt`；缺则 `handlePushConflicts` 可再 `pullAll` |
+| `skipped_deleted` / `ambiguous_race` | 进 `conflicts`（或等价非 applied 通道） | **禁止**进入 `applied`；**禁止**当成功 ACK |
+| `errors[]` | 见 §3.5.3 | **禁止**混入 `applied` |
+
+`cloud_newer`：走既有 M3-C（`open` / `keep_local` / `take_cloud`）；**无** Notion 专用冲突分支。
+
+#### 3.5.3 `errors[]` 结算
+
+Gateway：`errors: [{ id, entity, code, message, retryable }]`.
+
+实现二选一（P1 单测须覆盖映射；文档与代码择一并写清）：
+
+1. **扩展** `PushResult.errors`（推荐，契约同形），引擎按条结算；或  
+2. **映射**为逐 op `markOutboxFailure(opId, …)` + `nextRetryDelayMs` 退避，且 **不** ACK。
+
+| `code` / HTTP | 行为 | ACK？ |
+|---------------|------|-------|
+| `payload_too_large`（413/422） | **失败闭合**；该 op 标记失败；UI 可读；**禁截断** PayloadJson | ❌ |
+| 429 / `rate_limited` | `retryable: true` → backoff；可读「稍后重试」 | ❌ |
+| 503 / `notion_unavailable` / 5xx | `retryable: true` → backoff | ❌ |
+| 其它 `retryable: false` | 失败闭合或进诊断；不 ACK | ❌ |
+| 整包超时 / 网络断开 | 见 §3.5.4；全部未决 op **不** ACK | ❌ |
+
+顶层 `PushResult.error`（现有单字符串）可保留作「批次摘要」；**不得**用「有 error 就 ACK 其余」掩盖未列出的 op——未进 `applied` 的 op 一律保留队列。
+
+#### 3.5.4 AbortSignal
+
+- `NotionGatewayClient` 方法签名与引擎锁对齐：`verify/pullAll/pushOps/pushSnapshot(…, signal?: AbortSignal)`（实现阶段扩 `CloudProvider` 或 Provider 内转发）。  
+- 与 `withSyncLock` / `throwIfSyncAborted` 同一 `AbortSignal`；超时 / lease lost → **中止 in-flight fetch**。  
+- **超时 abort 必须不 ACK**：不得 `removeOutboxItems`；不得把不确定写成功的 id 写入 `applied`。  
+- abort 后上层按现网：`SyncLeaseLostError` 或等价「未合并 / 请重试」；Outbox 保持可幂等重推。
+
+#### 3.5.5 会话生命周期（`NotionRuntimeSession`）
+
+| 项 | 约定 |
+|----|------|
+| **栖身** | 进程内模块单例 / 设置页持有的 runtime（**非** `CloudStorageConfig`）；可选 `sessionStorage` 仅作 **同 tab** 刷新便利（**禁止**进 `car-care-export` / IDB 设置） |
+| **字段** | `{ bearer, workspaceKey, expiresAt? }`；`bearer` = 会话 Gateway API Key（或 D4 JWT） |
+| **清 Key** | `401 unauthorized` · `disconnectCloud` · `signOut` · **冷启动**（无有效会话） |
+| **工厂** | `resolveProvider('notion')` 注入 `notionGatewayUrl`（持久）+ 当前 `NotionRuntimeSession`；缺会话 → **不**构造可推送 Provider |
+| **enqueue** | 无会话时 `isCloudEnqueueEnabled('notion') === false`（实现：`provider==='notion'` 且 URL 已配 **且** 内存会话有效；仅 URL 不足） |
+
+**sessionStorage vs 冷启动**：`sessionStorage` **可选**；关浏览器 / 新会话仍须重输 Key（验收 D2.8）。有 sessionStorage 时「同 tab 刷新可免重输」≠ 持久化长期密钥。
+
+#### 3.5.6 持久字段与 `config.ts` 白名单
+
+| 字段 | 持久？ | 说明 |
+|------|--------|------|
+| `provider: 'notion'` | ✅ IDB `cloudStorage` | |
+| `notionGatewayUrl` | ✅ **新增** | HTTPS；`get/setCloudStorageConfig` 白名单读写 |
+| `notionWorkspaceHint` | ✅（已有） | 展示 |
+| `workspaceKey` | ✅ 建议 | 可放 `CloudStorageConfig` **或** `sync_meta.cloudUserId`（与 verify `userId` 同源）；防串租户；**非**密钥 |
+| `GATEWAY_API_KEY` / Token / JWT | ❌ | 类型 **禁止** secret 字段；对齐 architecture §2.4–2.5 |
+
+实现时同步改 `src/sync/types.ts` 的 `CloudStorageConfig` 与 `config.ts` 的 get/set **白名单**（今日仅 `provider` / `supabaseUrl` / `supabaseAnonKey` / `notionWorkspaceHint`）——漏白名单则 URL 无法 round-trip。导出过滤必须剥离会话密钥。
+
+#### 3.5.7 M3-C 依赖（D2-P4）
+
+- **D2-P4**（`cloud_newer` → open / keep / take）依赖仓库内 **已合并** 的 M3-C：`openConflict` · `keep_local` · `take_cloud`（持锁）。  
+- M3-C 已在 **main**（merge `9b64a2b` / PR #7）；当前 `origin/main` 含该提交（及后续 D1 等）。  
+- D2 **不**重做冲突模型；仅保证 PushResult 适配后进入同一条走廊。
+
+#### 3.5.8 非阻塞备注（实现时折叠执行）
+
+| 项 | 说明 |
+|----|------|
+| **P1 mocks** | 单测覆盖 `conflicts[].id → opId`、`workspaceKey → userId`、`errors[]` 结算（扩展或 `markOutboxFailure`） |
+| **P3 CORS** | 用户 Worker `ALLOWED_ORIGIN` **含本地开发 Origin**（及日后 Staging）；见 §2.2 |
+| **verify 文案** | **401** = Key 无效/缺失 → 清会话重输；**403** = Origin 未在 `ALLOWED_ORIGIN` → 提示改 Worker CORS，**不是**换 Key |
+| **P5 / 切换走廊** | D2-P5 可延期；默认 **保留** 孤儿 Outbox（按 `ownerUserId` 隔离不误推）；面板可延后；对齐 architecture SW* |
 
 ---
 
@@ -172,9 +272,9 @@
 | ID | 项 | 通过标准 |
 |----|----|----------|
 | D2.1 | enqueue | `isCloudEnqueueEnabled` 含 `notion`；vehicles/records 入队；media **不**入队 |
-| U1 | GatewayClient 401/403/429/503 | 映射正确；401 清会话 |
-| U2 | PushResult 透传 | `cloud_newer` / `skipped_deleted` / `ambiguous_race` / errors 原样到上层 |
-| U3 | 类型安全 | `CloudStorageConfig` 无 token/key 字段 |
+| U1 | GatewayClient 401/403/429/503 | 映射正确；**401** 清会话；**403 Origin** 文案区分（§3.5.8）；Abort 不 ACK |
+| U2 | PushResult 适配 | `id→opId`；`cloud_newer` / `skipped_deleted` / `ambiguous_race` **不**进 applied；`errors[]` 结算（§3.5.2–3） |
+| U3 | 类型安全 | `CloudStorageConfig` 无 token/key；含 `notionGatewayUrl` 白名单（§3.5.6） |
 | D2.4a | 静态扫描 | bundle 依赖无 `@notionhq/client`；源码无 `ntn_`/`secret_` 实值 |
 
 ### 4.2 ★ 真机（独立 Notion 测试工作区）
@@ -239,11 +339,11 @@
 | PR | 名称建议 | 内容 | 出口门禁 | 禁区 |
 |----|----------|------|----------|------|
 | **D2-P0** | `docs(m3d): D2 plan` | 本文件 + [`m3d-d2-product.md`](./m3d-d2-product.md)（US-D2-1..7 / 验收 A–E）+ roadmap | 架构师 + 产品签收 | 无 `src` |
-| **D2-P1** | `test(m3d-d2): NotionGatewayClient + Provider unit` | 客户端 + Provider 骨架；**mock Gateway**；enqueue/媒体/错误码单测 | G3 · D2.1 · U1–U3 · D2.4a | 不接真 Notion；不改设置默认 |
+| **D2-P1** | `test(m3d-d2): NotionGatewayClient + Provider unit` | 客户端 + Provider 骨架；**mock Gateway**；enqueue/媒体/错误码单测；**§3.5** mocks：`id→opId` / `workspaceKey→userId` / `errors[]` | G3 · D2.1 · U1–U3 · D2.4a · §3.5.8 | 不接真 Notion；不改设置默认 |
 | **D2-P2** | `feat(m3d-d2): experimental settings + session` | 实验 UI：URL、会话 Key、互斥、媒体文案；冷启动重输 | D2.7 · D2.8 · 文案扫描 | 不默认开启；不部署 |
 | **D2-P3** | `feat(m3d-d2): live sync vehicles/records` | 真机接线；outbox flush；pull/merge；artifacts `live-notion/` | ★C/U/D/R/T · D2.2 · D2.3 · D2.5 · D2.6 · G1/G4 | 无媒体上云；无正式站部署 |
-| **D2-P4** | `feat(m3d-d2): M3-C conflict path` | `cloud_newer` → open；keep/take；回声抑制 | ★F · 对齐 D3.1–D3.4 子集 | 无第二套冲突模型 |
-| **D2-P5**（可选） | `feat(m3d-d2): sync_notion_map + switch corridor` | map store；旧 Outbox 面板 SW* | SW1–SW4 或明确延期 D3 | 默认不清 Outbox |
+| **D2-P4** | `feat(m3d-d2): M3-C conflict path` | `cloud_newer` → open；keep/take；回声抑制；**依赖** main 已合并 M3-C（`9b64a2b`） | ★F · 对齐 D3.1–D3.4 子集 · §3.5.7 | 无第二套冲突模型 |
+| **D2-P5**（可选） | `feat(m3d-d2): sync_notion_map + switch corridor` | map store；旧 Outbox 面板 SW*；可延期 | SW1–SW4 或明确延期 D3 · §3.5.8 | 默认**保留**孤儿 Outbox；面板可延后 |
 
 **推荐开工顺序**：P0（本 PR）→ P1 → P2 → P3 → P4 →（P5）。  
 **产品经理**：用户故事与验收 A–E 已写入 [`m3d-d2-product.md`](./m3d-d2-product.md)（与本矩阵对齐，不另造冲突语义）；实现 PR 按 US-D2-1..7 对照 §4 / product §4 映射验收。
