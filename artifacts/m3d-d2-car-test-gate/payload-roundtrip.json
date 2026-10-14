@@ -1,0 +1,33 @@
+{
+  "kind": "live-gateway-payload-roundtrip",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "keyFp": "91dee0d48d59",
+  "workerVersion": "m3d-d1-0.1.1",
+  "stamp": "M3D-GATE-1791965702353",
+  "vid": "gate-v-1791965702353",
+  "found": true,
+  "payloadKeys": [
+    "archived",
+    "bodyType",
+    "createdAt",
+    "deviceId",
+    "energyType",
+    "fuelGrade",
+    "id",
+    "name",
+    "plate",
+    "updatedAt"
+  ],
+  "name": "M3D-GATE-1791965702353",
+  "plate": "GATE-PLATE",
+  "energyType": "gasoline",
+  "bodyType": "sedan",
+  "fuelGrade": "95",
+  "payloadId": "gate-v-1791965702353",
+  "nameOk": true,
+  "plateOk": true,
+  "idOk": true,
+  "energyOk": true,
+  "extrasOk": true,
+  "pass": true
+}

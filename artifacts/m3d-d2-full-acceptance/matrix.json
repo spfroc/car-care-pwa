@@ -300,5 +300,16 @@
       "Keep d1-test Gateway ≠ production; never point car-test at prod Notion workspace without intentional cutover."
     ],
     "blockers": []
+  },
+  "gateFollowUp": {
+    "folder": "artifacts/m3d-d2-car-test-gate",
+    "fixPr": "https://github.com/spfroc/car-care-pwa/pull/17",
+    "fixSha": "5b7052c00d2ed7370c7cca119672bed247c5396a",
+    "workerVersion": "m3d-d1-0.1.1",
+    "payloadNamePlate": "PASS",
+    "cors": "PASS",
+    "npmTest": "339 passed; tabLock flake not reproduced",
+    "sw1toSw4": "SKIP unit-only — 未完成真实双工作区联调",
+    "deployedPwa": false
   }
 }

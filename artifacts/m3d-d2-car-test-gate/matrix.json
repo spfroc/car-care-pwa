@@ -1,0 +1,51 @@
+{
+  "ranAt": "2026-10-14T08:15:58Z",
+  "zone": "Asia/Shanghai",
+  "baselineMainSha": "137e318a65df5bee3e9155d32b06930a16493884",
+  "fixSha": "5b7052c00d2ed7370c7cca119672bed247c5396a",
+  "fixPr": "https://github.com/spfroc/car-care-pwa/pull/17",
+  "acceptancePr": "https://github.com/spfroc/car-care-pwa/pull/16",
+  "gateway": "https://car-care-notion-sync-d1-test.spf-roc.workers.dev",
+  "workerVersion": "m3d-d1-0.1.1",
+  "keyFp": "91dee0d48d59",
+  "workspaceFp": "c647ac0368ff",
+  "deploy": {
+    "pwaCarTest": false,
+    "pwaProd": false,
+    "d1TestWorker": true,
+    "formalSupabase": false
+  },
+  "gates": {
+    "payloadJsonNamePlate": {
+      "status": "PASS",
+      "rootCause": "Worker pull omitted Notion column mirrors after slimPayload strip",
+      "fixPr": "https://github.com/spfroc/car-care-pwa/pull/17",
+      "assertions": [
+        "docs/templates/notion-sync-worker/tests/payload.test.ts",
+        "artifacts/m3d-d2-car-test-gate/payload-roundtrip.json"
+      ]
+    },
+    "cors": {
+      "status": "PASS",
+      "ALLOWED_ORIGIN": "https://car-test.adobesun.com,http://localhost:5173",
+      "carTestAllowed": true,
+      "arbitraryRejected": true,
+      "evidence": "cors-evidence.json"
+    },
+    "npmTest": {
+      "status": "PASS",
+      "passed": 339,
+      "skipped": 5,
+      "tabLockFlakeReproduced": false,
+      "tabLockReruns": ["12/12", "12/12"],
+      "tsc": "exit 0"
+    },
+    "sw1toSw4": {
+      "status": "SKIP_unit_only",
+      "realDualWorkspaceE2E": false,
+      "label": "未完成真实双工作区联调；不得称为真实 E2E PASS"
+    }
+  },
+  "recommendFrontendReReview": true,
+  "authorizeDeploy": false
+}

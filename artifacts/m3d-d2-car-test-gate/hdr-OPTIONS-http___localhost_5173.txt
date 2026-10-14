@@ -1,0 +1,13 @@
+HTTP/2 204 
+date: Wed, 14 Oct 2026 08:14:41 GMT
+access-control-allow-origin: http://localhost:5173
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=RsuB6%2FaKclxg616FcdARN6Ll3kqrCtnGwhDsrQznw1A7gd6q1z%2BUk%2BkfJVM7H88UKH0mmqiHEtsaKOAY%2FEjN%2BYYygqOGJ9oTEttvt1b0PASaFc8L4bYsya%2BMF%2FzLWustsYaqyq6jvgnaXfN%2FlT51Luy53JCtykfmpeDRkKvSskxkIBEEOhisO1f7WKYoryE%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4a521c559c2ae7d-IAD
+alt-svc: h3=":443"; ma=86400
+

@@ -100,8 +100,8 @@ Screenshot: `browser-smoke.png` · matrix: `browser-matrix.json`
 
 1. **SW1–SW4** not dual-tenant live (one d1-test workspaceKey) — unit coverage strong; accept residual until second test workspace exists.  
 2. **DEL1 pull:** Notion data-source query often excludes trash; tombstone authoritative in KV + `skipped_deleted` (documented honest口径).  
-3. **UI PayloadJson completeness:** browser-created vehicle synced by id; pull payload missing name/plate — spot-check before trusting cross-device nickname display from UI path (API script path does round-trip names).  
-4. **CORS:** d1-test `ALLOWED_ORIGIN` = `http://localhost:5173` only — **car-test origin currently 403**. Must update Worker var before staging browser use.  
+3. **UI PayloadJson completeness:** ~~missing name/plate~~ → **fixed on d1-test** via hydrate (`m3d-d1-0.1.1` / PR #17); see gate folder.  
+4. **CORS:** ~~localhost only~~ → **car-test + localhost** allowlist on d1-test; evil Origin still 403.  
 5. **tabLock flake** under load (see §A).  
 6. CloudAgent unavailable (region) — acceptance ran on shared box only.
 
@@ -141,3 +141,17 @@ artifacts/m3d-d2-full-acceptance/
   browser-smoke.log + browser-matrix.json + browser-smoke.png
   browser-notion-smoke.mjs
 ```
+
+## Gate follow-up (car-test pre-deploy)
+
+**2026-10-14 门禁轮次** 见 \`../m3d-d2-car-test-gate/SUMMARY.md\` + \`matrix.json\`。
+
+| Gate | Result |
+|------|--------|
+| PayloadJson name/plate | **PASS** — Worker hydrate 修复；独立 PR #17 |
+| CORS d1-test | **PASS** — car-test + localhost；evil 403 |
+| npm test | **339 PASS**；tabLock 本轮未复现 |
+| SW1–SW4 | 仍 **SKIP unit-only**（未双工作区 live） |
+| Deploy | **未部署** PWA；仅 d1-test Worker \`m3d-d1-0.1.1\` |
+
+Residual #3/#4 from prior Gaps section addressed on d1-test; merge of #17 still pending independent review.
