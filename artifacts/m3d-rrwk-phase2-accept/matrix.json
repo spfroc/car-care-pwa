@@ -1,0 +1,852 @@
+{
+  "status": "PASS",
+  "started": "2026-10-15T08:41:18.957Z",
+  "finished": "2026-10-15T08:44:03.243Z",
+  "base": "https://car-test.adobesun.com",
+  "deploySha": "f3bb58aceec53fea1c14f6959c3954259f6ff88d",
+  "bundle": "index-Ddi6Z1jp.js",
+  "keyFp": {
+    "T": "91dee0d48d59",
+    "B": "5d915911b54a",
+    "P": "aa819deb16dc"
+  },
+  "wkFp": {
+    "T": "c647ac0368ff",
+    "B": "db38e1e5a251",
+    "P": "c647ac0368ff"
+  },
+  "failed": [],
+  "matrix": [
+    {
+      "id": "preflight.gateways",
+      "ok": true,
+      "status": "PASS",
+      "detail": "T=91dee0d48d59/wk=c647ac0368ff B=5d915911b54a/wk=db38e1e5a251 P=aa819deb16dc/wk=c647ac0368ff sameWkTP=true",
+      "evidence": {},
+      "at": "2026-10-15T08:41:19.781Z"
+    },
+    {
+      "id": "deploy.bundle",
+      "ok": true,
+      "status": "PASS",
+      "detail": "stamp=git=f3bb58aceec53fea1c14f6959c3954259f6ff88d\nbundle=index-Ddi6Z1jp.js\nbundle_sha256=5e94997a82fb7353d44849283e02e2fd89aff638d13e2c1f0674f870cc3f7563\ntarget=car-test.adobesun.com\nbuilt_at=2026-10-15T15:41:34+0800\nphase=2-rr-wk\nmerge_sha=f3bb58aceec53fea1c14f6959c3954259f6ff88d\npr=24\n bundle=index-Ddi6Z1jp.js",
+      "evidence": {},
+      "at": "2026-10-15T08:41:20.179Z"
+    },
+    {
+      "id": "browser.bundle_loaded",
+      "ok": true,
+      "status": "PASS",
+      "detail": "https://car-test.adobesun.com/assets/index-Ddi6Z1jp.js",
+      "evidence": {},
+      "at": "2026-10-15T08:41:20.996Z"
+    },
+    {
+      "id": "C.observe.enabled",
+      "ok": true,
+      "status": "PASS",
+      "detail": "session=true guard=observe",
+      "evidence": {},
+      "at": "2026-10-15T08:41:23.629Z"
+    },
+    {
+      "id": "E1",
+      "ok": true,
+      "status": "PASS",
+      "detail": "fp=91dee0d48d59 tid=90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59",
+      "evidence": {
+        "row": {
+          "opId": "a807a946-32c1-4479-8552-a74533edf212",
+          "entity": "vehicles",
+          "entityId": "6d5a594e-c147-45a6-8f2d-cbb7d156e926",
+          "op": "upsert",
+          "ownerUserId": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+          "gatewayKeyFp": "91dee0d48d59",
+          "notionTargetId": "90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59",
+          "payloadName": "RRWK2-mv9ahpkq-E1"
+        }
+      },
+      "at": "2026-10-15T08:41:26.862Z"
+    },
+    {
+      "id": "C.observe.logs",
+      "ok": true,
+      "status": "PASS",
+      "detail": "observeLogs=0 totalGuardLogs=0 guard=observe",
+      "evidence": {
+        "sample": []
+      },
+      "at": "2026-10-15T08:41:28.082Z"
+    },
+    {
+      "id": "E4.setup_hold",
+      "ok": true,
+      "status": "PASS",
+      "detail": "fp=91dee0d48d59 entityId=46b8aff7-a80b-4a35-aa4c-2a2dadfd76be",
+      "evidence": {},
+      "at": "2026-10-15T08:41:31.278Z"
+    },
+    {
+      "id": "E2",
+      "ok": true,
+      "status": "PASS",
+      "detail": "sessionB=false holdRemains=true pushToB=0 bodyHasOrphan=true",
+      "evidence": {
+        "holdStill": {
+          "opId": "33b3221b-5519-403a-93ea-a66878bcbc90",
+          "entity": "vehicles",
+          "entityId": "46b8aff7-a80b-4a35-aa4c-2a2dadfd76be",
+          "op": "upsert",
+          "ownerUserId": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+          "gatewayKeyFp": "91dee0d48d59",
+          "notionTargetId": "90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59",
+          "payloadName": "RRWK2-mv9ahpkq-E4HOLD"
+        },
+        "pushB": []
+      },
+      "at": "2026-10-15T08:41:37.840Z"
+    },
+    {
+      "id": "E3",
+      "ok": true,
+      "status": "PASS",
+      "detail": "session=true holdGone=true push200=1",
+      "evidence": {},
+      "at": "2026-10-15T08:41:46.555Z"
+    },
+    {
+      "id": "E4.hold2",
+      "ok": true,
+      "status": "PASS",
+      "detail": "fp=91dee0d48d59",
+      "evidence": {},
+      "at": "2026-10-15T08:41:49.745Z"
+    },
+    {
+      "id": "E4",
+      "ok": true,
+      "status": "PASS",
+      "detail": "sessionP=true guard=true holdFp=91dee0d48d59 prodPush=0 attempted=true orphanHint=true keyFpP=aa819deb16dc",
+      "evidence": {
+        "e4Still": {
+          "opId": "71272d1e-92c4-4f77-b68e-3f6a34f87e18",
+          "entity": "vehicles",
+          "entityId": "7b5a6af3-32bb-4850-b365-07e6d8a69209",
+          "op": "upsert",
+          "ownerUserId": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+          "gatewayKeyFp": "91dee0d48d59",
+          "notionTargetId": "90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59",
+          "payloadName": "RRWK2-mv9ahpkq-E4RR"
+        },
+        "prodPushesE4": [],
+        "guardBeforeE4": true
+      },
+      "at": "2026-10-15T08:41:58.326Z"
+    },
+    {
+      "id": "C.enforce.enabled",
+      "ok": true,
+      "status": "PASS",
+      "detail": "guard=enforce",
+      "evidence": {},
+      "at": "2026-10-15T08:42:09.736Z"
+    },
+    {
+      "id": "C.enforce.no_attested_ready_empty",
+      "ok": true,
+      "status": "PASS",
+      "detail": "sessionCleared=true syncDisabled=true enfRowFp=91dee0d48d59",
+      "evidence": {},
+      "at": "2026-10-15T08:42:15.051Z"
+    },
+    {
+      "id": "E5",
+      "ok": true,
+      "status": "PASS",
+      "detail": "outboxCount=1 e5Still=true sessionReady=false",
+      "evidence": {},
+      "at": "2026-10-15T08:42:24.735Z"
+    },
+    {
+      "id": "E6",
+      "ok": true,
+      "status": "PASS",
+      "detail": "discarded=true e6Gone=true before=2 after=0",
+      "evidence": {},
+      "at": "2026-10-15T08:42:34.064Z"
+    },
+    {
+      "id": "E7",
+      "ok": true,
+      "status": "PASS",
+      "detail": "heldDuringWrong=true wrongPush=0 rightPush=1 flushed=true",
+      "evidence": {},
+      "at": "2026-10-15T08:42:54.399Z"
+    },
+    {
+      "id": "E8",
+      "ok": true,
+      "status": "PASS",
+      "detail": "session=true verify200=3 prodPushDelta=0 wkFp=c647ac0368ff",
+      "evidence": {},
+      "at": "2026-10-15T08:42:57.170Z"
+    },
+    {
+      "id": "E9",
+      "ok": true,
+      "status": "PASS",
+      "detail": "still=true noFp=true pushes=0",
+      "evidence": {},
+      "at": "2026-10-15T08:43:05.734Z"
+    },
+    {
+      "id": "E.legacy_CLAIM",
+      "ok": true,
+      "status": "PASS",
+      "detail": "claimUi=true claimed=true afterFp=91dee0d48d59 silentClaimPrevented=true",
+      "evidence": {},
+      "at": "2026-10-15T08:43:07.938Z"
+    },
+    {
+      "id": "E.legacy_no_silent_claim",
+      "ok": true,
+      "status": "PASS",
+      "detail": "verify/sync did not stamp legacy before explicit CLAIM",
+      "evidence": {},
+      "at": "2026-10-15T08:43:07.938Z"
+    },
+    {
+      "id": "E11",
+      "ok": true,
+      "status": "PASS",
+      "detail": "metaFp=91dee0d48d59 e11Fp=91dee0d48d59 pushT=1 pushP=0",
+      "evidence": {
+        "metaAfter": {
+          "deviceId": "9b0b4388-2fa0-4c61-be70-0008c00caf2a",
+          "status": "idle",
+          "provider": "notion",
+          "cloudUserId": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+          "notionGatewayKeyFp": "91dee0d48d59",
+          "notionTargetId": "90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59",
+          "lastPushAt": "2026-10-15T08:42:43.235Z",
+          "lastPullAt": "2026-10-15T08:42:43.235Z",
+          "lastSuccessAt": "2026-10-15T08:42:43.235Z"
+        }
+      },
+      "at": "2026-10-15T08:43:27.524Z"
+    },
+    {
+      "id": "E10",
+      "ok": true,
+      "status": "PASS",
+      "detail": "delegated to m2-supabase-smoke.mjs (separate step)",
+      "evidence": {},
+      "at": "2026-10-15T08:43:27.524Z"
+    },
+    {
+      "id": "F.vehicle_bidirectional",
+      "ok": true,
+      "status": "PASS",
+      "detail": "create=true pullSeen=true",
+      "evidence": {},
+      "at": "2026-10-15T08:43:39.242Z"
+    },
+    {
+      "id": "F.offline_retry",
+      "ok": true,
+      "status": "PASS",
+      "detail": "queued=true pulled=true",
+      "evidence": {},
+      "at": "2026-10-15T08:43:49.918Z"
+    },
+    {
+      "id": "F.cleanup_fixtures",
+      "ok": true,
+      "status": "PASS",
+      "detail": "deleted=9 status=200",
+      "evidence": {},
+      "at": "2026-10-15T08:44:03.030Z"
+    },
+    {
+      "id": "invariant.zero_prod_gateway_push",
+      "ok": true,
+      "status": "PASS",
+      "detail": "count=0",
+      "evidence": {},
+      "at": "2026-10-15T08:44:03.030Z"
+    }
+  ],
+  "consoleLogs": [
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:observe] verify_attested {workspaceKey: 18eab0db-43db-817c-911a-000390294864, gatewayKeyFp: 5d915911b54a, notionTargetId: 18eab0db-43db-817c-911a-000390294864::5d915911b54a}",
+      "t": 1792053693471
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: aa819deb16dc, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::aa819deb16dc}",
+      "t": 1792053711854
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053711859
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053711859
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053712181
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053712182
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053712973
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053714450
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053714452
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053718631
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053718632
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053719447
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053719448
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053719922
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_target_mismatch {opId: 71272d1e-92c4-4f77-b68e-3f6a34f87e18, item: Object, active: Object}",
+      "t": 1792053719923
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053720579
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053729518
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053734442
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053734443
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053735193
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053735194
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053736008
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053736009
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053736470
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_refused_no_attested_session {metaCloudUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa, metaTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053736471
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053737059
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053746771
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 18eab0db-43db-817c-911a-000390294864, gatewayKeyFp: 5d915911b54a, notionTargetId: 18eab0db-43db-817c-911a-000390294864::5d915911b54a}",
+      "t": 1792053752040
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053756082
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 18eab0db-43db-817c-911a-000390294864, gatewayKeyFp: 5d915911b54a, notionTargetId: 18eab0db-43db-817c-911a-000390294864::5d915911b54a}",
+      "t": 1792053761338
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053767904
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: aa819deb16dc, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::aa819deb16dc}",
+      "t": 1792053776455
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053779274
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053779594
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053779596
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053780382
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053781550
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053781552
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053785881
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] flush_skip_legacy_l1 {opId: legacy-1792053779450-ls0rl8, ownerUserId: 90da532e-b363-42df-99eb-7ac75f6c12aa}",
+      "t": 1792053785887
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] legacy_claimed {claimed: 1, workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59}",
+      "t": 1792053786733
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053795791
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053800993
+    },
+    {
+      "type": "info",
+      "text": "[notionTargetGuard:enforce] verify_attested {workspaceKey: 90da532e-b363-42df-99eb-7ac75f6c12aa, gatewayKeyFp: 91dee0d48d59, notionTargetId: 90da532e-b363-42df-99eb-7ac75f6c12aa::91dee0d48d59}",
+      "t": 1792053809520
+    }
+  ],
+  "netSample": [
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053682973
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053693155
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053694340
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053694498
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053699855
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053701056
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053701230
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053702970
+    },
+    {
+      "host": "car-care-notion-sync.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053711638
+    },
+    {
+      "host": "car-care-notion-sync.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053712820
+    },
+    {
+      "host": "car-care-notion-sync.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053712973
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053720370
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053721554
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053721714
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053722560
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053729336
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053736919
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053738103
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053738280
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053739072
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053746619
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053751869
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053755935
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053761184
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053762368
+    },
+    {
+      "host": "car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053762504
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053767719
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053768901
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053769057
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053770004
+    },
+    {
+      "host": "car-care-notion-sync.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053776267
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053779050
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053780235
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053780382
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053788734
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053788904
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053789836
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053795600
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053800850
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053802034
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053802181
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053803076
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053809383
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053812833
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053812961
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053813759
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/verify",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053822933
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/push",
+      "method": "POST",
+      "status": 200,
+      "t": 1792053823085
+    },
+    {
+      "host": "car-care-notion-sync-d1-test.spf-roc.workers.dev",
+      "path": "/sync/pull?entities=vehicles,records",
+      "method": "GET",
+      "status": 200,
+      "t": 1792053823939
+    }
+  ],
+  "notes": [
+    "Ephemeral Playwright profile only — user device IDB untouched",
+    "Production PWA car.adobesun.com not modified",
+    "Formal Gateway not redeployed; G-P used only for verify + flush-refusal (E4/E8)",
+    "Formal Supabase not modified in this script"
+  ]
+}
