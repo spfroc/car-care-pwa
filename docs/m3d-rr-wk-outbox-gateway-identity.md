@@ -2,6 +2,7 @@
 
 > **状态**：Phase 0 设计（本 PR）· **未实现代码** · **不 merge 部署**  
 > **日期**：2026-10-15（Asia/Shanghai）  
+> **Conditional Go 修订**：L1 二次确认硬性 · `notionTargetId` 冗余键 / 结构化比较权威 · session-derived `activeTarget` + verify 原子写 meta · §9 E4 同 wk 异 keyFp 必测  
 > **风险 ID**：RR-WK（高 / 已知）  
 > **对应检查表**：[`m3d-prod-pwa-release-checklist.md`](./m3d-prod-pwa-release-checklist.md) §1A 选项 ②  
 > **范围**：**仅 Notion 走廊**；Supabase `ownerUserId` / RLS / sync 路径**不变**  
@@ -12,9 +13,11 @@
 ## 0. 一句话结论
 
 在 Outbox 行与 `sync_meta` 上，于每次成功 `/verify` 后盖印 **复合身份**  
-`notionTargetId = workspaceKey + "::" + gatewayKeyFp`  
-（`gatewayKeyFp` = Bearer 的 sha256 前 12 位 hex，与运维指纹 `keyFp` 同算法）。  
-Flush **仅当**当前已验证会话的复合身份与行上盖印**完全一致**；否则拒发并 park 为孤儿队列。  
+`{ workspaceKey, gatewayKeyFp }`（Notion 下 `ownerUserId ≡ workspaceKey`）。  
+展示/分组用冗余键 `notionTargetId = workspaceKey + "::" + gatewayKeyFp`  
+（`gatewayKeyFp` = Bearer 的 sha256 前 **12** 位 hex，与运维指纹 `keyFp` 同算法；分隔符恰好 `::`、无空格）。  
+**比较权威**为结构化字段，**非**拼接串。  
+Flush **仅当**当前已验证会话派生的 target 与行上盖印**完全一致**；否则拒发并 park 为孤儿队列。  
 **禁止**仅用用户手填 Gateway URL 作为身份。
 
 ---
@@ -66,15 +69,19 @@ Flush **仅当**当前已验证会话的复合身份与行上盖印**完全一�
 ### 2.1 定义
 
 ```text
-gatewayKeyFp  := sha256_hex(utf8(bearer))[0:12]     // 与运维 keyFp 同算法；非密钥
+gatewayKeyFp  := sha256_hex(utf8(bearer))[0:12]     // 固定 12 hex 字符；与运维 keyFp 同算法；非密钥
 workspaceKey  := /verify 成功响应中的 workspaceKey   // 已有；亦即 tenant / owner 主键
 wkFp          := sha256_hex(utf8(workspaceKey))[0:12] // 可选展示 / 日志；与文档 wkFp 对齐时可相等或派生
 
-notionTargetId := workspaceKey + "::" + gatewayKeyFp
+// Notion 走廊：ownerUserId ≡ workspaceKey
+notionTargetId := workspaceKey + "::" + gatewayKeyFp   // 分隔符恰好 "::"；两侧无空格
 ```
 
-**规范字符串** `notionTargetId`：单一可比较主键，便于 orphan 汇总与 DISCARD 精确匹配。  
-结构化等价：`{ workspaceKey, gatewayKeyFp }`；序列化必须稳定（上式，无空格）。
+**比较权威（MUST）**：结构化字段 `{ workspaceKey | ownerUserId, gatewayKeyFp }`。  
+门禁 / flush / orphan 判定**必须**比对这两字段（或等价结构化对象），**不得**仅靠解析拼接串。  
+
+**冗余键** `notionTargetId`：规范形式恰好 `workspaceKey::gatewayKeyFp`（`gatewayKeyFp` = **12** hex；分隔符 `::`；无空格）。  
+仅用于展示、orphan 分组、DISCARD 精确匹配标签；若与结构化字段不一致，**以结构化字段为准**并视为数据错误。
 
 ### 2.2 为何不是「仅 URL」
 
@@ -107,7 +114,7 @@ notionTargetId := workspaceKey + "::" + gatewayKeyFp
 |------|------|------|
 | `ownerUserId` | string（已有） | **保持**：仍 ≈ `workspaceKey`（或 unbound）；Supabase 路径语义不变 |
 | `gatewayKeyFp` | `string \| undefined` | Notion 行：盖印的 keyFp；缺省 = legacy（§4） |
-| `notionTargetId` | `string \| undefined` | 冗余规范键 `workspaceKey::gatewayKeyFp`；便于索引/面板；与上两字段一致 |
+| `notionTargetId` | `string \| undefined` | **冗余**展示/分组键，形式恰好 `workspaceKey::gatewayKeyFp`（12 hex · `::` · 无空格）；比较权威仍为 `ownerUserId`/`workspaceKey` + `gatewayKeyFp` |
 
 > **兼容**：保留 `ownerUserId` 以免破坏 SW1–SW4 orphan 面板与 Supabase 共用类型。Notion flush 额外要求 `gatewayKeyFp` / `notionTargetId` 匹配。
 
@@ -153,7 +160,7 @@ notionTargetId := workspaceKey + "::" + gatewayKeyFp
 3. `stampOutboxOwner` 扩展为 `stampOutboxNotionTarget`：  
    - `ownerUserId = meta.cloudUserId ?? session.workspaceKey ?? unbound`  
    - `gatewayKeyFp = session.gatewayKeyFp`  
-   - `notionTargetId = ownerUserId + "::" + gatewayKeyFp`（owner 为 unbound 时**不**盖 notionTargetId / 不进 Notion flush）
+   - `notionTargetId = ownerUserId + "::" + gatewayKeyFp`（Notion 下 `ownerUserId ≡ workspaceKey`；owner 为 unbound 时**不**盖 notionTargetId / 不进 Notion flush；拼接串仅冗余）
 
 无有效复合身份 → **不 enqueue**（与「仅有 URL」同等拒绝）。
 
@@ -162,25 +169,40 @@ notionTargetId := workspaceKey + "::" + gatewayKeyFp
 对 `provider === 'notion'`：
 
 ```text
-activeTarget := meta.notionTargetId
-              或 (meta.cloudUserId + "::" + meta.notionGatewayKeyFp)
-              或 (session.workspaceKey + "::" + session.gatewayKeyFp)
+// 当存在已验证会话（session 有非空 workspaceKey + gatewayKeyFp）时：
+//   session-derived target 为权威；禁止用过期 sync_meta 覆盖当前会话。
+active := {
+  workspaceKey:  session.workspaceKey,
+  gatewayKeyFp:  session.gatewayKeyFp,
+}
+// 无已验证会话时：拒绝全部 Notion flush（不得回落到陈旧 meta 当作活跃 target）
 
 对每个候选 op：
   if op 无 gatewayKeyFp（legacy）→ 见 §4 分类，默认不自动 flush
-  if op.notionTargetId !== activeTarget → 排除（视为 orphan / park）
-  if op.ownerUserId !== active.workspaceKey → 排除（已有）
+  // 比较权威 = 结构化字段（不得仅比 notionTargetId 拼接串）
+  if op.ownerUserId !== active.workspaceKey
+     OR op.gatewayKeyFp !== active.gatewayKeyFp → 排除（视为 orphan / park）
   // 然后才进入 attempts / conflict / tombstone 等现有过滤
 ```
+
+**`/verify` → sync_meta 原子写入（MUST）**：
+
+成功 `/verify`（ok + 非空 `workspaceKey`）后，**同一事务/同一写路径**必须原子写入：
+
+1. 运行时 session：`workspaceKey` + `gatewayKeyFp`（由本次 Bearer 计算）  
+2. `sync_meta`：`cloudUserId`（= workspaceKey）+ `notionGatewayKeyFp` + `notionTargetId`（冗余键）
+
+禁止：先 flush 再写 meta；禁止「session 已是新 target、meta 仍是旧 target」时用 meta 参与 flush 比对。  
+`sync_meta` 仅作冷启动/展示的镜像；**有已验证会话时不得以 meta 覆盖 session**。
 
 **硬规则**：
 
 | 条件 | 行为 |
 |------|------|
-| 活跃会话无 verify 盖印 | 拒绝全部 Notion flush |
-| 行 target ≠ 活跃 target | **拒发**；保留行；计入「未推送（其他 Gateway）」孤儿 |
+| 活跃会话无 verify 盖印 | 拒绝全部 Notion flush（**不**用陈旧 meta 顶替） |
+| 行结构化 target ≠ session-derived | **拒发**；保留行；计入「未推送（其他 Gateway）」孤儿 |
 | URL 变了但 keyFp+workspaceKey 未变 | **允许** flush（身份未变） |
-| keyFp 变了（换 Key / 换 Gateway）同 workspaceKey | **拒发**旧队列；park；新 enqueue 走新 target |
+| keyFp 变了（换 Key / 换 Gateway）同 workspaceKey | **拒发**旧队列；park；新 enqueue 走新 target；verify 原子更新 meta |
 | 永远 | **禁止**把 A 队列 push 到 B Gateway |
 
 ### 3.3 Park / 孤儿面板扩展
@@ -190,7 +212,7 @@ Phase 1 扩展：
 
 - Orphan ⟺ `ownerUserId ≠ current.workspaceKey` **或**（Notion 且 `gatewayKeyFp` 存在且 ≠ current.gatewayKeyFp）。  
 - `summarizeOrphanOutbox` 增加按 `notionTargetId`（或 `ownerUserId` + `gatewayKeyFp`）分组。  
-- UI 文案区分：「其他工作区」vs「同工作区·其他 Gateway」（RR-WK 场景）。
+- UI 文案**必须**区分：「**异工作区**」vs「**同工作区·异 Gateway**」（RR-WK 场景；后者不得混称为异工作区）。
 
 ### 3.4 与 switchCorridor 关系
 
@@ -219,17 +241,18 @@ Phase 1 扩展：
 | 类别 | 判定 | Flush 策略 |
 |------|------|------------|
 | **T0 完整 Notion 目标** | 有 `gatewayKeyFp`（或可解析的 `notionTargetId`）且有 `ownerUserId` | 仅当与活跃 target 全等时 flush |
-| **L1 Legacy Notion** | `provider` 历史为 notion、有 `ownerUserId`（≠ unbound）、**无** `gatewayKeyFp` | **默认不自动 flush**；设置页提示「需一次成功 verify 后认领」 |
-| **L1 认领（claim）** | 用户当前 verify 成功，且 `ownerUserId === session.workspaceKey`，且该 owner 下**不存在**其他已盖章 target 冲突 | 一次性将 L1 行盖上**当前** `gatewayKeyFp` / `notionTargetId`（写回 IDB）；记审计日志（无密钥） |
-| **L1 冲突** | 同 `ownerUserId` 已有不同 `gatewayKeyFp` 的行，或用户拒绝认领 | 保持不 flush；面板展示为「旧队列（无 Gateway 指纹）」 |
+| **L1 Legacy Notion** | `provider` 历史为 notion、有 `ownerUserId`（≠ unbound）、**无** `gatewayKeyFp` | **默认不自动 flush**；设置页提示「需一次成功 verify 后，经二次确认认领」 |
+| **L1 认领（claim）** | 用户当前 verify 成功，且 `ownerUserId === session.workspaceKey`，且该 owner 下**不存在**其他已盖章 target 冲突，**且**设置页完成 **二次确认** | 一次性将 L1 行盖上**当前** `gatewayKeyFp` / 冗余 `notionTargetId`（写回 IDB）；记审计日志（无密钥）。**硬性要求**：claim **必须**经设置页 **二次确认**；**禁止**后台 / 静默 / 自动认领（含 observe 模式、升级 migration、verify 成功回调内隐式盖章） |
+| **L1 冲突** | 同 `ownerUserId` 已有不同 `gatewayKeyFp` 的行，或用户拒绝认领 / 未二次确认 | 保持不 flush；面板展示为「旧队列（无 Gateway 指纹）」 |
 | **U unbound** | `ownerUserId` 缺失或 `unbound` | 维持现有：不按用户 flush；不自动 DISCARD |
 | **S Supabase** | `meta.provider === 'supabase'` 路径 | **不读** Notion 指纹字段；行为完全不变 |
 
 ### 4.3 sync_meta 迁移
 
-- 缺 `notionGatewayKeyFp` / `notionTargetId`：下次 Notion verify 成功时写入。  
+- 缺 `notionGatewayKeyFp` / `notionTargetId`：下次 Notion verify 成功时**与 session 盖印同一写路径原子写入**（见 §3.2）。  
 - 升级瞬间**不**根据 URL 猜测 keyFp。  
-- `cloudUserId` 保持不动。
+- `cloudUserId` 保持不动。  
+- 有已验证会话时，flush **不以**陈旧 meta 覆盖 session-derived target。
 
 ### 4.4 明确不做
 
@@ -272,13 +295,13 @@ notionTargetId_P ≠ notionTargetId_T
 | B1 | **工作区切换**（verify 新 workspaceKey） | park 旧 owner 队列；meta 绑新 wk；旧队列不 flush 到新 wk（现有 SW2 + target 检查） |
 | B2 | **断开连接** | 清 bearer/session；Outbox **全留**；无 flush（SW1） |
 | B3 | **切回**原 workspaceKey + **原** keyFp | 原 target 队列恢复 ready；可 flush |
-| B4 | **切回**原 workspaceKey + **不同** keyFp | 旧 keyFp 队列仍 orphan；新队列独立；须 DISCARD 或再切回旧 Key 才能清/推旧队列 |
+| B4 | **切回**原 workspaceKey + **不同** keyFp（含**同 Gateway Key 轮换**） | 旧 keyFp 队列仍 orphan；新队列独立。**运维**：同 Gateway 轮换 Key 后，旧队列不会自动跟到新 Key；须**切回旧 Key** verify 后 flush，或对该 `notionTargetId` **DISCARD**（仍仅显式） |
 | B5 | **显式 DISCARD** | 仅 `confirmToken === 'DISCARD'` + 精确 `notionTargetId`（或 legacy owner）；成功删该队列 |
-| B6 | **离线重试** | 行上已盖 target；上线后仅当活跃 target 匹配才 retry；错 Gateway 不上送 |
+| B6 | **离线重试** | 行上已盖 target；上线后仅当 **session-derived** 活跃 target 匹配才 retry；错 Gateway 不上送 |
 | B7 | **账号 / 走廊切换**（Notion↔Supabase） | Supabase 不写 Notion 指纹；切回 Notion 须重新 verify 盖印；互斥展示保持 |
 | B8 | **仅改 URL、Key 相同** | target 不变；允许继续 flush |
-| B9 | **同会话改 Key（同 URL 或不同）未 verify** | 无新盖印 → 不 enqueue；flush 用旧 meta target 与行比较（或 session 已清则拒发） |
-| B10 | **L1 legacy 认领** | 见 §4.2；须显式或半显式确认（设置页），禁止后台静默 |
+| B9 | **同会话改 Key（同 URL 或不同）未 verify** | 无新盖印 → 不 enqueue；若 session 仍持旧盖印则按旧 session-derived 比对；session 已清则拒发（**不**用陈旧 meta 顶替） |
+| B10 | **L1 legacy 认领** | 见 §4.2；**必须**设置页 **二次确认**；**禁止**半显式 / 后台 / 静默 / 自动认领 |
 
 ---
 
@@ -325,16 +348,19 @@ Notion 字段在 Supabase 行上可为 `undefined`；flush 门禁以 `provider =
 
 | ID | 步骤 | 期望 |
 |----|------|------|
-| E1 | car-test 连 G-T · verify · 造 1 条车辆 upsert 入 Outbox | 行含 `gatewayKeyFp=91dee0d48d59` · `notionTargetId` 正确 |
-| E2 | 改 Key/URL 到 G-B · verify · 尝试 flush | G-T 行 **不** push 到 G-B；orphan 可见 |
+| E1 | car-test 连 G-T · verify · 造 1 条车辆 upsert 入 Outbox | 行含 `gatewayKeyFp=91dee0d48d59`；结构化字段与冗余 `notionTargetId`（`workspaceKey::91dee0d48d59`）一致 |
+| E2 | 改 Key/URL 到 G-B · verify · 尝试 flush | G-T 行 **不** push 到 G-B；orphan 可见且标「**异工作区**」（跨 wk 对照；**不得单独**作为 RR-WK 验收依据，见 E4） |
 | E3 | 同会话改回 G-T（同 Key）· verify · flush | G-T 行 push 200；Outbox 清空该 target |
-| E4 | 模拟「同 wk 另一 keyFp」：在仍持 G-T 队列时，用**另一测试 Key**（若有）或 mock session 注入不同 keyFp | ready 列表为空；无 push |
+| E4 | **【RR-WK 必测 · 同 workspaceKey · 异 keyFp】** 在仍持 G-T 队列时：用 **第二测试 Key**（同 wk 族）**或** mock session 注入同 `workspaceKey`、不同 `gatewayKeyFp` · verify/盖印 · 尝试 flush | G-T 行 **不** push；ready 为空；orphan 标「**同工作区·异 Gateway**」。**验收硬性**：本用例 PASS 才可声称 RR-WK 技术隔离；**不得**仅凭 E2（G-T↔G-B 跨 wk）主张 RR-WK 已验收 |
 | E5 | disconnect → 查 IDB | Outbox 仍在；session 无 bearer |
 | E6 | 显式 DISCARD 某 `notionTargetId` | 仅该队列删除；其他保留 |
 | E7 | 离线 enqueue → 上线错 Gateway → 再切回 | 错 Gateway 期间不上传；切回后上传 |
 | E8 | G-P `GET /verify` 只读 | 200 · wkFp `c647ac0368ff` · **零** push |
-| E9 | L1：手工写入无 `gatewayKeyFp` 的旧行 → 升级客户端 | 不自动 flush；认领或 DISCARD 路径可测 |
+| E9 | L1：手工写入无 `gatewayKeyFp` 的旧行 → 升级客户端 | 不自动 flush；**无**静默认领；设置页二次确认认领或 DISCARD 可测 |
 | E10 | Supabase 走廊冒烟（若 car-test 仍可） | owner 行为与改前一致 |
+| E11 | verify 成功后查 sync_meta | `notionGatewayKeyFp` / `notionTargetId` 与 session **原子一致**；随后故意写入陈旧 meta **不得**覆盖 session-derived flush 门禁 |
+
+> **RR-WK 验收边界**：E2（G-T↔G-B）只证明跨 `workspaceKey`；**E4 为同 wk 异 keyFp 专用用例**，缺 E4 不得关闭 RR-WK 技术隔离项。
 
 证据目录建议：`artifacts/m3d-rr-wk-target-guard/`（仅指纹，无密钥）。
 
@@ -355,11 +381,12 @@ Phase 0 成功标准：审查者能依据本文实现 Phase 1，且不违反硬�
 
 ## 11. 审查请关注
 
-1. 复合键是否同意用 `workspaceKey::gatewayKeyFp`（vs 仅结构化字段无拼接键）。  
-2. L1 legacy **认领**是否需设置页二次确认（推荐：要）。  
+1. ~~复合键是否同意用 `workspaceKey::gatewayKeyFp`~~ → **已定（Conditional Go）**：比较权威 = 结构化字段；`notionTargetId` 为冗余展示/分组键（形式 `workspaceKey::` + 12 hex）。  
+2. ~~L1 legacy **认领**是否需设置页二次确认~~ → **已定（硬性）**：必须设置页 **二次确认**；禁止半显式 / 静默 / 自动认领。  
 3. Feature flag 三级（off/observe/enforce）是否足够。  
 4. 是否接受「客户端自算 keyFp、正式 Gateway 本阶段不改 `/verify`」。  
-5. Orphan UI 是否必须区分「异工作区」与「同工作区异 Gateway」（推荐：要，便于 RR-WK 教育）。
+5. ~~Orphan UI 是否必须区分「异工作区」与「同工作区异 Gateway」~~ → **已定（建议落地）**：必须区分；E4 验收依赖该文案。  
+6. Flush `activeTarget`：**已定** — 有已验证会话时 session-derived 权威；`/verify` 原子写 sync_meta；禁止陈旧 meta 覆盖。
 
 ---
 
