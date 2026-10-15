@@ -1,14 +1,17 @@
 /**
- * SW1–SW4 live dual-workspace E2E (m3d-risks-and-acceptance).
+ * SW1–SW4 / FG1–FG3 live dual-workspace E2E (formal Gateway A + d1-test-b B).
  *
  * Requires TWO Gateways with DIFFERENT Notion workspace_id / workspaceKey:
- *   GATEWAY_A_URL + GATEWAY_A_KEY  (default: d1-test + ~/.car-care-secrets/m3d-d1-gateway-api-key.txt)
+ *   GATEWAY_A_URL + GATEWAY_A_KEY  (default: formal prod + ~/.car-care-secrets/m3d-prod-gateway-api-key.txt)
  *   GATEWAY_B_URL + GATEWAY_B_KEY  (from env or ~/.car-care-secrets/m3d-d1-b-*.txt)
+ *
+ * Fixture names: use agreed prefix M3D-PROD-FIXTURE-* (e.g. M3D-PROD-FIXTURE-SW-A-…).
+ * Historical runs used SW-A / SW1-OFF- / SW4- without that prefix; matchers still accept both.
  *
  * Without Gateway B secrets → status BLOCKED (honest; never unit-only live PASS).
  * Fingerprints only — never log Token / API Key plaintext.
  *
- * Artifacts: artifacts/m3d-prod-pre-gates/sw-dual/
+ * Artifacts: artifacts/m3d-prod-gateway-deploy/fg-dual/
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -383,8 +386,8 @@ async function runLiveDual(cfg) {
         mutatedAt: t0,
         payload: {
           id: markerA,
-          name: `SW-A ${markerA}`,
-          plate: 'SWA001',
+          name: `M3D-PROD-FIXTURE-SW-A-${markerA}`,
+          plate: 'PFXSWA01',
           energyType: 'ICE',
           bodyType: 'SEDAN',
           createdAt: t0,
@@ -428,7 +431,7 @@ async function runLiveDual(cfg) {
     await page.goto(PWA + '/vehicles', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(500);
     await context.setOffline(true);
-    const stamp = `SW1-OFF-${Date.now().toString(36)}`;
+    const stamp = `M3D-PROD-FIXTURE-SW1-OFF-${Date.now().toString(36)}`;
     const enq = await enqueueLocalVehicleOffline(page, stamp, wkA);
     const afterEnqueue = await outboxCounts(page);
     const ownerA = wkA; // parked orphan owner is workspace A key
@@ -497,7 +500,7 @@ async function runLiveDual(cfg) {
     await page.goto(PWA + '/vehicles', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(400);
     await context.setOffline(true);
-    const stamp4 = `SW4-${Date.now().toString(36)}`;
+    const stamp4 = `M3D-PROD-FIXTURE-SW4-${Date.now().toString(36)}`;
     const enq4 = await enqueueLocalVehicleOffline(page, stamp4, wkA);
     await context.setOffline(false);
     const parked4 = await outboxCounts(page);
@@ -631,16 +634,15 @@ async function runLiveDual(cfg) {
     const pullA = await gw(cfg.aUrl, cfg.aKey, 'GET', '/sync/pull?entities=vehicles');
     const rowsA = pullA.json?.rows || [];
     const flat = Array.isArray(rowsA) ? rowsA : [];
+    const nameOf = (r) => String(r.payload?.name || r.name || '');
+    const isSw4Name = (n) => n.includes('SW4-') || n.includes('M3D-PROD-FIXTURE-SW4-');
     const seenOnA = flat.some(
-      (r) =>
-        (r.payload?.name || r.name || '').includes('SW4-') ||
-        r.id === enq4.id ||
-        r.entityId === enq4.id,
+      (r) => isSw4Name(nameOf(r)) || r.id === enq4.id || r.entityId === enq4.id,
     );
     const pullB2 = await gw(cfg.bUrl, cfg.bKey, 'GET', '/sync/pull?entities=vehicles');
     const rowsB2 = pullB2.json?.rows || [];
     const leakedToB = (Array.isArray(rowsB2) ? rowsB2 : []).some(
-      (r) => r.id === enq4.id || (r.payload?.name || r.name || '').includes('SW4-'),
+      (r) => r.id === enq4.id || isSw4Name(nameOf(r)),
     );
     // FG1: must observe real /sync/push HTTP 200 (not merely seenOnA)
     record('FG1_push200', push200Count > 0 && browserPushStatus === 200, {

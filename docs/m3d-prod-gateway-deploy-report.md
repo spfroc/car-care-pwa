@@ -1,7 +1,7 @@
 # M3-D 正式 Gateway 部署验收报告
 
-> **状态**：**PASS**（正式 Gateway A–E + FG1–FG3；F 节 N/A）  
-> **时间**：2026-10-15 Asia/Shanghai (CST)  
+> **状态**：**PASS**（正式 Gateway A–E + FG1–FG3；F 节 N/A；测试条件 1/2 已补）  
+> **时间**：2026-10-15 Asia/Shanghai (CST) · 条件修复同日  
 > **用户授权**：选择 B · 部署独立正式 Notion Gateway · **暂不**发布生产 PWA  
 > **操作者**：Grok Bot（box 执行者）  
 > **审查 PR**：https://github.com/spfroc/car-care-pwa/pull/21 · **不要 merge**
@@ -49,6 +49,19 @@
 
 ---
 
+## 1.1 ⚠ 同 workspaceKey / Outbox 披露（merge / 生产 PWA 前必读）
+
+> **正式 Gateway wkFp(A)=`c647ac0368ff` 与历史 d1-test A 相同**——二者同属「鹏飞 孙's Notion」工作区，因此派生出**同一 `workspaceKey`**。  
+> **DS / Integration / KV / Gateway Key / Worker URL 均独立**；跨工作区隔离由 FG3（B=`d1-test-b` · wkFp `db38e1e5a251`）证明。
+
+| 含义 | 运维要求 |
+|------|----------|
+| PWA Outbox 按 owner=`workspaceKey` 隔离 | 同一浏览器会话若**混连** d1-test URL/Key 与正式 Gateway URL/Key，可能对**同一 owner** 发生跨环境直 flush |
+| 生产 PWA 上线前 | **禁止**同会话混连测试与正式 Gateway |
+| 建议 | 暂停/隔离 d1-test 指向任何将用于生产的浏览器会话；运维上正式与测试 Gateway **Key/URL 勿混用** |
+
+本披露为测试工程师带条件 PASS 之**条件 2**；未勾「已接受」不等于可跳过。
+
 ## 2. Checklist A–E / FG / F
 
 ### A 隔离 — PASS
@@ -94,6 +107,16 @@ C1–C8 ✅（car ACAO；evil 无 ACAO；无/错 Bearer→401；含 car-test 且
 - **禁止**将 pre-gates SW4 `push200=0` 冒充本结果  
 - 证据：`artifacts/m3d-prod-gateway-deploy/fg-dual/`（含 `sw-matrix.json` · `sw-dual-final.png`）  
 - G4 带伤短句：**未勾**（本轮以 FG 硬证，不走带伤）
+
+#### 夹具前缀与残留复核（条件 1）
+
+| 项 | 事实 |
+|----|------|
+| E-smoke | 使用约定前缀 **`M3D-PROD-FIXTURE-`**；E5 后 live_remaining=0 |
+| FG 本轮种子 | harness **未**统一使用约定前缀：云种子为 `SW-A …`，离线/切回戳为 `SW1-OFF-` / `SW4-`（历史命名） |
+| 以后 FG | 脚本已改为优先 `M3D-PROD-FIXTURE-SW-A-*` / `M3D-PROD-FIXTURE-SW1-OFF-*` / `M3D-PROD-FIXTURE-SW4-*` |
+| 残留只读证明 | 对正式 A + 对照 B `GET /sync/pull`：**live** 页名匹配 `SW-A` / `SW1-OFF-` / `SW4-` / `M3D-PROD-FIXTURE-` → **均为 0**（无需清理） |
+| 证据 | `artifacts/m3d-prod-gateway-deploy/fg-dual/fixture-residue-check.json` · `.md` |
 
 ### F 生产 PWA — N/A
 F1–F6：**本轮未授权生产 PWA · N/A**。F4 相关：本轮未改正式 Supabase、未清用户 IDB。

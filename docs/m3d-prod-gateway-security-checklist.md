@@ -3,7 +3,7 @@
 > **用途**：正式 Cloudflare Worker Gateway **部署前/后**勾选；供架构与安全审查。  
 > **配套总案**：[`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md)  
 > **配套部署报告**：[`m3d-prod-gateway-deploy-report.md`](./m3d-prod-gateway-deploy-report.md)  
-> **状态（2026-10-15 CST · 正式环境）**：**PASS**（A–E + FG1–FG3；F N/A）  
+> **状态（2026-10-15 CST · 正式环境）**：**PASS**（A–E + FG1–FG3；F N/A；条件 1/2 已补）  
 > - Worker `car-care-notion-sync` / `m3d-prod-1.0.0` / URL `https://car-care-notion-sync.spf-roc.workers.dev`  
 > - KV `car-care-notion-tombstone-prod` id `86eaac822dac…` · keyFp `aa819deb16dc` · token_fp `974ffc15d334` · wkFp `c647ac0368ff`  
 > - Integration「车护正式同步」+ DS Share ✅  
@@ -14,6 +14,22 @@
 操作者：Grok Bot（box）　日期（CST）：2026-10-15　审查人：____________
 
 ---
+
+## ⚠ 同 workspaceKey / Outbox 披露（条件 2 · 生产 PWA 前必读）
+
+> 正式 Gateway **wkFp(A)=`c647ac0368ff`** 与历史 **d1-test A 相同**（同一 Notion workspace → 同一 `workspaceKey`）。  
+> DS / Integration / KV / Key / URL **独立**；跨工作区由 FG3（B wkFp `db38e1e5a251`）证明。
+
+- PWA Outbox 按 owner=`workspaceKey` 隔离。  
+- **禁止**同一浏览器会话混连 d1-test 与正式 Gateway（URL/Key）；否则可能跨环境直 flush。  
+- 建议：生产会话暂停/隔离 d1-test；运维上正式与测试 Key/URL 勿混用。  
+- 详述见部署报告 §1.1。
+
+## 夹具残留（条件 1）
+
+- E-smoke：`M3D-PROD-FIXTURE-` ✅  
+- FG 本轮种子：历史 `SW-A` / `SW1-OFF-` / `SW4-`（未统一约定前缀）；脚本此后改为 `M3D-PROD-FIXTURE-*`  
+- 只读 pull 证明 A+B live 前缀命中 = **0**：`artifacts/m3d-prod-gateway-deploy/fg-dual/fixture-residue-check.md`
 
 ## A. 隔离门禁（全部必须 ✅）
 
@@ -106,7 +122,7 @@
 | G1 | **SW1–SW4 真实双工作区 live PASS**（2026-10-14 17:22 CST）— A `d1-test` wkFp `c647ac0368ff` · B `d1-test-b` wkFp `db38e1e5a251`；证据 `artifacts/m3d-prod-pre-gates/sw-dual/` | ☑ |
 | G2 | **离线 IDB 探针异常**（历史 `IDB.databases` SecurityError）；**2026-10-14 RR-IDB**：对象仓直读直写 + reonline Outbox sync **PASS**（`artifacts/m3d-prod-pre-gates/rr-idb/`）；未清用户 IDB | ☐ |
 | G3 | Gateway LWW 弱于 Supabase RPC；竞态靠 M3-C，不承诺强一致 | ☐ |
-| G4 | G1 双工作区 live **已 PASS**；若仍带已知残余（SW4 flush 观测偏软、正式 Gateway/PWA 未部署等）强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
+| G4 | G1 双工作区 live **已 PASS**；若仍带已知残余（SW4 flush 观测偏软、**生产 PWA 未发布**等）强行生产 → **No-Go**（除非用户按下方模板**原样确认**带伤上线） | ☐ |
 
 **G4「带伤上线」书面接受模板（须原样确认）**
 
@@ -114,7 +130,7 @@
 
 勾选 G4「用户接受」**仅当**用户授权原文中含以下短句（一字不改；缺任一项则 G4 不可勾、视为未接受）：
 
-> 我确认：SW1–SW4 双工作区 live 已 PASS；接受 SW4 flush 证据偏软（push200=0 / seenOnA=true）及正式 Gateway/PWA 尚未部署等残余风险。同意在此条件下带伤上线。
+> 我确认：SW1–SW4 双工作区 live 已 PASS；接受 SW4 flush 证据偏软（push200=0 / seenOnA=true）及生产 PWA 未发布等残余风险。同意在此条件下带伤上线。
 
 用户确认原文粘贴处：
 
