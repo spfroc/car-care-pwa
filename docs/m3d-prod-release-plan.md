@@ -250,6 +250,8 @@ curl -sS -H "Authorization: Bearer $GATEWAY_API_KEY" \
 
 ## 4. PWA 生产前端部署与回滚方案（授权后）
 
+> **勾选表**：发布当日请同时使用 [`m3d-prod-pwa-release-checklist.md`](./m3d-prod-pwa-release-checklist.md)（含正式/测试 Gateway 不混用强制项）。
+
 ### 4.1 部署前条件（全部满足才可申请「发布生产」）
 
 | # | 条件 |
@@ -386,6 +388,7 @@ nginx -t
 |------|------|
 | `docs/m3d-prod-release-plan.md` | 本文：正式 Gateway 方案、隔离、PWA 部署/回滚、互斥与 Outbox 复核、残余风险、门禁 |
 | `docs/m3d-prod-gateway-security-checklist.md` | 安全部署检查表（可打印勾选） |
+| `docs/m3d-prod-pwa-release-checklist.md` | 生产 PWA 发布勾选表（备份/指纹/冒烟/回滚/IDB·Outbox 保护/正式·测试不混用） |
 
 ### 9.2 明确未做
 
