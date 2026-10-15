@@ -1,0 +1,70 @@
+{
+  "status": "PASS",
+  "checkedAt": "2026-10-15T01:49:05.338Z",
+  "prefixes": [
+    "SW-A",
+    "SW1-OFF-",
+    "SW4-",
+    "M3D-PROD-FIXTURE-"
+  ],
+  "note_prefix_policy": {
+    "e_smoke": "E-smoke used agreed prefix M3D-PROD-FIXTURE-",
+    "fg_seed": "FG dual harness seeded with SW-A / SW1-OFF- / SW4- (not the agreed M3D-PROD-FIXTURE- prefix); future FG should prefer M3D-PROD-FIXTURE- (or M3D-PROD-FIXTURE-FG-*)"
+  },
+  "gateways": [
+    {
+      "role": "A_prod",
+      "url": "https://car-care-notion-sync.spf-roc.workers.dev",
+      "keyFp": "aa819deb16dc",
+      "verifyHttp": 200,
+      "wkFp": "c647ac0368ff",
+      "botName": "车护正式同步",
+      "pullHttp": 200,
+      "rowCount": 7,
+      "prefixHitsAll": [],
+      "livePrefixHits": [],
+      "liveCount": 0
+    },
+    {
+      "role": "B_d1_test_b",
+      "url": "https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "keyFp": "5d915911b54a",
+      "verifyHttp": 200,
+      "wkFp": "db38e1e5a251",
+      "botName": "车护测试B同步",
+      "pullHttp": 200,
+      "rowCount": 0,
+      "prefixHitsAll": [],
+      "livePrefixHits": [],
+      "liveCount": 0
+    }
+  ],
+  "cleanup": {
+    "attempted": false,
+    "ops": [],
+    "results": []
+  },
+  "after": [
+    {
+      "role": "A_prod",
+      "url": "https://car-care-notion-sync.spf-roc.workers.dev",
+      "keyFp": "aa819deb16dc",
+      "pullHttp": 200,
+      "rowCount": 7,
+      "livePrefixHits": [],
+      "liveCount": 0,
+      "tombstonedPrefixHits": 0
+    },
+    {
+      "role": "B_d1_test_b",
+      "url": "https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+      "keyFp": "5d915911b54a",
+      "pullHttp": 200,
+      "rowCount": 0,
+      "livePrefixHits": [],
+      "liveCount": 0,
+      "tombstonedPrefixHits": 0
+    }
+  ],
+  "summary": "Read-only pull: 0 live rows matching SW-A / SW1-OFF- / SW4- / M3D-PROD-FIXTURE- on A and B"
+}

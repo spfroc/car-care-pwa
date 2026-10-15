@@ -1,0 +1,16 @@
+Gateway https://car-care-notion-sync.spf-roc.workers.dev
+keyFp aa819deb16dc
+PASS E1.health http=200 version=m3d-prod-1.0.0
+PASS E2.verify http=200 bot=车护正式同步 wkFp=c647ac0368ff
+PASS E3.push_vehicle http=200 applied=["op-create-veh-mv8vizi2-ce45ec"] conflicts=[]
+PASS E3.pull_hydrate_name_plate attempts=1 nameOk=true plateOk=true payloadKeys=bodyType,createdAt,id,updatedAt,name,plate,energyType,archived
+PASS E3.idempotent_repush http=200 applied=["op-repush-veh-mv8vizi2-ce45ec"] conflicts=[]
+PASS E3.push_record http=200 applied=["op-create-rec-mv8vizi2-0dbc1e"]
+PASS E3.pull_record attempts=1 found=true
+PASS E3.payloadjson_roundtrip markerOk=true bodyOk=true bodyType=SUV
+PASS E4.delete http=200 applied=["op-del-veh-mv8vizi2-ce45ec"]
+PASS E4.delete_idempotent_retry http=200 applied=["op-del-retry-veh-mv8vizi2-ce45ec"] conflicts=[]
+PASS E4.skipped_deleted http=200 conflicts=[{"id":"op-stale-veh-mv8vizi2-ce45ec","entity":"vehicles","reason":"skipped_deleted","attemptedAt":"2026-10-15T01:41:33.076Z","cloudRow":{"entity":"vehicles","id":"veh-mv8vizi2-ce45ec","payload":{"bodyType":"SUV","fuelGrade":"95#","fixtureMarker":"marker-prod-mv8viz74-8ecbc3","createdAt":"2026-10-15T01:42:25.850Z","id":"veh-mv8vizi2-ce45ec","updatedAt":"2026-10-15T01:42:33.076Z","name":"M3D-PROD-FIXTURE-prod-mv8viz74-8ecbc3","plate":"PF8ECBC3","energyType":"ICE","archived":false},"updatedAt":"2026-10-15T01:42:33.076Z","deletedAt":"2026-10-15T01:42:33.076Z","deviceId":null}}]
+PASS E5.cleanup_record_delete http=200 applied=["op-del-rec-rec-mv8vizi2-0dbc1e"]
+PASS E5.no_live_fixture_resurrect liveResurrect=false aliveLike=0
+STATUS PASS failed= []

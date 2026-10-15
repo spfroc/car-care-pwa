@@ -1,0 +1,85 @@
+{
+  "status": "PASS",
+  "started": "2026-10-15T01:42:25.456Z",
+  "finished": "2026-10-15T01:42:37.381Z",
+  "gateway": "https://car-care-notion-sync.spf-roc.workers.dev",
+  "keyFp": "aa819deb16dc",
+  "wkFp": "c647ac0368ff",
+  "runId": "prod-mv8viz74-8ecbc3",
+  "fixturePrefix": "M3D-PROD-FIXTURE-",
+  "steps": {
+    "E1.health": {
+      "ok": true,
+      "summary": "http=200 version=m3d-prod-1.0.0",
+      "at": "2026-10-15T01:42:25.625Z"
+    },
+    "E2.verify": {
+      "ok": true,
+      "summary": "http=200 bot=车护正式同步 wkFp=c647ac0368ff",
+      "wkFp": "c647ac0368ff",
+      "botName": "车护正式同步",
+      "dsVehiclesFp": "43c9c8b98f79",
+      "dsRecordsFp": "886ef02f3e29",
+      "at": "2026-10-15T01:42:25.850Z"
+    },
+    "E3.push_vehicle": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-create-veh-mv8vizi2-ce45ec\"] conflicts=[]",
+      "http": 200,
+      "at": "2026-10-15T01:42:26.943Z"
+    },
+    "E3.pull_hydrate_name_plate": {
+      "ok": true,
+      "summary": "attempts=1 nameOk=true plateOk=true payloadKeys=bodyType,createdAt,id,updatedAt,name,plate,energyType,archived",
+      "nameOk": true,
+      "plateOk": true,
+      "at": "2026-10-15T01:42:27.845Z"
+    },
+    "E3.idempotent_repush": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-repush-veh-mv8vizi2-ce45ec\"] conflicts=[]",
+      "at": "2026-10-15T01:42:28.685Z"
+    },
+    "E3.push_record": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-create-rec-mv8vizi2-0dbc1e\"]",
+      "at": "2026-10-15T01:42:30.968Z"
+    },
+    "E3.pull_record": {
+      "ok": true,
+      "summary": "attempts=1 found=true",
+      "at": "2026-10-15T01:42:31.720Z"
+    },
+    "E3.payloadjson_roundtrip": {
+      "ok": true,
+      "summary": "markerOk=true bodyOk=true bodyType=SUV",
+      "at": "2026-10-15T01:42:33.076Z"
+    },
+    "E4.delete": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-del-veh-mv8vizi2-ce45ec\"]",
+      "at": "2026-10-15T01:42:34.238Z"
+    },
+    "E4.delete_idempotent_retry": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-del-retry-veh-mv8vizi2-ce45ec\"] conflicts=[]",
+      "at": "2026-10-15T01:42:34.929Z"
+    },
+    "E4.skipped_deleted": {
+      "ok": true,
+      "summary": "http=200 conflicts=[{\"id\":\"op-stale-veh-mv8vizi2-ce45ec\",\"entity\":\"vehicles\",\"reason\":\"skipped_deleted\",\"attemptedAt\":\"2026-10-15T01:41:33.076Z\",\"cloudRow\":{\"entity\":\"vehicles\",\"id\":\"veh-mv8vizi2-ce45ec\",\"payload\":{\"bodyType\":\"SUV\",\"fuelGrade\":\"95#\",\"fixtureMarker\":\"marker-prod-mv8viz74-8ecbc3\",\"createdAt\":\"2026-10-15T01:42:25.850Z\",\"id\":\"veh-mv8vizi2-ce45ec\",\"updatedAt\":\"2026-10-15T01:42:33.076Z\",\"name\":\"M3D-PROD-FIXTURE-prod-mv8viz74-8ecbc3\",\"plate\":\"PF8ECBC3\",\"energyType\":\"ICE\",\"archived\":false},\"updatedAt\":\"2026-10-15T01:42:33.076Z\",\"deletedAt\":\"2026-10-15T01:42:33.076Z\",\"deviceId\":null}}]",
+      "at": "2026-10-15T01:42:35.630Z"
+    },
+    "E5.cleanup_record_delete": {
+      "ok": true,
+      "summary": "http=200 applied=[\"op-del-rec-rec-mv8vizi2-0dbc1e\"]",
+      "at": "2026-10-15T01:42:36.786Z"
+    },
+    "E5.no_live_fixture_resurrect": {
+      "ok": true,
+      "summary": "liveResurrect=false aliveLike=0",
+      "at": "2026-10-15T01:42:37.381Z"
+    }
+  },
+  "failed": []
+}

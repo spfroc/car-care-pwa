@@ -1,0 +1,66 @@
+{
+  "status": "PASS",
+  "timestamp_cst": "2026-10-15T09:50+08:00",
+  "worker": {
+    "name": "car-care-notion-sync",
+    "url": "https://car-care-notion-sync.spf-roc.workers.dev",
+    "GATEWAY_VERSION": "m3d-prod-1.0.0",
+    "NOTION_VERSION": "2026-03-11",
+    "ALLOWED_ORIGIN": [
+      "https://car.adobesun.com",
+      "https://car-test.adobesun.com"
+    ],
+    "botName": "车护正式同步"
+  },
+  "kv": {
+    "title": "car-care-notion-tombstone-prod",
+    "id": "86eaac822dac466aa6f7e3af66447c21",
+    "id_prefix": "86eaac822dac"
+  },
+  "notion_databases": {
+    "workspace_id": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+    "vehicles_ds": "8a131796-3b54-49ef-870c-db60eb6ee081",
+    "records_ds": "6aef6240-eecb-4608-97d9-78216af766fb"
+  },
+  "fingerprints": {
+    "keyFp": "aa819deb16dc",
+    "token_fp": "974ffc15d334",
+    "wkFp": "c647ac0368ff"
+  },
+  "note_wkFp": "wkFp matches historical d1-test because same Notion workspace; DS/Integration/KV/Key are independent. FG B uses d1-test-b wkFp db38e1e5a251 (distinct).",
+  "probes": {
+    "A_isolation": "PASS",
+    "B_secrets": "PASS",
+    "C_cors_auth": "PASS",
+    "D_notion_contract": "PASS",
+    "E1_health": "PASS",
+    "E2_verify": "PASS",
+    "E3_fixture_roundtrip": "PASS",
+    "E4_skipped_deleted": "PASS",
+    "E5_cleanup": "PASS",
+    "FG1_push200": "PASS",
+    "FG2_outbox_cleared": "PASS",
+    "FG3_no_leak_B": "PASS",
+    "F_prod_pwa": "N/A",
+    "fixture_residue_readonly": "PASS"
+  },
+  "hard_constraints": {
+    "no_prod_pwa": true,
+    "no_formal_supabase": true,
+    "no_clear_idb": true,
+    "no_reuse_d1_test_resources": true
+  },
+  "pr": "https://github.com/spfroc/car-care-pwa/pull/21",
+  "tester_conditions": {
+    "condition1_fixture_residue": {
+      "status": "PASS",
+      "evidence": "artifacts/m3d-prod-gateway-deploy/fg-dual/fixture-residue-check.json",
+      "note": "Read-only pull A+B: 0 live rows matching SW-A / SW1-OFF- / SW4- / M3D-PROD-FIXTURE-; cleanup not needed. E-smoke used M3D-PROD-FIXTURE-; FG run used historical SW-* names; harness now prefers M3D-PROD-FIXTURE-*."
+    },
+    "condition2_shared_workspaceKey_outbox": {
+      "status": "DISCLOSED",
+      "wkFp_A": "c647ac0368ff",
+      "note": "Same as historical d1-test A (same Notion workspace). Outbox owner=workspaceKey — do not mix d1-test and formal Gateway in one browser session before prod PWA."
+    }
+  }
+}

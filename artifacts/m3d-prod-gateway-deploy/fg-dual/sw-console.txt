@@ -1,0 +1,99 @@
+{
+  "status": "PASS",
+  "steps": {
+    "SW0_verify_A": {
+      "ok": true,
+      "summary": "status=200 wkFp=c647ac0368ff",
+      "workspaceKeyFp": "c647ac0368ff",
+      "at": "2026-10-15T01:43:11.040Z"
+    },
+    "SW0_verify_B": {
+      "ok": true,
+      "summary": "status=200 wkFp=db38e1e5a251",
+      "workspaceKeyFp": "db38e1e5a251",
+      "at": "2026-10-15T01:43:11.041Z"
+    },
+    "SW0_distinct_workspaceKey": {
+      "ok": true,
+      "summary": "wkA=c647ac0368ff wkB=db38e1e5a251 distinct=true",
+      "at": "2026-10-15T01:43:11.041Z"
+    },
+    "SW0_seed_A": {
+      "ok": true,
+      "summary": "status=200",
+      "at": "2026-10-15T01:43:12.032Z"
+    },
+    "SW_connect_A": {
+      "ok": true,
+      "summary": "pwa=https://car-test.adobesun.com",
+      "at": "2026-10-15T01:43:14.984Z"
+    },
+    "SW1_offline_enqueue": {
+      "ok": true,
+      "summary": "before=0 after=1 via=idb",
+      "byOwnerFp": {
+        "c647ac0368ff": 1
+      },
+      "at": "2026-10-15T01:43:15.640Z"
+    },
+    "SW1_disconnect_retain": {
+      "ok": true,
+      "summary": "retained=1 sessionCleared=true how=清除本会话 Key",
+      "at": "2026-10-15T01:43:16.986Z"
+    },
+    "SW2_connect_B": {
+      "ok": true,
+      "summary": "wkB=db38e1e5a251",
+      "at": "2026-10-15T01:43:19.015Z"
+    },
+    "SW2_park_no_mispush": {
+      "ok": true,
+      "summary": "parkedTotal=1 push200toB=0 leakedA=false",
+      "at": "2026-10-15T01:43:21.527Z"
+    },
+    "SW3_reject_without_DISCARD": {
+      "ok": true,
+      "summary": "wrong={\"ok\":false,\"removed\":0,\"reason\":\"token-rejected-client\"} total=1",
+      "at": "2026-10-15T01:43:21.537Z"
+    },
+    "SW3_DISCARD_clears_parked": {
+      "ok": true,
+      "summary": "removed=? aOwnerLeft=0",
+      "at": "2026-10-15T01:43:22.090Z"
+    },
+    "FG1_push200": {
+      "ok": true,
+      "summary": "push200=2 browserPushStatus=200 netHits=1",
+      "at": "2026-10-15T01:43:32.092Z"
+    },
+    "FG2_outbox_cleared": {
+      "ok": true,
+      "summary": "parkedOps=1 ownerALeft=0 outboxTotal=0",
+      "at": "2026-10-15T01:43:32.093Z"
+    },
+    "FG3_no_leak_B": {
+      "ok": true,
+      "summary": "seenOnA=true leakedB=false",
+      "at": "2026-10-15T01:43:32.093Z"
+    },
+    "SW4_switchback_flush": {
+      "ok": true,
+      "summary": "parkedBefore=1 afterPark=1 push200=2 seenOnA=true leakedB=false ownerLeft=0",
+      "at": "2026-10-15T01:43:32.093Z"
+    }
+  },
+  "started": "2026-10-15T01:43:10.462Z",
+  "pwa": "https://car-test.adobesun.com",
+  "aUrl": "https://car-care-notion-sync.spf-roc.workers.dev",
+  "aKeyFp": "aa819deb16dc",
+  "bUrl": "https://car-care-notion-sync-d1-test-b.spf-roc.workers.dev",
+  "bKeyFp": "5d915911b54a",
+  "hardBans": {
+    "noProdGatewayDeploy": false,
+    "noProdPwaDeploy": true,
+    "noFormalSupabase": true,
+    "noClearUserIdb": true,
+    "secretsFingerprintsOnly": true
+  },
+  "ended": "2026-10-15T01:43:34.542Z"
+}
