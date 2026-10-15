@@ -1,0 +1,16 @@
+PASS SW0_verify_A status=200 wkFp=c647ac0368ff
+PASS SW0_verify_B status=200 wkFp=db38e1e5a251
+PASS SW0_distinct_workspaceKey wkA=c647ac0368ff wkB=db38e1e5a251 distinct=true
+PASS SW0_seed_A status=200
+PASS SW_connect_A pwa=https://car-test.adobesun.com
+PASS SW1_offline_enqueue before=0 after=1 via=idb
+PASS SW1_disconnect_retain retained=1 sessionCleared=true how=清除本会话 Key
+PASS SW2_connect_B wkB=db38e1e5a251
+PASS SW2_park_no_mispush parkedTotal=1 push200toB=0 leakedA=false
+PASS SW3_reject_without_DISCARD wrong={"ok":false,"removed":0,"reason":"token-rejected-client"} total=1
+PASS SW3_DISCARD_clears_parked removed=? aOwnerLeft=0
+PASS FG1_push200 push200=2 browserPushStatus=200 netHits=1
+PASS FG2_outbox_cleared parkedOps=1 ownerALeft=0 outboxTotal=0
+PASS FG3_no_leak_B seenOnA=true leakedB=false
+PASS SW4_switchback_flush parkedBefore=1 afterPark=1 push200=2 seenOnA=true leakedB=false ownerLeft=0
+STATUS PASS
