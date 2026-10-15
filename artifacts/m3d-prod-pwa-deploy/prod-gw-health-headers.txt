@@ -1,0 +1,15 @@
+HTTP/2 401 
+date: Thu, 15 Oct 2026 09:24:39 GMT
+content-type: application/json
+content-length: 59
+access-control-allow-origin: https://car.adobesun.com
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=ln7hGj7PTiFVtH9lqHvDxicslftq0%2BRu33IXARxL44wI4t%2Bz7hiTmldB3bkT%2B65StEbPlYqvRLc39k504KJCE3XCHwxD4O%2FGOJryhWOdK%2F%2FyEZFMwZadoMdcikoJM8m7bRr7l1GU2ao7crZp7KK0Se2jE9yLZ1WFvMBvn4ZaXgewZRLUE2uk"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4adc5a39afce60d-IAD
+alt-svc: h3=":443"; ma=86400
+

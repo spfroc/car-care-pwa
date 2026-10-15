@@ -1,0 +1,8 @@
+# Restore production static site from pre-deploy backup
+# Do NOT point production at d1-test / d1-test-b.
+#
+# On Contabo (as root or with sudo):
+tar -C /var/www -xzf /var/www/car-care-backups/car-care-pre-m3d-prod-rrwk-20261015-112538.tar.gz
+ls -la /var/www/car-care/assets/index-*.js
+cat /var/www/car-care/deploy-stamp.txt
+# Expect baseline: index-TdTLY2U-.js

@@ -1,0 +1,18 @@
+m3d-prod-pwa-deploy artifacts (no secrets)
+CST deploy window: 2026-10-15 ~17:24–17:26 Asia/Shanghai
+approved tip: f3bb58aceec53fea1c14f6959c3954259f6ff88d
+bundle: index-Ddi6Z1jp.js
+bundle_sha256: 5e94997a82fb7353d44849283e02e2fd89aff638d13e2c1f0674f870cc3f7563
+css: index-DUfOadJ-.css
+target: https://car.adobesun.com
+prod_dir: /var/www/car-care
+backup: /var/www/car-care-backups/car-care-pre-m3d-prod-rrwk-20261015-112538.tar.gz
+backup_sha256: 43c581cef68b8e1cd32eb85a4a9863f8190ca0222ce95a22aeaeb2396b3930ab
+backup_note: Contabo local clock in filename (≈2026-10-15 17:25 CST)
+baseline_pre_deploy_js: index-TdTLY2U-.js
+gateway_version: m3d-prod-1.0.0
+gateway_keyFp: aa819deb16dc
+gateway_wkFp: c647ac0368ff
+gateway_bot: 车护正式同步
+tests: 350 passed | 5 skipped
+section2A: PASS (d1-test / d1-test-b no ACAO for car.adobesun.com; Origin not allowed)

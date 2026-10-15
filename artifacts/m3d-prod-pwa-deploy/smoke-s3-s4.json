@@ -1,0 +1,29 @@
+{
+  "s3_home": {
+    "ok": true,
+    "title": "车护助手",
+    "snippet": "存储未持久化，建议安装到主屏幕并定期导出备份\n怎么装\n×\n车护助手\n\n离线车辆养护账本\n\n+ 车辆\n\n还没有车辆\n\n添加第一辆车\n\n或到设置中载入演示数据\n\n🏠\n首页\n📊\n统计\n⚙️\n设置"
+  },
+  "s3_settings": {
+    "ok": true,
+    "snippet": "存储未持久化，建议安装到主屏幕并定期导出备份\n怎么装\n×\n车护助手\n\n离线车辆养护账本\n\n+ 车辆\n\n还没有车辆\n\n添加第一辆车\n\n或到设置中载入演示数据\n\n🏠\n首页\n📊\n统计\n⚙️\n设置",
+    "hasNotion": false,
+    "hasSupabase": false
+  },
+  "s4_notion": {
+    "status": "未配置 PASS",
+    "reason": "临时 Playwright context，无用户真实配置；未写入任何 Gateway/Key",
+    "cfg": {
+      "localStorageKeys": [],
+      "idb": null,
+      "notionUrl": null,
+      "idbNames": [
+        "car-care-db"
+      ]
+    }
+  },
+  "notes": [
+    "未触碰用户真实配置文件；未 clear IDB/Outbox；未写正式 Supabase",
+    "notionTargetGuard runtime default off (module let guardMode = off)"
+  ]
+}
