@@ -19,7 +19,9 @@ import { countOpenConflicts, openConflict } from './conflictStore';
 import {
   ackOutboxCoveredByUpload,
   appendConflicts,
+  claimLegacyNotionOutbox,
   countOutboxForOwner,
+  discardOutboxForNotionTarget,
   ensureDeviceId,
   getSyncMeta,
   listOutbox,
@@ -31,6 +33,7 @@ import {
   rebindUnboundOutbox,
   removeOutboxItems,
   removeStaleConflictOps,
+  syncNotionTargetGuardFromConfig,
 } from './outbox';
 import {
   hasActiveLease,
@@ -44,6 +47,7 @@ import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
 import { clearNotionRuntimeSession, getNotionRuntimeSession } from './notionSession';
+import { attestNotionTargetAfterVerify } from './notionAttest';
 import {
   applyCloudRowsToNotionMap,
   markNotionMapTombstone,
@@ -472,6 +476,7 @@ export async function verifyConnection(): Promise<SyncActionResult> {
     return { ok: false, message: '未配置云存储（本地模式）' };
   }
   try {
+    await syncNotionTargetGuardFromConfig();
     const verify = await provider.verify();
     if (verify.ok) {
       const metaBefore = await getSyncMeta();
@@ -484,6 +489,24 @@ export async function verifyConnection(): Promise<SyncActionResult> {
       // Only bind unbound ops on first connect / same user — never on account switch / park switch
       if (verify.userId && (!prevUser || prevUser === verify.userId)) {
         await rebindUnboundOutbox(verify.userId);
+      }
+      // RR-WK: Notion verifies atomically stamp session + sync_meta composite identity.
+      // Never claim legacy outbox here (must be settings-page CLAIM with secondary confirm).
+      if (provider.id === 'notion' && verify.userId) {
+        const attested = await attestNotionTargetAfterVerify(verify.userId, { provider: 'notion' });
+        await patchSyncMeta({
+          status: 'idle',
+          lastError: undefined,
+          provider: 'notion',
+          cloudUserId: attested.workspaceKey,
+          notionGatewayKeyFp: attested.gatewayKeyFp,
+          notionTargetId: attested.notionTargetId,
+        });
+        return {
+          ok: true,
+          message: `连接成功${verify.email ? `（${verify.email}）` : ''}；云端约 ${verify.cloudRowCount ?? 0} 行；Gateway 指纹 ${attested.gatewayKeyFp}。不会自动改动本地数据。${switchGuard.note ? ` ${switchGuard.note}` : ''}`,
+          verify,
+        };
       }
       await patchSyncMeta({
         status: 'idle',
@@ -1343,9 +1366,39 @@ async function recordNotionMapAfterPush(
 export async function discardOrphanOutboxOwner(input: {
   ownerUserId: string;
   confirmToken: string;
+  notionTargetId?: string;
 }): Promise<SyncActionResult> {
+  if (input.notionTargetId?.trim()) {
+    if (input.confirmToken !== 'DISCARD') {
+      return { ok: false, message: '需要确认令牌 DISCARD 才会丢弃旧工作区队列。', pushed: 0 };
+    }
+    const removed = await discardOutboxForNotionTarget({
+      notionTargetId: input.notionTargetId,
+      confirmToken: 'DISCARD',
+    });
+    return {
+      ok: true,
+      message:
+        removed > 0
+          ? `已丢弃目标 ${input.notionTargetId.slice(0, 24)}… 的 ${removed} 条待同步项。`
+          : '该目标无待同步项。',
+      pushed: removed,
+    };
+  }
   const r = await discardParkedOutboxOwner(input);
   return { ok: r.ok, message: r.message, pushed: r.removed };
+}
+
+/**
+ * RR-WK L1: claim legacy Outbox rows onto current verified Gateway target.
+ * HARD: only from settings UI with confirmToken === 'CLAIM' (secondary confirm).
+ * Never call from verify / observe / migration.
+ */
+export async function claimLegacyOutboxOwner(input: {
+  confirmToken: string;
+}): Promise<SyncActionResult> {
+  const r = await claimLegacyNotionOutbox(input);
+  return { ok: r.ok, message: r.message, pushed: r.claimed };
 }
 
 /** D2-P5: orphan Outbox panel data for settings UI. */
@@ -1388,10 +1441,18 @@ export async function getSyncStatusSummary(): Promise<{
   outboxReadyCount: number;
   openConflictCount: number;
   orphanOutboxCount: number;
-  orphanOwners: Array<{ ownerUserId: string; count: number }>;
+  orphanOwners: Array<{
+    ownerUserId: string;
+    count: number;
+    notionTargetId?: string;
+    gatewayKeyFp?: string;
+    kind?: string;
+  }>;
+  legacyOutboxCount: number;
   config: CloudStorageConfig;
 }> {
   await recoverStaleSyncingStatus();
+  await syncNotionTargetGuardFromConfig();
   const meta = await getSyncMeta();
   const config = await getCloudStorageConfig();
   const outbox = meta.cloudUserId
@@ -1400,6 +1461,12 @@ export async function getSyncStatusSummary(): Promise<{
   const ready = await listReadyOutbox();
   const openConflictCount = await countOpenConflicts();
   const panel = await getOrphanOutboxPanel();
+  const legacyOutboxCount = outbox.filter(
+    (o) =>
+      (o.ownerUserId ?? '') !== 'unbound' &&
+      o.ownerUserId === meta.cloudUserId &&
+      !o.gatewayKeyFp,
+  ).length;
   return {
     meta,
     outboxCount: outbox.length,
@@ -1407,6 +1474,7 @@ export async function getSyncStatusSummary(): Promise<{
     openConflictCount,
     orphanOutboxCount: panel.orphanTotal,
     orphanOwners: panel.orphans,
+    legacyOutboxCount,
     config,
   };
 }

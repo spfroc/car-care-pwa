@@ -25,6 +25,16 @@ export interface SyncOutboxItem {
    * 'unbound' = enqueued before first successful verify.
    */
   ownerUserId?: string;
+  /**
+   * RR-WK: Gateway key fingerprint (sha256(bearer)[0:12] hex).
+   * Notion rows only; absent = legacy L1 (no auto flush when guard active).
+   */
+  gatewayKeyFp?: string;
+  /**
+   * RR-WK redundant display/group key: workspaceKey + "::" + gatewayKeyFp.
+   * Comparison authority remains structured { ownerUserId, gatewayKeyFp }.
+   */
+  notionTargetId?: string;
   /** M3-C: blocked while an open conflict exists for this entity+id. */
   blockedByConflictId?: string;
 }
@@ -50,6 +60,10 @@ export interface SyncMetaState {
   /** ISO watermark of max cloud updated_at seen */
   serverCursor?: ISODateTime;
   provider: CloudProviderId;
+  /** RR-WK: last successful Notion /verify keyFp (mirror of session). */
+  notionGatewayKeyFp?: string;
+  /** RR-WK redundant active target id (workspaceKey::gatewayKeyFp). */
+  notionTargetId?: string;
 }
 
 export interface CloudStorageConfig {
@@ -66,6 +80,17 @@ export interface CloudStorageConfig {
    * Not a secret; optional duplicate of sync_meta.cloudUserId for offline checks.
    */
   workspaceKey?: string;
+  /**
+   * RR-WK non-secret hint: last verified Gateway keyFp for settings display.
+   * Not used as flush identity authority (session-derived target is).
+   */
+  notionGatewayKeyFp?: string;
+  /**
+   * RR-WK feature flag for Outbox target guard.
+   * Default off (safe). observe|enforce activate session-derived composite identity gates.
+   * Must NOT auto-enforce on production car.adobesun.com until Phase 3 authorization.
+   */
+  notionTargetGuard?: 'off' | 'observe' | 'enforce';
   // Intentionally NO gateway/API token fields — secrets stay in NotionRuntimeSession (memory only).
 }
 

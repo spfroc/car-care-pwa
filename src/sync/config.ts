@@ -46,6 +46,14 @@ export async function getCloudStorageConfig(): Promise<CloudStorageConfig> {
     notionWorkspaceHint:
       typeof v.notionWorkspaceHint === 'string' ? v.notionWorkspaceHint : undefined,
     workspaceKey: typeof v.workspaceKey === 'string' ? v.workspaceKey : undefined,
+    notionGatewayKeyFp:
+      typeof v.notionGatewayKeyFp === 'string' ? v.notionGatewayKeyFp : undefined,
+    notionTargetGuard:
+      v.notionTargetGuard === 'off' ||
+      v.notionTargetGuard === 'observe' ||
+      v.notionTargetGuard === 'enforce'
+        ? v.notionTargetGuard
+        : undefined,
   };
 }
 
@@ -71,6 +79,7 @@ export async function setCloudStorageConfig(cfg: CloudStorageConfig): Promise<vo
     notionGatewayUrl = assertHttpsUrl(cfg.notionGatewayUrl, 'Notion Gateway URL');
   }
   // Whitelist only — never persist bearer / Integration Token / JWT (§3.5.6)
+  const guard = cfg.notionTargetGuard;
   const value: CloudStorageConfig = {
     provider: cfg.provider,
     supabaseUrl: cfg.supabaseUrl?.trim() || undefined,
@@ -78,6 +87,9 @@ export async function setCloudStorageConfig(cfg: CloudStorageConfig): Promise<vo
     notionGatewayUrl,
     notionWorkspaceHint: cfg.notionWorkspaceHint?.trim() || undefined,
     workspaceKey: cfg.workspaceKey?.trim() || undefined,
+    notionGatewayKeyFp: cfg.notionGatewayKeyFp?.trim().toLowerCase() || undefined,
+    notionTargetGuard:
+      guard === 'off' || guard === 'observe' || guard === 'enforce' ? guard : undefined,
   };
   const row: SettingRow = { key: KEY, value, updatedAt: nowISO() };
   await (await getDB()).put('settings', row);

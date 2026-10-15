@@ -1,7 +1,22 @@
 import { getDB } from '../db';
 import { nowISO, uid } from '../lib/constants';
 import { getCloudStorageConfig } from './config';
-import { hasValidNotionRuntimeSession } from './notionSession';
+import {
+  getNotionRuntimeSession,
+  hasAttestedNotionRuntimeSession,
+  hasValidNotionRuntimeSession,
+} from './notionSession';
+import {
+  buildNotionTargetId,
+  classifyOrphanKind,
+  isNotionTargetGuardActive,
+  notionTargetsEqual,
+  observeTargetGuard,
+  setNotionTargetGuardMode,
+  targetFromOutboxItem,
+  type NotionTarget,
+  type OrphanKind,
+} from './notionTarget';
 import { shouldBlockBlindRecreate } from './notionMap';
 import { listOpenConflictKeys } from './conflictStore';
 import { dedupeOutbox } from './merge';
@@ -19,6 +34,28 @@ const META_KEY = 'syncMeta';
 const CONFLICTS_KEY = 'syncConflicts';
 
 export const OUTBOX_UNBOUND = 'unbound';
+
+/** Sync in-memory guard mode from CloudStorageConfig (call on verify / flush paths). */
+export async function syncNotionTargetGuardFromConfig(): Promise<void> {
+  const cfg = await getCloudStorageConfig();
+  if (cfg.notionTargetGuard) {
+    setNotionTargetGuardMode(cfg.notionTargetGuard);
+  }
+}
+
+/**
+ * Session-derived active Notion target (ADR §3.2).
+ * When a verified session exists, it is authoritative — never fall back to stale sync_meta.
+ * Returns null when session lacks workspaceKey + gatewayKeyFp.
+ */
+export function getSessionDerivedActiveTarget(): NotionTarget | null {
+  const s = getNotionRuntimeSession();
+  const wk = s?.workspaceKey?.trim();
+  const fp = s?.gatewayKeyFp?.trim().toLowerCase();
+  if (!wk || !fp) return null;
+  return { workspaceKey: wk, gatewayKeyFp: fp };
+}
+
 
 export function nextRetryDelayMs(attempts: number): number {
   const capped = Math.min(2 ** attempts, 64);
@@ -41,7 +78,16 @@ export async function isCloudEnqueueEnabled(entity?: SyncEntity): Promise<boolea
     if (entity === 'media' || entity === 'stations' || entity === 'settings') return false;
     if (!cfg.notionGatewayUrl?.trim()) return false;
     // URL alone is insufficient — in-memory session must be valid (§3.5.5 / D2.1)
-    return hasValidNotionRuntimeSession();
+    if (!hasValidNotionRuntimeSession()) return false;
+    // RR-WK: when target guard is active, require gatewayKeyFp attestation
+    if (cfg.notionTargetGuard === 'observe' || cfg.notionTargetGuard === 'enforce') {
+      setNotionTargetGuardMode(cfg.notionTargetGuard);
+      return hasAttestedNotionRuntimeSession();
+    }
+    if (isNotionTargetGuardActive()) {
+      return hasAttestedNotionRuntimeSession();
+    }
+    return true;
   }
   return false;
 }
@@ -70,12 +116,44 @@ export function makeOutboxItem(input: {
 
 /** Stamp owner from current sync meta (call before putting into a tx). */
 export async function stampOutboxOwner(item: SyncOutboxItem): Promise<SyncOutboxItem> {
-  if (item.ownerUserId) return item;
-  const meta = await getSyncMeta();
-  return {
-    ...item,
-    ownerUserId: meta.cloudUserId ?? OUTBOX_UNBOUND,
-  };
+  let next = item;
+  if (!next.ownerUserId) {
+    const meta = await getSyncMeta();
+    next = {
+      ...next,
+      ownerUserId: meta.cloudUserId ?? OUTBOX_UNBOUND,
+    };
+  }
+  return stampOutboxNotionTarget(next);
+}
+
+/**
+ * RR-WK: stamp gatewayKeyFp / notionTargetId from attested session when available.
+ * Does not silently drop queues; unbound owners stay without notionTargetId.
+ */
+export async function stampOutboxNotionTarget(item: SyncOutboxItem): Promise<SyncOutboxItem> {
+  if (item.gatewayKeyFp && item.notionTargetId) return item;
+  const cfg = await getCloudStorageConfig();
+  if (cfg.provider !== 'notion') return item;
+  const session = getNotionRuntimeSession();
+  const fp = session?.gatewayKeyFp?.trim().toLowerCase();
+  const owner = (item.ownerUserId ?? '').trim();
+  if (!fp || !owner || owner === OUTBOX_UNBOUND) return item;
+  // Prefer session workspaceKey when it matches owner; else owner ≡ workspaceKey under Notion
+  const wk =
+    session?.workspaceKey && session.workspaceKey === owner
+      ? session.workspaceKey
+      : owner;
+  try {
+    const notionTargetId = buildNotionTargetId(wk, fp);
+    return {
+      ...item,
+      gatewayKeyFp: fp,
+      notionTargetId,
+    };
+  } catch {
+    return item;
+  }
 }
 
 /** Put outbox row inside an existing readwrite transaction (same atomic unit as business write). */
@@ -175,16 +253,26 @@ export async function countOutboxForOwner(ownerUserId: string): Promise<number> 
 }
 
 /**
- * Ops whose owner is set and differs from the current workspaceKey / cloudUserId.
- * These must never be flushed while bound to another owner (SW2 isolation).
+ * Ops whose owner is set and differs from the current workspaceKey / cloudUserId,
+ * or (when target guard active) same owner but different gatewayKeyFp / legacy L1.
+ * These must never be flushed while bound to another target (SW2 + RR-WK).
  */
 export async function listOrphanOutbox(currentOwnerId: string | undefined): Promise<SyncOutboxItem[]> {
+  await syncNotionTargetGuardFromConfig();
   const all = await listOutbox();
+  const active = getSessionDerivedActiveTarget();
+  const currentWk = active?.workspaceKey ?? currentOwnerId;
+  const guardOn = isNotionTargetGuardActive();
+
   return all.filter((o) => {
     const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
     if (owner === OUTBOX_UNBOUND) return false;
-    if (!currentOwnerId) return true;
-    return owner !== currentOwnerId;
+    if (!currentWk) return true;
+    if (owner !== currentWk) return true;
+    if (!guardOn) return false;
+    // Same workspace: orphan if legacy (no fp) or different gatewayKeyFp
+    const kind = classifyOrphanKind(o, active);
+    return kind === 'same_workspace_diff_gateway' || kind === 'legacy_no_fp';
   });
 }
 
@@ -192,17 +280,49 @@ export async function countOrphanOutbox(currentOwnerId: string | undefined): Pro
   return (await listOrphanOutbox(currentOwnerId)).length;
 }
 
-/** Summarize orphan queues by ownerUserId for the minimal switch panel. */
+export type OrphanOutboxSummaryRow = {
+  ownerUserId: string;
+  count: number;
+  /** RR-WK redundant target id when group is gateway-scoped. */
+  notionTargetId?: string;
+  gatewayKeyFp?: string;
+  /** 异工作区 | 同工作区·异 Gateway | legacy */
+  kind: OrphanKind;
+};
+
+/** Summarize orphan queues by owner / notionTargetId for the switch panel. */
 export async function summarizeOrphanOutbox(
   currentOwnerId: string | undefined,
-): Promise<Array<{ ownerUserId: string; count: number }>> {
+): Promise<OrphanOutboxSummaryRow[]> {
   const orphans = await listOrphanOutbox(currentOwnerId);
-  const map = new Map<string, number>();
+  const active = getSessionDerivedActiveTarget();
+  const map = new Map<string, OrphanOutboxSummaryRow>();
   for (const o of orphans) {
+    const kind = classifyOrphanKind(o, active) ?? 'cross_workspace';
     const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
-    map.set(owner, (map.get(owner) ?? 0) + 1);
+    const target = targetFromOutboxItem(o);
+    const key =
+      kind === 'same_workspace_diff_gateway' && target
+        ? `t:${target.workspaceKey}::${target.gatewayKeyFp}`
+        : kind === 'legacy_no_fp'
+          ? `legacy:${owner}`
+          : `wk:${owner}`;
+    const row = map.get(key);
+    if (row) {
+      row.count += 1;
+    } else {
+      map.set(key, {
+        ownerUserId: owner,
+        count: 1,
+        notionTargetId: target
+          ? `${target.workspaceKey}::${target.gatewayKeyFp}`
+          : o.notionTargetId,
+        gatewayKeyFp: target?.gatewayKeyFp ?? o.gatewayKeyFp,
+        kind,
+      });
+    }
   }
-  return [...map.entries()].map(([ownerUserId, count]) => ({ ownerUserId, count }));
+  return [...map.values()];
 }
 
 /**
@@ -220,11 +340,38 @@ export async function discardOutboxForExactOwner(ownerUserId: string): Promise<n
 }
 
 export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]> {
+  await syncNotionTargetGuardFromConfig();
   const meta = await getSyncMeta();
-  const mine = await listOutboxForUser(meta.cloudUserId);
-  const openKeys = await listOpenConflictKeys();
   const cfg = await getCloudStorageConfig();
-  const wk = meta.cloudUserId ?? cfg.workspaceKey;
+  const openKeys = await listOpenConflictKeys();
+  const guardOn = isNotionTargetGuardActive() && cfg.provider === 'notion';
+
+  // RR-WK §3.2: when guard active, session-derived target is authoritative.
+  // No attested session → refuse all Notion flush (do not fall back to stale meta).
+  let mine: SyncOutboxItem[];
+  let active: NotionTarget | null = null;
+  if (guardOn) {
+    active = getSessionDerivedActiveTarget();
+    if (!active) {
+      observeTargetGuard('flush_refused_no_attested_session', {
+        metaCloudUserId: meta.cloudUserId,
+        metaTargetId: meta.notionTargetId,
+      });
+      return [];
+    }
+    // Prefer session workspace; ignore stale meta for ownership filter
+    const all = await listOutbox();
+    mine = all.filter((o) => {
+      const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+      return owner === active!.workspaceKey || owner === OUTBOX_UNBOUND;
+    });
+  } else {
+    mine = await listOutboxForUser(meta.cloudUserId);
+  }
+
+  const wk = guardOn
+    ? active!.workspaceKey
+    : (meta.cloudUserId ?? cfg.workspaceKey);
   const candidates = mine.filter(
     (o) =>
       o.attempts < MAX_OUTBOX_ATTEMPTS &&
@@ -235,6 +382,23 @@ export async function listReadyOutbox(now = nowISO()): Promise<SyncOutboxItem[]>
   // Defense in depth: never flush Notion upserts that hit a same-workspace map tombstone
   const ready: SyncOutboxItem[] = [];
   for (const o of candidates) {
+    if (guardOn && cfg.provider === 'notion') {
+      const itemTarget = targetFromOutboxItem(o);
+      // L1 legacy (no gatewayKeyFp): never auto flush
+      if (!itemTarget) {
+        observeTargetGuard('flush_skip_legacy_l1', { opId: o.opId, ownerUserId: o.ownerUserId });
+        continue;
+      }
+      // Structured compare — must match session-derived active target
+      if (!notionTargetsEqual(itemTarget, active)) {
+        observeTargetGuard('flush_skip_target_mismatch', {
+          opId: o.opId,
+          item: itemTarget,
+          active,
+        });
+        continue;
+      }
+    }
     if (
       o.op === 'upsert' &&
       cfg.provider === 'notion' &&
@@ -479,6 +643,105 @@ export async function enqueueSyncOp(input: {
   if (!item) return;
   // Already stamped; putOutboxItem is a no-op re-stamp when ownerUserId is set.
   await putOutboxItem(item);
+}
+
+
+/**
+ * RR-WK L1 claim: stamp legacy rows (no gatewayKeyFp) onto the current verified target.
+ * HARD: confirmToken must be exactly "CLAIM". Forbidden from observe/migration/verify callbacks.
+ * Only claims rows whose ownerUserId === session.workspaceKey and that owner has no
+ * conflicting stamped target rows with a different gatewayKeyFp.
+ */
+export async function claimLegacyNotionOutbox(input: {
+  confirmToken: string;
+}): Promise<{ ok: boolean; claimed: number; message: string }> {
+  if (input.confirmToken !== 'CLAIM') {
+    return {
+      ok: false,
+      claimed: 0,
+      message: '需要确认令牌 CLAIM 才会认领旧队列（无 Gateway 指纹）。',
+    };
+  }
+  const active = getSessionDerivedActiveTarget();
+  if (!active) {
+    return {
+      ok: false,
+      claimed: 0,
+      message: '无已验证会话复合身份；请先成功 /verify 后再认领。',
+    };
+  }
+  const all = await listOutbox();
+  const stampedOther = all.some((o) => {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    if (owner !== active.workspaceKey) return false;
+    const t = targetFromOutboxItem(o);
+    return Boolean(t && t.gatewayKeyFp !== active.gatewayKeyFp);
+  });
+  if (stampedOther) {
+    return {
+      ok: false,
+      claimed: 0,
+      message:
+        '同工作区已存在其它 Gateway 指纹的队列，拒绝认领以免混连。请先切回原 Key flush/DISCARD，或丢弃冲突队列。',
+    };
+  }
+  const legacy = all.filter((o) => {
+    const owner = o.ownerUserId ?? OUTBOX_UNBOUND;
+    if (owner !== active.workspaceKey) return false;
+    return !o.gatewayKeyFp && !targetFromOutboxItem(o);
+  });
+  if (!legacy.length) {
+    return { ok: true, claimed: 0, message: '没有可认领的旧队列（无 Gateway 指纹）。' };
+  }
+  const notionTargetId = buildNotionTargetId(active.workspaceKey, active.gatewayKeyFp);
+  let n = 0;
+  for (const item of legacy) {
+    await putOutboxItem({
+      ...item,
+      ownerUserId: active.workspaceKey,
+      gatewayKeyFp: active.gatewayKeyFp,
+      notionTargetId,
+    });
+    n += 1;
+  }
+  observeTargetGuard('legacy_claimed', {
+    claimed: n,
+    workspaceKey: active.workspaceKey,
+    gatewayKeyFp: active.gatewayKeyFp,
+  });
+  return {
+    ok: true,
+    claimed: n,
+    message: `已认领 ${n} 条旧队列到当前 Gateway 指纹 ${active.gatewayKeyFp}。`,
+  };
+}
+
+/**
+ * Explicit discard by redundant notionTargetId (or legacy ownerUserId).
+ * confirmToken must be exactly 'DISCARD'. Exact match only.
+ */
+export async function discardOutboxForNotionTarget(input: {
+  notionTargetId?: string;
+  ownerUserId?: string;
+  confirmToken: string;
+}): Promise<number> {
+  if (input.confirmToken !== 'DISCARD') return 0;
+  const tid = input.notionTargetId?.trim();
+  const owner = input.ownerUserId?.trim();
+  if (tid) {
+    const all = await listOutbox();
+    const mine = all.filter((o) => {
+      if (o.notionTargetId === tid) return true;
+      const t = targetFromOutboxItem(o);
+      return t != null && `${t.workspaceKey}::${t.gatewayKeyFp}` === tid;
+    });
+    await removeOutboxItems(mine.map((o) => o.opId));
+    return mine.length;
+  }
+  if (owner && owner !== OUTBOX_UNBOUND) {
+    return discardOutboxForExactOwner(owner);
+  }
+  return 0;
 }
 
 export async function listConflicts(): Promise<SyncConflict[]> {
