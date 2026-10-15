@@ -1,0 +1,10 @@
+{
+  "deploySha": "f3bb58aceec53fea1c14f6959c3954259f6ff88d",
+  "bundle": "index-Ddi6Z1jp.js",
+  "bundleSha256": "5e94997a82fb7353d44849283e02e2fd89aff638d13e2c1f0674f870cc3f7563",
+  "deployedAt": "2026-10-15T15:41:34+0800",
+  "target": "https://car-test.adobesun.com",
+  "backup": "car-care-staging-pre-m3d-rrwk-phase2-20261015-154120",
+  "backupSha256": "c32b6fb1eb211efdbe608898cfe28575625a61e056c8dba020376257e311daa1",
+  "prodBundleUnchanged": "index-TdTLY2U-.js"
+}
