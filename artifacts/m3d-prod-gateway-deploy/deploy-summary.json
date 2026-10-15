@@ -1,0 +1,51 @@
+{
+  "status": "BLOCKED_NOTION_TOKEN",
+  "timestamp_cst": "2026-10-15T08:38+08:00",
+  "worker": {
+    "name": "car-care-notion-sync",
+    "url": "https://car-care-notion-sync.spf-roc.workers.dev",
+    "GATEWAY_VERSION": "m3d-prod-1.0.0",
+    "NOTION_VERSION": "2026-03-11",
+    "ALLOWED_ORIGIN": ["https://car.adobesun.com", "https://car-test.adobesun.com"]
+  },
+  "kv": {
+    "title": "car-care-notion-tombstone-prod",
+    "id": "86eaac822dac466aa6f7e3af66447c21",
+    "id_prefix": "86eaac822dac",
+    "not_equal_to": ["6ae5cb6d1309453db197b6ce8217e419", "fbb4af0a15e1414e931fd949a78df0d8"]
+  },
+  "notion_databases": {
+    "lab_page": "https://app.notion.com/p/3fa620fbd01f8144b645e13e13170129",
+    "vehicles_ds": "8a131796-3b54-49ef-870c-db60eb6ee081",
+    "records_ds": "6aef6240-eecb-4608-97d9-78216af766fb",
+    "note": "DBs created via user Notion MCP; Internal Integration Token NOT yet created/Shared"
+  },
+  "fingerprints": {
+    "keyFp": "aa819deb16dc",
+    "wkFp": null
+  },
+  "probes": {
+    "E1_health_version": "PASS",
+    "C3_car_origin_ACAO": "PASS",
+    "C4_evil_no_ACAO": "PASS",
+    "C5_no_bearer_401": "PASS",
+    "C5_wrong_bearer_401": "PASS",
+    "C7_car_test_ACAO": "PASS",
+    "E2_verify": "BLOCKED_NO_NOTION_TOKEN",
+    "E3_E5_fixture_smoke": "NOT_RUN",
+    "FG1_FG3": "NOT_RUN"
+  },
+  "hard_constraints": {
+    "no_prod_pwa": true,
+    "no_formal_supabase": true,
+    "no_clear_idb": true,
+    "no_reuse_d1_test": true,
+    "no_template_inplace_deploy": true,
+    "config_dir": "~/.car-care-secrets/notion-sync-worker-prod/"
+  },
+  "blocker": {
+    "id": "NOTION_INTERNAL_INTEGRATION",
+    "need": "Create Internal Integration named like 车护正式同步 at https://www.notion.so/my-integrations, copy secret Token, Share M3D PROD Vehicles + M3D PROD Records to that Integration only (not test Integrations), save Token to ~/.car-care-secrets/m3d-prod-notion.env and inject via CF secret put NOTION_TOKEN",
+    "current_verify_error": "NOTION_TOKEN secret missing → HTTP 503"
+  }
+}

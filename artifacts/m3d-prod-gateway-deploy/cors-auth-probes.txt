@@ -1,0 +1,113 @@
+=== C5 no bearer ===
+HTTP/2 401 
+date: Thu, 15 Oct 2026 00:38:23 GMT
+content-type: application/json
+content-length: 59
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=ilWPBJBgkXbzJel4ca3b677huE9ev7UH7W5sTEeFZQMrNwzHcHO%2F2Rt7t7lQ%2BCkvSmtcd37EcDtRIa2h2C6a8A%2BF7NXvnYLyNJN%2BDIoO%2Fr8jw6HqcFlyD%2FgF%2Fs47LGAuCb7qPb6nKqpha%2FLbeJ%2BqRG7I9m7JJDvVENqP6KC%2FhGjXFOu%2FLNWC"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2bcb8e472ec-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":false,"code":"unauthorized","message":"unauthorized"}
+=== C5 wrong bearer ===
+HTTP/2 503 
+date: Thu, 15 Oct 2026 00:38:23 GMT
+content-type: application/json
+content-length: 74
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=oNMXl7ez%2BVmUnT7SgAst196yfPoaDTPZeDQSTVwr%2B9SwsjtVmIuBDyhQ080gVIp%2FoLjJjCDVW7J7z3d3wYkBJzqK9OsyBc0GjI6YtB2Y08o%2FZC1F9na%2Fd8mZeUrb3F4K72IPBg3iwz1EKnhtCXIez15yJHSLcGXOKIYhB6RUWEWgXOI59%2F9W"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2bd9cb82fdf-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":false,"code":"notion_unavailable","message":"gateway misconfigured"}
+=== E1 health with correct key ===
+HTTP/2 200 
+date: Thu, 15 Oct 2026 00:38:23 GMT
+content-type: application/json
+content-length: 38
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=F5NRQYgGg95rPOXtiqwA48GFQV8NTLrLFsIps2uAzlldQhjqKU4yJt6p7WrvLdxvFpZe54aLEDEw3rYgK5HQKf7rFDDhlHPWmQpVuirvhMSiGHyNH2vSL9wf9tbYr%2BBPOmcKj7EdIvenda8BNPdGV1%2BQUFcj4aeFPQZDZSsMg2t1INFYE0Mb"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2be8f50165c-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":true,"version":"m3d-prod-1.0.0"}
+=== C3 Origin car.adobesun.com ===
+HTTP/2 200 
+date: Thu, 15 Oct 2026 00:38:23 GMT
+content-type: application/json
+content-length: 38
+access-control-allow-origin: https://car.adobesun.com
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=2lxcCqPrhU8anHegfykX3PyZs97WNMOE3ygdBJMnIWXNY0xm9jUXI7YQUPwHcXHjQnLs%2BJjFUW%2BdTksB2QvXMWsJpyYCCTXzJ2S2MEze53KFwVy0rtHSGvX8KdE1luhsCVSZjFim7drdmFeOQ0UEaM4fY9h7%2Bi%2BQ36Sw7cEOPmEHcgC4mnSG"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2bf7b177048-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":true,"version":"m3d-prod-1.0.0"}
+=== C4 Origin evil ===
+HTTP/2 403 
+date: Thu, 15 Oct 2026 00:38:24 GMT
+content-type: application/json
+content-length: 62
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=z%2BXnY6jBzn3HfbIb9sUzVQgYIZydaab35%2F3rYso8dXZ8gEFy6drgWsil6NZaS53F5M5r%2BKitjE5r6cIuh%2FgpfV0v2%2BXay78Eg9DET2hAWUKWI0NHI2PRSwLCkVYmrYJHJu0APglbrDLflo8oOP50%2FIIO5r7XcyBiaarn%2FzsCFohMxOSFHM%2BM"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2c04df1e581-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":false,"code":"forbidden","message":"Origin not allowed"}
+=== C7 Origin car-test ===
+HTTP/2 200 
+date: Thu, 15 Oct 2026 00:38:24 GMT
+content-type: application/json
+content-length: 38
+access-control-allow-origin: https://car-test.adobesun.com
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=bVSQPLBrH7ydQ3%2FIwXoiELzSyWHunofNWnv1kscoNzCTGhPYvRNNMmPTfxNEbVEsM55a3sS%2Fv5RjYWnlArQujs81lOjPiSH4Ze4NFqgn7kYvR8g16qzm%2BiZFmD4KdKAtcVpMYLdHW%2B3W5WJ%2BTqcqFvAmnHU3GB4E6MP9URgrgoZIHTExLsr9"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2c11dd9205d-IAD
+alt-svc: h3=":443"; ma=86400
+
+=== verify (expects Notion token) ===
+HTTP/2 503 
+date: Thu, 15 Oct 2026 00:38:24 GMT
+content-type: application/json
+content-length: 80
+vary: Origin
+access-control-allow-headers: Authorization, Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-max-age: 86400
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=lI%2BWC2a%2BQVlXyvngOQOdVK1DnVcG%2BB%2F3WIzcT6c%2FKMX9Fa8yOE%2BK2x8%2BpeXuoD%2BAAULMhvbWuDW8xYs%2BBUXnVO8xJYzsmaMfamF6BxQmUHnxH%2BBoRywDqVoTO9hk%2FzxPPHW2F7Yidg1jk7P%2FgL57u03xvlDNZZl4Nx9Q8pQuxv2udAHmOal6"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4aac2c21bec827a-IAD
+alt-svc: h3=":443"; ma=86400
+
+body={"ok":false,"code":"notion_unavailable","message":"NOTION_TOKEN secret missing"}

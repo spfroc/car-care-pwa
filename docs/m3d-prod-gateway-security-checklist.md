@@ -2,11 +2,16 @@
 
 > **用途**：正式 Cloudflare Worker Gateway **部署前/后**勾选；供架构与安全审查。  
 > **配套总案**：[`m3d-prod-release-plan.md`](./m3d-prod-release-plan.md)  
-> **状态**：docs-only · **本检查表本身不授权部署**  
-> **基线**：d1-test = `car-care-notion-sync-d1-test` / `m3d-d1-0.1.1` — **勾选任一项前须确认未复用该 Worker**  
+> **配套部署报告**：[`m3d-prod-gateway-deploy-report.md`](./m3d-prod-gateway-deploy-report.md)  
+> **状态（2026-10-15 CST · 正式环境）**：**部分完成 · BLOCKED on NOTION_TOKEN**  
+> - Worker `car-care-notion-sync` / `m3d-prod-1.0.0` / URL `https://car-care-notion-sync.spf-roc.workers.dev`  
+> - KV `car-care-notion-tombstone-prod` id `86eaac822dac…` · keyFp `aa819deb16dc`  
+> - 生产 Vehicles/Records DS 已建；**缺** Internal Integration Token + Share  
+> - F 节生产 PWA：**本轮未授权 · N/A**  
+> **基线测试（禁止复用）**：d1-test = `car-care-notion-sync-d1-test` / `m3d-d1-0.1.1`  
 > **pre-gates（2026-10-14 CST）**：DEL **PASS** · RR-IDB **PASS** · SW1–SW4 live **PASS**（Gateway B `d1-test-b` · wkFp `db38e1e5a251`）；详见 [`m3d-prod-pre-gates-report.md`](./m3d-prod-pre-gates-report.md)
 
-操作者：____________　日期（CST）：____________　审查人：____________
+操作者：Grok Bot（box）　日期（CST）：2026-10-15　审查人：____________
 
 ---
 
@@ -14,16 +19,16 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| A1 | 正式 Worker **name** ≠ `car-care-notion-sync-d1-test`，且不含仅测试用途的 `d1-test` 角色 | ☐ |
-| A2 | 正式 Worker **URL** 与 d1-test URL 不同；生产 PWA 配置**不**指向 d1-test | ☐ |
-| A3 | 新建生产 `TOMBSTONE_KV`；id **≠** `6ae5cb6d1309453db197b6ce8217e419` | ☐ |
-| A4 | 生产 Notion **Integration** 独立；Token **≠** 测试 Token | ☐ |
-| A5 | 生产 Data Source ID **≠** 模板/测试中的 `68e70331-…` / `dee1f83b-…` | ☐ |
-| A6 | 生产 Integration **未** Share 到测试库；测试 Integration **未** Share 到生产库 | ☐ |
-| A7 | `GATEWAY_API_KEY` 为新熵；与 d1-test / 任何已泄露演示 Key 不同 | ☐ |
-| A8 | `GATEWAY_VERSION` 使用生产串（如 `m3d-prod-1.0.0`），便于与 `m3d-d1-0.1.1` 区分 | ☐ |
-| A9 | **deploy 前**：在**独立生产配置目录**（仓外或 gitignore；**非** `docs/templates/notion-sync-worker` 就地）执行 `npx wrangler whoami`，确认账号无误 | ☐ |
-| A10 | **deploy 前**：打印并核对 `wrangler.toml` 的 `name` = 审定生产名，且 **≠** `*-d1-test`、**≠** `car-care-notion-sync-d1-test`、**≠** 任何测试 Worker 名后，才执行 `wrangler deploy` | ☐ |
+| A1 | 正式 Worker **name** ≠ `car-care-notion-sync-d1-test`，且不含仅测试用途的 `d1-test` 角色 | ✅ `car-care-notion-sync` |
+| A2 | 正式 Worker **URL** 与 d1-test URL 不同；生产 PWA 配置**不**指向 d1-test | ✅ `…car-care-notion-sync.spf-roc.workers.dev`；生产 PWA 未改 |
+| A3 | 新建生产 `TOMBSTONE_KV`；id **≠** `6ae5cb6d1309453db197b6ce8217e419` | ✅ `86eaac822dac466aa6f7e3af66447c21` |
+| A4 | 生产 Notion **Integration** 独立；Token **≠** 测试 Token | ⛔ BLOCKED — 待 UI 建「车护正式同步」 |
+| A5 | 生产 Data Source ID **≠** 模板/测试中的 `68e70331-…` / `dee1f83b-…` | ✅ `8a131796-…` / `6aef6240-…` |
+| A6 | 生产 Integration **未** Share 到测试库；测试 Integration **未** Share 到生产库 | ⛔ 待正式 Integration 后核对 |
+| A7 | `GATEWAY_API_KEY` 为新熵；与 d1-test / 任何已泄露演示 Key 不同 | ✅ keyFp `aa819deb16dc` |
+| A8 | `GATEWAY_VERSION` 使用生产串（如 `m3d-prod-1.0.0`），便于与 `m3d-d1-0.1.1` 区分 | ✅ `m3d-prod-1.0.0` |
+| A9 | **deploy 前**：在**独立生产配置目录**（仓外或 gitignore；**非** `docs/templates/notion-sync-worker` 就地）执行 `npx wrangler whoami`，确认账号无误 | ✅ 仓外目录 + MCP whoami `spf_roc@163.com`（本机 wrangler 未登录） |
+| A10 | **deploy 前**：打印并核对 `wrangler.toml` 的 `name` = 审定生产名，且 **≠** `*-d1-test`、**≠** `car-care-notion-sync-d1-test`、**≠** 任何测试 Worker 名后，才执行 `wrangler deploy` | ✅ name=`car-care-notion-sync` |
 
 ---
 
@@ -31,13 +36,13 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| B1 | `NOTION_TOKEN` 仅通过 `wrangler secret put` 注入 | ☐ |
-| B2 | `GATEWAY_API_KEY` 仅通过 `wrangler secret put` 注入 | ☐ |
-| B3 | 仓库 / PR / artifacts / issue 评论中 **无** Token、API Key、`.dev.vars` 真值 | ☐ |
-| B4 | `wrangler.toml`（若提交）无 secret 字段；生产 DS/KV 若不宜公开可留本地覆盖 | ☐ |
-| B5 | 健康/错误响应抽样：无 Token / Key 回显 | ☐ |
-| B6 | 密钥轮换SOP已理解：覆盖 secret → 旧 Key 401 → 用户重输（见总案 §2.9）；单用户 MVP **无双 Key 窗口**，多设备会短暂全断会话（已知代价） | ☐ |
-| B7 | 密码管理器已保存生产 Key/Token 备份位置（离线安全介质）；**不**存 git | ☐ |
+| B1 | `NOTION_TOKEN` 仅通过 `wrangler secret put` 注入 | ⛔ 尚未注入（无 Token） |
+| B2 | `GATEWAY_API_KEY` 仅通过 `wrangler secret put` 注入 | ✅ CF MCP secrets（等价 secret put） |
+| B3 | 仓库 / PR / artifacts / issue 评论中 **无** Token、API Key、`.dev.vars` 真值 | ✅ |
+| B4 | `wrangler.toml`（若提交）无 secret 字段；生产 DS/KV 若不宜公开可留本地覆盖 | ✅ 生产 toml 仅仓外 |
+| B5 | 健康/错误响应抽样：无 Token / Key 回显 | ✅ |
+| B6 | 密钥轮换SOP已理解：覆盖 secret → 旧 Key 401 → 用户重输（见总案 §2.9）；单用户 MVP **无双 Key 窗口**，多设备会短暂全断会话（已知代价） | ✅ |
+| B7 | 密码管理器已保存生产 Key/Token 备份位置（离线安全介质）；**不**存 git | 部分 — Key 在 `~/.car-care-secrets/`；Token 待建 |
 
 ---
 
@@ -45,14 +50,14 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| C1 | `ALLOWED_ORIGIN` **包含** `https://car.adobesun.com`（精确字符串） | ☐ |
-| C2 | CORS 实现为允许列表精确匹配（`cors.ts`）；**不**反射任意 `Origin` | ☐ |
-| C3 | 探针：`Origin: https://car.adobesun.com` → 有 `Access-Control-Allow-Origin` 回显该值 | ☐ |
-| C4 | 探针：`Origin: https://evil.example` → **无**该 Origin 的 ACAO 回显 | ☐ |
-| C5 | 无 Bearer / 错 Bearer → **401**（`/health` `/verify` `/sync/*`） | ☐ |
-| C6 | 仅 HTTPS 对外（workers.dev 或自定义域）；无 HTTP 明文生产入口 | ☐ |
-| C7 | （可选）若正式 Worker 同时服务 staging：列表可含 `https://car-test.adobesun.com`；仍禁止 `*` | ☐ |
-| C8 | **醒目**：若 CORS 同时含 car-test，**密钥仍须与 d1-test 严格分离**（Token / Gateway Key / KV / DS 均不可与 d1-test 共用）；CORS 放宽 ≠ 可混用测试密钥 | ☐ |
+| C1 | `ALLOWED_ORIGIN` **包含** `https://car.adobesun.com`（精确字符串） | ✅ 另含 car-test |
+| C2 | CORS 实现为允许列表精确匹配（`cors.ts`）；**不**反射任意 `Origin` | ✅ |
+| C3 | 探针：`Origin: https://car.adobesun.com` → 有 `Access-Control-Allow-Origin` 回显该值 | ✅ |
+| C4 | 探针：`Origin: https://evil.example` → **无**该 Origin 的 ACAO 回显 | ✅ 403 无 ACAO |
+| C5 | 无 Bearer / 错 Bearer → **401**（`/health` `/verify` `/sync/*`） | ✅ `/health` 复测 |
+| C6 | 仅 HTTPS 对外（workers.dev 或自定义域）；无 HTTP 明文生产入口 | ✅ |
+| C7 | （可选）若正式 Worker 同时服务 staging：列表可含 `https://car-test.adobesun.com`；仍禁止 `*` | ✅ |
+| C8 | **醒目**：若 CORS 同时含 car-test，**密钥仍须与 d1-test 严格分离**（Token / Gateway Key / KV / DS 均不可与 d1-test 共用）；CORS 放宽 ≠ 可混用测试密钥 | ✅ |
 
 ---
 
@@ -60,12 +65,12 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| D1 | `NOTION_VERSION` = `2026-03-11` | ☐ |
-| D2 | 车辆/养护库属性 PascalCase：`Name` `AppEntityId` `AppUpdatedAt` `AppDeletedAt` `DeviceId` `PayloadJson` + 实体专用列 | ☐ |
-| D3 | 两库已 Share 给**生产** Integration；`GET /verify` → 200 + `workspaceKey` | ☐ |
-| D4 | Payload 失败闭合：超长 `PayloadJson` **不**静默截断业务成功 | ☐ |
-| D5 | 删除双轨 + KV tombstone；KV 失败不 ACK（可幂等重试 delete） | ☐ |
-| D6 | 确认生产库**不是**用户日常手改的唯一真相源冲突源时，产品文案仍以 `AppUpdatedAt` 为准 | ☐ |
+| D1 | `NOTION_VERSION` = `2026-03-11` | ✅ |
+| D2 | 车辆/养护库属性 PascalCase：`Name` `AppEntityId` `AppUpdatedAt` `AppDeletedAt` `DeviceId` `PayloadJson` + 实体专用列 | ✅ 库已建 |
+| D3 | 两库已 Share 给**生产** Integration；`GET /verify` → 200 + `workspaceKey` | ⛔ 503 NOTION_TOKEN missing |
+| D4 | Payload 失败闭合：超长 `PayloadJson` **不**静默截断业务成功 | ☐ 未跑（待 Token） |
+| D5 | 删除双轨 + KV tombstone；KV 失败不 ACK（可幂等重试 delete） | ☐ 未跑（待 Token） |
+| D6 | 确认生产库**不是**用户日常手改的唯一真相源冲突源时，产品文案仍以 `AppUpdatedAt` 为准 | ☐ 待审查披露 |
 
 ---
 
@@ -73,11 +78,11 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| E1 | `GET /health` 200；version = 生产 `GATEWAY_VERSION` | ☐ |
-| E2 | `GET /verify` 200；记录 **fingerprint**（非明文 Key）备查 | ☐ |
-| E3 | 夹具 push/pull 车辆 name+plate 往返（hydrate）PASS | ☐ |
-| E4 | 夹具 delete → `skipped_deleted` 防复活 PASS | ☐ |
-| E5 | 夹具清理完成；无残留脏页进入真实用户车辆（或使用专用测试页前缀） | ☐ |
+| E1 | `GET /health` 200；version = 生产 `GATEWAY_VERSION` | ✅ `m3d-prod-1.0.0` |
+| E2 | `GET /verify` 200；记录 **fingerprint**（非明文 Key）备查 | ⛔ |
+| E3 | 夹具 push/pull 车辆 name+plate 往返（hydrate）PASS | ☐ 未跑 |
+| E4 | 夹具 delete → `skipped_deleted` 防复活 PASS | ☐ 未跑 |
+| E5 | 夹具清理完成；无残留脏页进入真实用户车辆（或使用专用测试页前缀） | ☐ 未跑 |
 
 ---
 
@@ -85,12 +90,12 @@
 
 | # | 检查项 | ✅ |
 |---|--------|---|
-| F1 | 生产备份 `/var/www/car-care` 已完成且 sha 记录在案 | ☐ |
-| F2 | 部署 tip 与审查批准一致（基线功能 tip `c5dcf49…` 或批准后续 SHA） | ☐ |
-| F3 | 部署后 stamp / bundle 公网一致；**staging 未误伤**（除非另授权） | ☐ |
-| F4 | 未改正式 Supabase；未 clear 用户 IDB/Outbox | ☐ |
-| F5 | 设置页：Notion 与 Supabase **互斥**；Bearer 不进导出 JSON | ☐ |
-| F6 | 回滚命令已演练文档化（总案 §4.3 / §2.10）；联合回滚顺序：先 PWA 后 Gateway | ☐ |
+| F1 | 生产备份 `/var/www/car-care` 已完成且 sha 记录在案 | N/A 本轮未授权生产 PWA |
+| F2 | 部署 tip 与审查批准一致（基线功能 tip `c5dcf49…` 或批准后续 SHA） | N/A 本轮未授权生产 PWA |
+| F3 | 部署后 stamp / bundle 公网一致；**staging 未误伤**（除非另授权） | N/A 本轮未授权生产 PWA |
+| F4 | 未改正式 Supabase；未 clear 用户 IDB/Outbox | ✅ 零变更（本轮） |
+| F5 | 设置页：Notion 与 Supabase **互斥**；Bearer 不进导出 JSON | N/A 本轮未授权生产 PWA |
+| F6 | 回滚命令已演练文档化（总案 §4.3 / §2.10）；联合回滚顺序：先 PWA 后 Gateway | N/A 本轮未授权生产 PWA（Gateway 回滚见部署报告 §3） |
 
 ---
 
@@ -165,12 +170,12 @@
 
 | 节 | 剩余项（须授权后执行） | 本轮状态 |
 |----|------------------------|----------|
-| **A** | 新建正式 Worker / 独立 KV / 生产 Integration+DS / 新 `GATEWAY_API_KEY` / 核对 `wrangler.toml` name≠`*-d1-test` | **待授权** — 未建正式 Gateway |
-| **B** | 生产 Secrets 仅 `wrangler secret put`；密码管理器备份；轮换 SOP | **待授权** — d1-test Key 仅测试；生产须新熵 |
-| **C** | 正式 `ALLOWED_ORIGIN` 含 `https://car.adobesun.com`；CORS/401 探针 | **待授权** — d1-test 现仅 car-test + localhost |
-| **D** | 生产 Notion 契约（`NOTION_VERSION` / Share / Payload / tombstone） | **待授权** |
-| **E** | 正式 Key 冒烟（health/verify/夹具 push-pull/delete）；**另见下方「正式 Gateway 发布验收条件」** | **待授权**（E4 行为已在 d1-test 证明） |
-| **F** | 生产备份 + tip 部署 + stamp 公网核对；不改正式 Supabase / 不清用户 IDB | **待授权** — 未动 `car.adobesun.com` |
+| **A** | 新建正式 Worker / 独立 KV / 生产 Integration+DS / 新 `GATEWAY_API_KEY` / 核对 `wrangler.toml` name≠`*-d1-test` | **部分** — Worker/KV/DS/Key ✅；Integration Token ⛔ |
+| **B** | 生产 Secrets 仅 `wrangler secret put`；密码管理器备份；轮换 SOP | **部分** — GATEWAY_API_KEY ✅；NOTION_TOKEN ⛔ |
+| **C** | 正式 `ALLOWED_ORIGIN` 含 `https://car.adobesun.com`；CORS/401 探针 | **PASS** |
+| **D** | 生产 Notion 契约（`NOTION_VERSION` / Share / Payload / tombstone） | **部分** — VERSION/schema ✅；Share/verify ⛔ |
+| **E** | 正式 Key 冒烟（health/verify/夹具 push-pull/delete）；**另见下方「正式 Gateway 发布验收条件」** | **部分** — E1 PASS；E2–E5 ⛔ |
+| **F** | 生产备份 + tip 部署 + stamp 公网核对；不改正式 Supabase / 不清用户 IDB | **N/A** — 本轮未授权生产 PWA；Supabase/IDB 零变更 |
 | **G1** | — | **已闭** — SW1–SW4 live PASS |
 | **G2** | 正式环境手工确认离线 IDB（可选） | 主路径已 PASS；历史探针风险保留披露 |
 | **G3** | — | 已知披露（LWW） |
@@ -186,9 +191,9 @@
 
 | # | 验收条件 | ✅ |
 |---|----------|---|
-| FG1 | 切回原工作区 A 后，实际产生 **`/sync/push` HTTP 200**（网络层可计数；非仅 `seenOnA`） | ☐ |
-| FG2 | 该 owner（`workspaceKey`）的 Outbox **正确清空**（无残留待推条目） | ☐ |
-| FG3 | 数据**仅**出现在工作区 A；工作区 B **无**串写 / 泄漏（`leakedB=false` 类断言） | ☐ |
+| FG1 | 切回原工作区 A 后，实际产生 **`/sync/push` HTTP 200**（网络层可计数；非仅 `seenOnA`） | ☐ NOT RUN（待 Token） |
+| FG2 | 该 owner（`workspaceKey`）的 Outbox **正确清空**（无残留待推条目） | ☐ NOT RUN（待 Token） |
+| FG3 | 数据**仅**出现在工作区 A；工作区 B **无**串写 / 泄漏（`leakedB=false` 类断言） | ☐ NOT RUN（待 Token） |
 
 pre-gates SW4 现状（保留披露）：`push200=0` 却 `seenOnA=true` · `leakedB=false` — **隔离硬、flush 观测偏软**；上表 FG1–FG3 为正式发布补验门槛。
 
