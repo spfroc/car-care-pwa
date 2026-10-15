@@ -60,7 +60,7 @@
 | 选项 | 做法 |
 |------|------|
 | ① 独立工作区 | 正式 Gateway 绑定**独立生产 Notion 工作区**，使 wkFp **≠** d1-test（彻底分离 `workspaceKey`） |
-| ② 端点指纹 | Outbox enqueue 时记录 gateway 端点指纹（URL 和/或 keyFp）；flush 时与当前会话配置不一致则**拒发**或要求显式确认 |
+| ② 端点指纹 | Outbox enqueue 时记录 **Gateway+Workspace 复合身份**（`/verify` 盖印的结构化 `{ workspaceKey, gatewayKeyFp }`；冗余键 `notionTargetId = workspaceKey::gatewayKeyFp`；**非**仅用户手填 URL）；flush 以**会话派生** target 为准，不一致则**拒发** / park 孤儿。设计见 [`m3d-rr-wk-outbox-gateway-identity.md`](./m3d-rr-wk-outbox-gateway-identity.md)（Phase 0；代码未落地前仍须 WK3 或本选项实现证据） |
 
 ### 用户接受（本轮不修代码 / 不换工作区时）
 
