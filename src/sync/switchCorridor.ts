@@ -9,6 +9,8 @@ import {
   clearOutboxForUser,
   countOutboxForOwner,
   discardOutboxForExactOwner,
+  discardOutboxForNotionTarget,
+  getSessionDerivedActiveTarget,
   getSyncMeta,
   listOrphanOutbox,
   listOutbox,
@@ -16,7 +18,9 @@ import {
   listReadyOutbox,
   patchSyncMeta,
   summarizeOrphanOutbox,
+  syncNotionTargetGuardFromConfig,
   OUTBOX_UNBOUND,
+  type OrphanOutboxSummaryRow,
 } from './outbox';
 import { clearNotionRuntimeSession, getNotionRuntimeSession } from './notionSession';
 import type { SyncOutboxItem } from './types';
@@ -110,15 +114,18 @@ export async function assertDisconnectRetainsOutbox(
 
 export type OrphanPanelSummary = {
   currentOwnerId?: string;
-  orphans: Array<{ ownerUserId: string; count: number }>;
+  currentGatewayKeyFp?: string;
+  orphans: OrphanOutboxSummaryRow[];
   orphanTotal: number;
   currentReady: number;
   currentPending: number;
 };
 
 export async function getOrphanOutboxPanel(): Promise<OrphanPanelSummary> {
+  await syncNotionTargetGuardFromConfig();
   const meta = await getSyncMeta();
-  const currentOwnerId = meta.cloudUserId;
+  const active = getSessionDerivedActiveTarget();
+  const currentOwnerId = active?.workspaceKey ?? meta.cloudUserId;
   const orphans = await summarizeOrphanOutbox(currentOwnerId);
   const orphanTotal = orphans.reduce((n, o) => n + o.count, 0);
   const currentPending = currentOwnerId
@@ -127,7 +134,14 @@ export async function getOrphanOutboxPanel(): Promise<OrphanPanelSummary> {
       ).length
     : 0;
   const currentReady = (await listReadyOutbox()).length;
-  return { currentOwnerId, orphans, orphanTotal, currentReady, currentPending };
+  return {
+    currentOwnerId,
+    currentGatewayKeyFp: active?.gatewayKeyFp ?? meta.notionGatewayKeyFp,
+    orphans,
+    orphanTotal,
+    currentReady,
+    currentPending,
+  };
 }
 
 /**
@@ -137,9 +151,38 @@ export async function getOrphanOutboxPanel(): Promise<OrphanPanelSummary> {
 export async function discardParkedOutboxOwner(input: {
   ownerUserId: string;
   confirmToken: string;
+  notionTargetId?: string;
 }): Promise<{ ok: boolean; removed: number; message: string }> {
   if (input.confirmToken !== 'DISCARD') {
     return { ok: false, removed: 0, message: '需要确认令牌 DISCARD 才会丢弃旧工作区队列。' };
+  }
+  const tid = input.notionTargetId?.trim();
+  if (tid) {
+    const active = getSessionDerivedActiveTarget();
+    const meta = await getSyncMeta();
+    const activeTid =
+      active != null
+        ? `${active.workspaceKey}::${active.gatewayKeyFp}`
+        : meta.notionTargetId;
+    if (activeTid && tid === activeTid) {
+      return {
+        ok: false,
+        removed: 0,
+        message: '拒绝丢弃当前 Gateway 目标队列；请先切换 Key/断开。',
+      };
+    }
+    const removed = await discardOutboxForNotionTarget({
+      notionTargetId: tid,
+      confirmToken: 'DISCARD',
+    });
+    return {
+      ok: true,
+      removed,
+      message:
+        removed > 0
+          ? `已丢弃目标 ${tid.slice(0, 24)}… 的 ${removed} 条待同步项。`
+          : '该目标无待同步项。',
+    };
   }
   const owner = input.ownerUserId?.trim();
   if (!owner || owner === OUTBOX_UNBOUND) {

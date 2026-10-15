@@ -12,6 +12,7 @@ import {
   setNotionRuntimeSession,
   type NotionRuntimeSession,
 } from '../notionSession';
+import { computeGatewayKeyFp } from '../notionTarget';
 import { NotionGatewayClient, type GatewayFetch } from './notionGatewayClient';
 
 export class NotionNotImplementedError extends Error {
@@ -91,9 +92,17 @@ export class NotionProvider implements CloudProvider {
     if (result.ok && result.userId) {
       const prev = this.getSession();
       if (prev?.bearer) {
+        // RR-WK: stamp gatewayKeyFp from the bearer used for this verify
+        let gatewayKeyFp: string | undefined;
+        try {
+          gatewayKeyFp = await computeGatewayKeyFp(prev.bearer);
+        } catch {
+          gatewayKeyFp = undefined;
+        }
         setNotionRuntimeSession({
           bearer: prev.bearer,
           workspaceKey: result.userId,
+          gatewayKeyFp,
           expiresAt: prev.expiresAt,
         });
       }

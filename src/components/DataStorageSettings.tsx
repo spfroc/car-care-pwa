@@ -6,6 +6,7 @@ import {
 } from '../sync/config';
 import {
   bidirectionalSync,
+  claimLegacyOutboxOwner,
   disconnectCloud,
   discardOrphanOutboxOwner,
   firstUploadToCloud,
@@ -46,15 +47,24 @@ export function DataStorageSettings() {
   const [outboxReadyCount, setOutboxReadyCount] = useState(0);
   const [openConflictCount, setOpenConflictCount] = useState(0);
   const [orphanOutboxCount, setOrphanOutboxCount] = useState(0);
-  const [orphanOwners, setOrphanOwners] = useState<Array<{ ownerUserId: string; count: number }>>(
-    [],
-  );
+  const [orphanOwners, setOrphanOwners] = useState<
+    Array<{
+      ownerUserId: string;
+      count: number;
+      notionTargetId?: string;
+      gatewayKeyFp?: string;
+      kind?: string;
+    }>
+  >([]);
+  const [legacyOutboxCount, setLegacyOutboxCount] = useState(0);
+  const [sessionGatewayFp, setSessionGatewayFp] = useState('');
 
   const refreshSessionUi = useCallback(() => {
     const s = getNotionRuntimeSession();
     const valid = hasValidNotionRuntimeSession();
     setSessionReady(valid);
     setSessionWorkspace(valid ? (s?.workspaceKey ?? '') : '');
+    setSessionGatewayFp(valid ? (s?.gatewayKeyFp ?? '') : '');
     // Do not echo bearer into controlled input after hydrate — keep field empty unless user is typing
     if (!s?.bearer) setNotionApiKey('');
   }, []);
@@ -71,6 +81,7 @@ export function DataStorageSettings() {
     setOpenConflictCount(summary.openConflictCount ?? 0);
     setOrphanOutboxCount(summary.orphanOutboxCount ?? 0);
     setOrphanOwners(summary.orphanOwners ?? []);
+    setLegacyOutboxCount(summary.legacyOutboxCount ?? 0);
     setConflicts(await listConflicts());
     refreshSessionUi();
     const m = summary.meta;
@@ -376,6 +387,34 @@ export function DataStorageSettings() {
             </button>
           )}
 
+          {sessionReady && sessionGatewayFp ? (
+            <p className="muted small">
+              {t('storage.notionGatewayFp', { fp: sessionGatewayFp })}
+            </p>
+          ) : null}
+
+          {legacyOutboxCount > 0 && sessionReady && sessionGatewayFp ? (
+            <div className="legacy-claim-panel" style={{ marginTop: 12 }}>
+              <p className="hint">{t('storage.legacyClaimTitle')}</p>
+              <p className="muted small">{t('storage.legacyClaimHint')}</p>
+              <p className="muted small">
+                {t('storage.legacyClaimCount', { n: legacyOutboxCount })}
+              </p>
+              <button
+                type="button"
+                className="btn block"
+                disabled={busy}
+                onClick={() => {
+                  if (!confirm(t('storage.legacyClaimConfirm1'))) return;
+                  if (!confirm(t('storage.legacyClaimConfirm2'))) return;
+                  void run(() => claimLegacyOutboxOwner({ confirmToken: 'CLAIM' }));
+                }}
+              >
+                {t('storage.legacyClaimButton')}
+              </button>
+            </div>
+          ) : null}
+
           <div className="orphan-outbox-panel" style={{ marginTop: 12 }}>
             <p className="hint">{t('storage.orphanOutboxTitle')}</p>
             <p className="muted small">{t('storage.orphanOutboxHint')}</p>
@@ -384,31 +423,54 @@ export function DataStorageSettings() {
               <p className="muted small">{t('storage.orphanOutboxEmpty')}</p>
             ) : (
               <ul className="small" style={{ paddingLeft: 18 }}>
-                {orphanOwners.map((o) => (
-                  <li key={o.ownerUserId} style={{ marginBottom: 8 }}>
-                    {t('storage.orphanOutboxRow', {
+                {orphanOwners.map((o) => {
+                  const rowKey = o.notionTargetId ?? `${o.kind ?? 'wk'}:${o.ownerUserId}`;
+                  let label: string;
+                  if (o.kind === 'same_workspace_diff_gateway') {
+                    label = t('storage.orphanOutboxRowDiffGw', {
+                      fp: (o.gatewayKeyFp ?? o.notionTargetId ?? '').slice(0, 8),
+                      n: o.count,
+                    });
+                  } else if (o.kind === 'legacy_no_fp') {
+                    label = t('storage.orphanOutboxRowLegacy', {
                       key: o.ownerUserId.slice(0, 8),
                       n: o.count,
-                    })}
-                    <button
-                      type="button"
-                      className="btn danger"
-                      style={{ marginLeft: 8 }}
-                      disabled={busy}
-                      onClick={() => {
-                        if (!confirm(t('storage.orphanDiscardConfirm'))) return;
-                        void run(() =>
-                          discardOrphanOutboxOwner({
-                            ownerUserId: o.ownerUserId,
-                            confirmToken: 'DISCARD',
-                          }),
-                        );
-                      }}
-                    >
-                      {t('storage.orphanDiscard')}
-                    </button>
-                  </li>
-                ))}
+                    });
+                  } else if (o.kind === 'cross_workspace') {
+                    label = t('storage.orphanOutboxRowCrossWk', {
+                      key: o.ownerUserId.slice(0, 8),
+                      n: o.count,
+                    });
+                  } else {
+                    label = t('storage.orphanOutboxRow', {
+                      key: o.ownerUserId.slice(0, 8),
+                      n: o.count,
+                    });
+                  }
+                  return (
+                    <li key={rowKey} style={{ marginBottom: 8 }}>
+                      {label}
+                      <button
+                        type="button"
+                        className="btn danger"
+                        style={{ marginLeft: 8 }}
+                        disabled={busy}
+                        onClick={() => {
+                          if (!confirm(t('storage.orphanDiscardConfirm'))) return;
+                          void run(() =>
+                            discardOrphanOutboxOwner({
+                              ownerUserId: o.ownerUserId,
+                              notionTargetId: o.notionTargetId,
+                              confirmToken: 'DISCARD',
+                            }),
+                          );
+                        }}
+                      >
+                        {t('storage.orphanDiscard')}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
