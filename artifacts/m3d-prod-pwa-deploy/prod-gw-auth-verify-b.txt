@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "botName": "车护正式同步",
+  "workspaceKey": "90da532e-b363-42df-99eb-7ac75f6c12aa",
+  "dataSources": {
+    "vehicles": "8a131796-3b54-49ef-870c-db60eb6ee081",
+    "records": "6aef6240-eecb-4608-97d9-78216af766fb"
+  },
+  "wkFp_computed": "c647ac0368ff",
+  "keyFp_archived": "aa819deb16dc",
+  "note": "API key never written; keyFp from sha256(key)[:12]"
+}

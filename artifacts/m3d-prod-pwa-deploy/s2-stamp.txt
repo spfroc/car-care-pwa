@@ -1,0 +1,8 @@
+git=f3bb58aceec53fea1c14f6959c3954259f6ff88d
+bundle=index-Ddi6Z1jp.js
+bundle_sha256=5e94997a82fb7353d44849283e02e2fd89aff638d13e2c1f0674f870cc3f7563
+target=car-test.adobesun.com
+built_at=2026-10-15T15:41:34+0800
+phase=2-rr-wk
+merge_sha=f3bb58aceec53fea1c14f6959c3954259f6ff88d
+pr=24
