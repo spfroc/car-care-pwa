@@ -11,7 +11,7 @@
 | `display` | `standalone` |
 | Icons | `pwa-192.png` / `pwa-512.png` (`purpose: any`) + `pwa-maskable-512.png` (`maskable`) |
 | iOS | `apple-touch-icon.png` + `apple-mobile-web-app-capable` |
-| Service Worker | `vite-plugin-pwa`，`registerType: 'prompt'`（有新版本时提示用户确认后再刷新），注册于 `src/lib/pwaRegister.ts` / `main.tsx` |
+| Service Worker | `vite-plugin-pwa`，`registerType: 'autoUpdate'`（无感自动更新），注册于 `src/lib/pwaRegister.ts` / `main.tsx`；已安装 PWA 另有约每小时一次 `registration.update()` |
 
 线上 manifest / 图标需能从 `https://<user>.github.io/car-care-pwa/` 以 200 打开（相对路径相对 manifest URL 解析）。
 
@@ -32,15 +32,14 @@
 - `appinstalled` 或 `display-mode: standalone` → 「已安装」toast。
 - 无原生事件时：「怎么装」说明（iOS / Android / 桌面 / 国产机提示）。
 - 设置页可再次展开安装说明。
-- **新版本提示**：检测到 waiting Service Worker 时顶部横幅「发现新版本」→「立即更新」调用 `updateSW(true)` 激活并 reload；「稍后」仅关闭提示，不静默刷新（避免更新循环）。独立 PWA 与浏览器标签共用同一 SW。
+- **无感更新（产品默认）**：`registerType: 'autoUpdate'`。检测到新 Service Worker 后自动激活；用户刷新或下次打开即可用上新版本，**不**再弹出「发现新版本 / 立即更新」横幅。独立 PWA 与浏览器标签共用同一 SW；`pwaRegister` 另约每小时调用一次 `registration.update()`，便于长驻已安装窗口发现新部署。
 
-### 本地验证更新提示
+### 本地验证无感更新
 
 1. `npm run build && npm run preview`（或部署到 staging）。
 2. 用 Chromium 打开 preview，Application → Service Workers，确认已控制页面。
 3. 改一处可见文案或 bump `package.json` version，再 `build` + 重启 preview（同 origin / 同 port）。
-4. 刷新或等待 SW `update()`：应出现「发现新版本」横幅（不应自动 reload）。
-5. 点「立即更新」→ 页面 reload，新版本生效；点「稍后」→ 横幅消失且不 reload。
+4. 刷新或等待 SW `update()`：应自动接管新 worker（无确认横幅）；再刷新后内容为新版本。
 
 ## 人工验证清单
 

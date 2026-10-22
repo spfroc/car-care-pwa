@@ -25,7 +25,8 @@ const checks = [
   ['feedback email constant', 'car-care-feedback@adobesun.com'],
   ['zh feedback title', '问题反馈'],
   ['zh about section', '关于本应用'],
-  ['update prompt copy', '发现新版本'],
+  ['zh changelog section', '更新日志'],
+  ['changelog silent-update note', '无感自动更新'],
   ['package version embedded', pkg.version],
 ];
 
@@ -33,6 +34,15 @@ const failed = [];
 for (const [name, needle] of checks) {
   if (!blob.includes(needle)) failed.push(name);
 }
+
+// Hourly poll is minified (often 36e5); SW autoUpdate injects skipWaiting.
+const hasHourly =
+  blob.includes('3600000') || blob.includes('36e5') || /36\s*\*\s*1e5/.test(blob);
+if (!hasHourly) failed.push('hourly registration.update interval');
+
+const swPath = join(root, 'dist', 'sw.js');
+const sw = existsSync(swPath) ? readFileSync(swPath, 'utf-8') : '';
+if (!/skipWaiting/.test(sw)) failed.push('sw skipWaiting (autoUpdate)');
 
 if (failed.length) {
   console.error('FAIL settings-feedback-smoke:', failed.join(', '));
@@ -45,7 +55,7 @@ console.log(
       ok: true,
       version: pkg.version,
       jsFiles: files.length,
-      checks: checks.map(([n]) => n),
+      checks: [...checks.map(([n]) => n), 'hourly registration.update interval', 'sw skipWaiting (autoUpdate)'],
     },
     null,
     2,
