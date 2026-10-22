@@ -20,6 +20,7 @@ import {
   getAppVersion,
   getDisplayModeLabel,
 } from '../lib/appMeta';
+import { CHANGELOG, changelogBullets } from '../lib/changelog';
 import { FEEDBACK_EMAIL } from '../lib/feedbackConstants';
 import {
   DATE_FORMAT_OPTIONS,
@@ -43,6 +44,7 @@ export function SettingsPage() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [skipCorruptMedia, setSkipCorruptMedia] = useState(false);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const [online, setOnline] = useState(
     () => (typeof navigator !== 'undefined' ? navigator.onLine : true),
   );
@@ -479,6 +481,36 @@ export function SettingsPage() {
           </div>
         </dl>
         <p className="muted small">{t('settings.aboutHint')}</p>
+      </section>
+
+      <section className="card">
+        <h2>{t('settings.changelog')}</h2>
+        <p className="hint">{t('settings.changelogHint')}</p>
+        <button
+          type="button"
+          className="btn block"
+          onClick={() => setChangelogOpen((v) => !v)}
+          aria-expanded={changelogOpen}
+        >
+          {changelogOpen ? t('settings.changelogHide') : t('settings.changelogShow')}
+        </button>
+        {changelogOpen && (
+          <div className="changelog-list">
+            {CHANGELOG.map((entry) => (
+              <article key={entry.version} className="changelog-entry">
+                <h3>
+                  v{entry.version}
+                  {entry.date ? <span className="muted small"> · {entry.date}</span> : null}
+                </h3>
+                <ul>
+                  {changelogBullets(entry, language).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card muted small">

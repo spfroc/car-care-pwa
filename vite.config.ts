@@ -36,8 +36,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Prompt the user before activating a waiting SW (no silent reload).
-      registerType: 'prompt',
+      // Silent auto-update: activate new SW without a confirm banner.
+      registerType: 'autoUpdate',
       includeAssets: [
         'favicon.svg',
         'apple-touch-icon.png',

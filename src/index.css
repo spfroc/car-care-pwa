@@ -591,27 +591,25 @@ button, input, select, textarea {
   flex-shrink: 0;
 }
 
-.update-banner {
+.changelog-list {
+  margin-top: 12px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--primary-soft);
-  color: #4c1d95;
-  border-bottom: 1px solid #ddd6fe;
+  flex-direction: column;
+  gap: 14px;
+}
+.changelog-entry h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+.changelog-entry ul {
+  margin: 0;
+  padding-left: 1.2em;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.45;
+  color: var(--muted);
 }
-.update-banner-text {
-  min-width: 0;
-  flex: 1;
-}
-.update-banner-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+.changelog-entry li {
+  margin-bottom: 4px;
 }
 
 .about-meta {

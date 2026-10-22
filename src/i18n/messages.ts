@@ -264,7 +264,11 @@ const zhCN = {
   'settings.aboutDisplay': '显示模式',
   'settings.aboutStandaloneYes': ' · 已安装独立窗口',
   'settings.aboutStandaloneNo': ' · 浏览器标签页',
-  'settings.aboutHint': '版本来自 package.json；构建号为短提交 SHA（构建时写入）。无匿名用量上报。',
+  'settings.aboutHint': '版本来自 package.json；构建号为短提交 SHA（构建时写入）。无匿名用量上报。应用更新为无感自动更新。',
+  'settings.changelog': '更新日志',
+  'settings.changelogHint': '最近版本变更摘要。默认折叠，点下方按钮展开。',
+  'settings.changelogShow': '展开更新日志',
+  'settings.changelogHide': '收起更新日志',
 
   // Data storage (M2)
   'storage.title': '数据存储',
@@ -522,10 +526,6 @@ const zhCN = {
   'pwa.android4': '小米 / 华为 / OPPO / vivo 等：浏览器「添加到主屏幕」往往是快捷方式（可能带浏览器角标），与系统「安装应用」(WebAPK) 不同；无 GMS 时通常无法生成完整 WebAPK。',
   'pwa.desktop1': '桌面 Chrome / Edge：地址栏右侧安装图标，或菜单 → 安装车护助手。',
   'pwa.desktop2': '手机请用系统浏览器打开本页后再按对应系统步骤操作。',
-  'pwa.updateAvailable': '发现新版本，刷新后即可使用最新功能与修复。',
-  'pwa.updateNow': '立即更新',
-  'pwa.updateLater': '稍后',
-  'pwa.updateBusy': '更新中…',
 } as const;
 
 const en: { [K in MessageKey]: string } = {
@@ -777,7 +777,11 @@ const en: { [K in MessageKey]: string } = {
   'settings.aboutDisplay': 'Display mode',
   'settings.aboutStandaloneYes': ' · Installed standalone',
   'settings.aboutStandaloneNo': ' · Browser tab',
-  'settings.aboutHint': 'Version comes from package.json; build id is the short commit SHA injected at build. No anonymous usage telemetry.',
+  'settings.aboutHint': 'Version comes from package.json; build id is the short commit SHA injected at build. No anonymous usage telemetry. App updates apply silently.',
+  'settings.changelog': 'Changelog',
+  'settings.changelogHint': 'Recent release notes. Collapsed by default — tap below to expand.',
+  'settings.changelogShow': 'Show changelog',
+  'settings.changelogHide': 'Hide changelog',
 
   'storage.title': 'Data storage',
   'storage.hint': 'Default is local IndexedDB only. Optionally connect your own Supabase project for sync/backup; the cloud is not the live write source.',
@@ -1031,10 +1035,6 @@ const en: { [K in MessageKey]: string } = {
   'pwa.android4': 'Xiaomi / Huawei / OPPO / vivo etc.: browser “Add to Home screen” is often a shortcut (may show a browser badge), different from system Install (WebAPK); without GMS a full WebAPK may not be possible.',
   'pwa.desktop1': 'Desktop Chrome / Edge: install icon in the address bar, or menu → Install Car Care.',
   'pwa.desktop2': 'On phone, open this page in the system browser and follow the steps for that OS.',
-  'pwa.updateAvailable': 'A new version is available. Refresh to get the latest fixes and features.',
-  'pwa.updateNow': 'Update now',
-  'pwa.updateLater': 'Later',
-  'pwa.updateBusy': 'Updating…',
 };
 
 export const MESSAGES = { 'zh-CN': zhCN, en } as const;

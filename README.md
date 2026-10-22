@@ -68,7 +68,7 @@ npm test         # 油耗/电耗/综合公式单测
 
 - 顶栏合并为一条可关闭的紧凑提示：存储未持久化与/或「安装到主屏幕」（不再叠两条横幅）。`beforeinstallprompt` 可用时点「安装」。
 - 安装成功或已以独立窗口打开：顶栏「已安装」提示。
-- 有新 Service Worker 时提示「立即更新」（需用户确认，不静默刷新）。见 [`docs/pwa-install.md`](docs/pwa-install.md)。
+- 有新 Service Worker 时**无感自动更新**（`registerType: 'autoUpdate'` + 约每小时 `registration.update()`）。见 [`docs/pwa-install.md`](docs/pwa-install.md)。
 - 设置页亦可展开安装说明。排障（主屏幕无图标、国产机快捷方式 vs WebAPK）见同上文档。
 - Chrome 端侧语音/文字自动记账评估见 [`docs/chrome-on-device-input-eval.md`](docs/chrome-on-device-input-eval.md)。
 
@@ -77,6 +77,7 @@ npm test         # 油耗/电耗/综合公式单测
 - **设置 → 问题反馈**：主通道打开本仓库 GitHub Issues（预填版本 / UA / display-mode）；备用 `mailto:`。
 - 备用邮箱常量：`src/lib/feedbackConstants.ts` 的 `FEEDBACK_EMAIL`（默认 `car-care-feedback@adobesun.com`，仓库内原先无公开联系方式，可随时改）。
 - **设置 → 关于本应用**：版本来自 `package.json`；构建短 SHA / 时间由 Vite `define`（`__APP_GIT_SHA__` / `__APP_BUILD_TIME__`）注入，可用环境变量 `VITE_GIT_SHA` / `VITE_BUILD_TIME` 覆盖。
+- **设置 → 更新日志**：默认折叠；展开可读近期版本摘要（数据在 `src/lib/changelog.ts`，发版时追加）。
 - **不做**匿名用量心跳 / telemetry（选项 A）。
 
 ## 车辆详情卡指标
