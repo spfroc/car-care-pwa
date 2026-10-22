@@ -251,6 +251,20 @@ const zhCN = {
   'settings.footerOcr': 'OCR 引擎属 M2；当前仅保存白名单配置。',
   'settings.time24': '24 小时制',
   'settings.time12': '12 小时制 (AM/PM)',
+  'settings.feedback': '问题反馈',
+  'settings.feedbackHint': '遇到问题或有建议，可打开 GitHub Issues（预填版本与环境信息）。',
+  'settings.feedbackOffline': '当前离线：可查看此入口，提交反馈需联网。',
+  'settings.feedbackNeedNetwork': '提交反馈需要网络，请联网后再试。',
+  'settings.feedbackGithub': '在 GitHub 提交 Issue',
+  'settings.feedbackMailto': '发邮件反馈（备用）',
+  'settings.feedbackMailtoHint': '备用邮箱：{email}（可在源码 feedbackConstants.ts 修改）',
+  'settings.about': '关于本应用',
+  'settings.aboutVersion': '版本',
+  'settings.aboutBuild': '构建',
+  'settings.aboutDisplay': '显示模式',
+  'settings.aboutStandaloneYes': ' · 已安装独立窗口',
+  'settings.aboutStandaloneNo': ' · 浏览器标签页',
+  'settings.aboutHint': '版本来自 package.json；构建号为短提交 SHA（构建时写入）。无匿名用量上报。',
 
   // Data storage (M2)
   'storage.title': '数据存储',
@@ -508,6 +522,10 @@ const zhCN = {
   'pwa.android4': '小米 / 华为 / OPPO / vivo 等：浏览器「添加到主屏幕」往往是快捷方式（可能带浏览器角标），与系统「安装应用」(WebAPK) 不同；无 GMS 时通常无法生成完整 WebAPK。',
   'pwa.desktop1': '桌面 Chrome / Edge：地址栏右侧安装图标，或菜单 → 安装车护助手。',
   'pwa.desktop2': '手机请用系统浏览器打开本页后再按对应系统步骤操作。',
+  'pwa.updateAvailable': '发现新版本，刷新后即可使用最新功能与修复。',
+  'pwa.updateNow': '立即更新',
+  'pwa.updateLater': '稍后',
+  'pwa.updateBusy': '更新中…',
 } as const;
 
 const en: { [K in MessageKey]: string } = {
@@ -746,6 +764,20 @@ const en: { [K in MessageKey]: string } = {
   'settings.footerOcr': 'OCR engine is M2; only whitelist config is stored for now.',
   'settings.time24': '24-hour',
   'settings.time12': '12-hour (AM/PM)',
+  'settings.feedback': 'Feedback',
+  'settings.feedbackHint': 'Report a problem or suggestion via GitHub Issues (prefilled with version and environment).',
+  'settings.feedbackOffline': 'You are offline: this entry stays available; submitting needs a network connection.',
+  'settings.feedbackNeedNetwork': 'Submitting feedback needs a network connection. Try again when online.',
+  'settings.feedbackGithub': 'Open GitHub Issue',
+  'settings.feedbackMailto': 'Email feedback (fallback)',
+  'settings.feedbackMailtoHint': 'Fallback email: {email} (change in feedbackConstants.ts)',
+  'settings.about': 'About',
+  'settings.aboutVersion': 'Version',
+  'settings.aboutBuild': 'Build',
+  'settings.aboutDisplay': 'Display mode',
+  'settings.aboutStandaloneYes': ' · Installed standalone',
+  'settings.aboutStandaloneNo': ' · Browser tab',
+  'settings.aboutHint': 'Version comes from package.json; build id is the short commit SHA injected at build. No anonymous usage telemetry.',
 
   'storage.title': 'Data storage',
   'storage.hint': 'Default is local IndexedDB only. Optionally connect your own Supabase project for sync/backup; the cloud is not the live write source.',
@@ -999,6 +1031,10 @@ const en: { [K in MessageKey]: string } = {
   'pwa.android4': 'Xiaomi / Huawei / OPPO / vivo etc.: browser “Add to Home screen” is often a shortcut (may show a browser badge), different from system Install (WebAPK); without GMS a full WebAPK may not be possible.',
   'pwa.desktop1': 'Desktop Chrome / Edge: install icon in the address bar, or menu → Install Car Care.',
   'pwa.desktop2': 'On phone, open this page in the system browser and follow the steps for that OS.',
+  'pwa.updateAvailable': 'A new version is available. Refresh to get the latest fixes and features.',
+  'pwa.updateNow': 'Update now',
+  'pwa.updateLater': 'Later',
+  'pwa.updateBusy': 'Updating…',
 };
 
 export const MESSAGES = { 'zh-CN': zhCN, en } as const;

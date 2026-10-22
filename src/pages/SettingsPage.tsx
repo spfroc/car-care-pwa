@@ -12,12 +12,23 @@ import {
 import { loadDemoSeed } from '../seed/demo';
 import { nowISO, uid } from '../lib/constants';
 import {
+  buildFeedbackMailtoUrl,
+  buildGitHubIssueUrl,
+  formatBuildTimeForDisplay,
+  getAppBuildTime,
+  getAppGitSha,
+  getAppVersion,
+  getDisplayModeLabel,
+} from '../lib/appMeta';
+import { FEEDBACK_EMAIL } from '../lib/feedbackConstants';
+import {
   DATE_FORMAT_OPTIONS,
   LANGUAGE_OPTIONS,
   TIME_FORMAT_OPTIONS,
   normalizeLanguage,
 } from '../lib/datetime';
 import { useSettings } from '../hooks/useAppData';
+import { isStandaloneDisplay } from '../hooks/usePwaInstall';
 import type { Station } from '../types';
 import { useEffect } from 'react';
 import { DataStorageSettings } from '../components/DataStorageSettings';
@@ -32,6 +43,20 @@ export function SettingsPage() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [skipCorruptMedia, setSkipCorruptMedia] = useState(false);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [online, setOnline] = useState(
+    () => (typeof navigator !== 'undefined' ? navigator.onLine : true),
+  );
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
 
   async function refreshLocal() {
     await refresh();
@@ -403,6 +428,57 @@ export function SettingsPage() {
         >
           {t('settings.clearData')}
         </button>
+      </section>
+
+      <section className="card">
+        <h2>{t('settings.feedback')}</h2>
+        <p className="hint">{t('settings.feedbackHint')}</p>
+        {!online && <p className="muted small">{t('settings.feedbackOffline')}</p>}
+        <a
+          className="btn primary block"
+          href={buildGitHubIssueUrl(language)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            if (!online) {
+              e.preventDefault();
+              setMsg(t('settings.feedbackNeedNetwork'));
+            }
+          }}
+        >
+          {t('settings.feedbackGithub')}
+        </a>
+        <a className="btn block" href={buildFeedbackMailtoUrl(language)}>
+          {t('settings.feedbackMailto')}
+        </a>
+        <p className="muted small">{t('settings.feedbackMailtoHint', { email: FEEDBACK_EMAIL })}</p>
+      </section>
+
+      <section className="card">
+        <h2>{t('settings.about')}</h2>
+        <dl className="about-meta">
+          <div>
+            <dt>{t('settings.aboutVersion')}</dt>
+            <dd>{getAppVersion()}</dd>
+          </div>
+          <div>
+            <dt>{t('settings.aboutBuild')}</dt>
+            <dd>
+              {getAppGitSha()}
+              {getAppBuildTime()
+                ? ` · ${formatBuildTimeForDisplay(getAppBuildTime(), language)}`
+                : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>{t('settings.aboutDisplay')}</dt>
+            <dd>
+              {getDisplayModeLabel()}
+              {isStandaloneDisplay() ? t('settings.aboutStandaloneYes') : t('settings.aboutStandaloneNo')}
+            </dd>
+          </div>
+        </dl>
+        <p className="muted small">{t('settings.aboutHint')}</p>
       </section>
 
       <section className="card muted small">
