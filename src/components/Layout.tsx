@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAppData } from '../i18n';
 import { useTabBarAutohide } from '../hooks/useTabBarAutohide';
 import { isRootTabPath } from '../lib/tabNav';
+import { preloadRootTab } from '../routes/lazyPages';
 import { RootTabPager } from './RootTabPager';
 
 export function Layout() {
@@ -23,11 +24,19 @@ export function Layout() {
           <span>🏠</span>
           <span>{t('nav.home')}</span>
         </NavLink>
-        <NavLink to="/stats" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+        <NavLink
+          to="/stats"
+          className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+          onPointerDown={() => preloadRootTab('/stats')}
+        >
           <span>📊</span>
           <span>{t('nav.stats')}</span>
         </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+        <NavLink
+          to="/settings"
+          className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+          onPointerDown={() => preloadRootTab('/settings')}
+        >
           <span>⚙️</span>
           <span>{t('nav.settings')}</span>
         </NavLink>

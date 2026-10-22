@@ -12,6 +12,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.6',
+    date: '2026-10-22',
+    bulletsZh: [
+      '首屏不再解析统计、设置、快捷记账面板和同步客户端，首页先出来',
+      '统计 / 设置的列表改到进入该页或开始滑向该页时再读本地数据库',
+      'Supabase 客户端改到真正同步或登录时再加载；离线队列仍在',
+    ],
+    bulletsEn: [
+      'Home paints without parsing Stats, Settings, the quick-entry sheet, or the sync client',
+      'Stats and Settings read IndexedDB when you open that tab or start swiping toward it',
+      'The Supabase client loads on the first real sync or sign-in; the offline outbox stays',
+    ],
+  },
+  {
     version: '1.0.5',
     date: '2026-10-22',
     bulletsZh: [

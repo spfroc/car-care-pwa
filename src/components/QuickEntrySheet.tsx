@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useTabPanePortal } from './tabPanePortal';
 import { RECORD_TYPE_ICONS, recordTypeLabel } from '../lib/constants';
 import { useI18n } from '../i18n';
 import {
@@ -387,45 +385,4 @@ export function QuickEntrySheet({ open, onClose, vehicles, records = [], station
       </div>
     </div>
   );
-}
-
-type FabProps = {
-  vehicles: Vehicle[];
-  records?: CareRecord[];
-  stations?: Station[];
-};
-
-/** Fixed FAB above the tab bar (home). Does not scroll with the list. */
-export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProps) {
-  const { t } = useI18n();
-  const portal = useTabPanePortal();
-  const [open, setOpen] = useState(false);
-  if (vehicles.length === 0) return null;
-
-  const ui = (
-    <>
-      <button
-        type="button"
-        className="qe-fab"
-        onClick={() => setOpen(true)}
-        aria-label={t('qe.title')}
-        title={t('qe.fabTitle')}
-      >
-        <span className="qe-fab-icon" aria-hidden>
-          ✏️
-        </span>
-        <span className="qe-fab-label">{t('qe.fab')}</span>
-      </button>
-      <QuickEntrySheet
-        open={open}
-        onClose={() => setOpen(false)}
-        vehicles={vehicles}
-        records={records}
-        stations={stations}
-      />
-    </>
-  );
-  // While the home pane is translated, fixed UI must live on that pane so it
-  // slides with the page and stays out of the scrolling content.
-  return portal ? createPortal(ui, portal) : ui;
 }

@@ -66,11 +66,9 @@ describe('syncLifecycle BG Sync message → locked sync (E2E-ish)', () => {
       data: { type: BG_SYNC_MESSAGE_TYPE, tag: 'car-care-outbox' },
     });
     for (const fn of listeners.get('message') ?? []) fn(msg);
-    // allow microtask
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(spy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
     // Must call the exported exclusive entry — not an unlocked internal
     spy.mockRestore();
   });

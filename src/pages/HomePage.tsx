@@ -1,25 +1,24 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { QuickEntryFab } from '../components/QuickEntrySheet';
+import { QuickEntryFab } from '../components/QuickEntryFab';
 import { VehicleCard } from '../components/VehicleCard';
-import { useSettings, useVehicles } from '../hooks/useAppData';
+import { useAppData } from '../i18n';
+import { useVehicles } from '../hooks/useAppData';
 import { listAllRecords } from '../repositories/records';
-import { listStations } from '../repositories/stations';
-import type { CareRecord, Station } from '../types';
+import type { CareRecord } from '../types';
 
 export function HomePage() {
   const { vehicles, loading, refresh } = useVehicles();
-  const { settings, t } = useSettings();
+  const { settings, t, dbReady } = useAppData();
   const [records, setRecords] = useState<CareRecord[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
 
   useEffect(() => {
+    if (!dbReady) return;
     listAllRecords().then(setRecords);
-    listStations().then(setStations);
     refresh();
-  }, [refresh]);
+  }, [dbReady, refresh]);
 
-  if (loading || !settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
+  if (loading || !dbReady) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   return (
     <div className="page page-home">
@@ -56,7 +55,11 @@ export function HomePage() {
         </div>
       )}
 
-      <QuickEntryFab vehicles={vehicles} records={records} stations={stations} />
+      <QuickEntryFab
+        vehicles={vehicles}
+        records={records}
+        loadStations={() => import('../repositories/stations').then((m) => m.listStations())}
+      />
     </div>
   );
 }

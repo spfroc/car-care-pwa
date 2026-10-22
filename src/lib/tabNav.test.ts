@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   adjacentTabPath,
   isRootTabPath,
+  neighborRootTabs,
   normalizePath,
   rootTabIndex,
   tabBarVisibleFromPreference,
@@ -35,6 +36,13 @@ describe('tabNav', () => {
     expect(tabBarVisibleFromPreference(undefined)).toBe(true);
     expect(tabBarVisibleFromPreference(null)).toBe(true);
     expect(tabBarVisibleFromPreference(true)).toBe(false);
+  });
+
+  it('names only the adjacent root tabs', () => {
+    expect(neighborRootTabs('/')).toEqual(['/stats']);
+    expect(neighborRootTabs('/stats')).toEqual(['/', '/settings']);
+    expect(neighborRootTabs('/settings')).toEqual(['/stats']);
+    expect(neighborRootTabs('/vehicles/1')).toEqual([]);
   });
 
   it('indexes root tabs', () => {

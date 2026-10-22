@@ -4,20 +4,11 @@ import {
   getCloudStorageConfig,
   setCloudStorageConfig,
 } from '../sync/config';
-import {
-  bidirectionalSync,
-  claimLegacyOutboxOwner,
-  disconnectCloud,
-  discardOrphanOutboxOwner,
-  firstUploadToCloud,
-  getSyncStatusSummary,
-  resolveProvider,
-  restoreFromCloud,
-  verifyConnection,
-} from '../sync/engine';
-import { SupabaseProvider } from '../sync/providers/supabase';
-import { listConflicts } from '../sync/outbox';
 import { ConflictList } from './ConflictList';
+
+function loadEngine() {
+  return import('../sync/engine');
+}
 import {
   clearNotionRuntimeSession,
   getNotionRuntimeSession,
@@ -28,7 +19,7 @@ import type { CloudProviderId, CloudStorageConfig, SyncConflict } from '../sync/
 import type { MessageKey } from '../i18n/messages';
 
 export function DataStorageSettings() {
-  const { t } = useSettings();
+  const { t, dbReady } = useSettings();
   const [cfg, setCfg] = useState<CloudStorageConfig>({ provider: 'none' });
   const [url, setUrl] = useState('');
   const [anon, setAnon] = useState('');
@@ -70,7 +61,9 @@ export function DataStorageSettings() {
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    const summary = await getSyncStatusSummary();
+    const engine = await loadEngine();
+    const { listConflicts } = await import('../sync/outbox');
+    const summary = await engine.getSyncStatusSummary();
     setCfg(summary.config);
     setUrl(summary.config.supabaseUrl ?? '');
     setAnon(summary.config.supabaseAnonKey ?? '');
@@ -99,6 +92,7 @@ export function DataStorageSettings() {
   }, [t, refreshSessionUi]);
 
   useEffect(() => {
+    if (!dbReady) return;
     void (async () => {
       const c = await getCloudStorageConfig();
       setCfg(c);
@@ -108,7 +102,7 @@ export function DataStorageSettings() {
       setNotionHint(c.notionWorkspaceHint ?? '');
       await refreshStatus();
     })();
-  }, [refreshStatus]);
+  }, [dbReady, refreshStatus]);
 
   async function saveProvider(provider: CloudProviderId) {
     setBusy(true);
@@ -178,16 +172,20 @@ export function DataStorageSettings() {
         notionWorkspaceHint: cfg.notionWorkspaceHint,
         workspaceKey: cfg.workspaceKey,
       });
-      const provider = await resolveProvider();
-      if (provider instanceof SupabaseProvider && email && password) {
+      const engine = await loadEngine();
+      const provider = await engine.resolveProvider();
+      if (email && password) {
+        const { SupabaseProvider } = await import('../sync/providers/supabase');
+        if (provider instanceof SupabaseProvider) {
         const auth = await provider.signIn(email, password, true);
         if (!auth.ok) {
           setMsg(auth.error ?? t('storage.authFailed'));
           await refreshStatus();
           return;
         }
+        }
       }
-      const r = await verifyConnection();
+      const r = await engine.verifyConnection();
       setMsg(r.message);
       await refreshStatus();
     } catch (e) {
@@ -217,7 +215,7 @@ export function DataStorageSettings() {
       });
       // Bearer in memory (optional sessionStorage) before /verify; workspaceKey filled on success
       setNotionSessionBearer(key);
-      const r = await verifyConnection();
+      const r = await (await loadEngine()).verifyConnection();
       if (r.ok && r.verify?.userId) {
         await setCloudStorageConfig({
           provider: 'notion',
@@ -361,7 +359,7 @@ export function DataStorageSettings() {
             type="button"
             className="btn primary block"
             disabled={busy || !sessionReady}
-            onClick={() => void run(bidirectionalSync)}
+            onClick={() => void run(() => loadEngine().then((e) => e.bidirectionalSync()))}
           >
             {t('storage.bidirectional')}
           </button>
@@ -371,7 +369,7 @@ export function DataStorageSettings() {
             disabled={busy}
             onClick={() => {
               if (!confirm(t('storage.disconnectConfirm'))) return;
-              void run(disconnectCloud);
+              void run(() => loadEngine().then((e) => e.disconnectCloud()));
             }}
           >
             {t('storage.disconnect')}
@@ -381,7 +379,7 @@ export function DataStorageSettings() {
               type="button"
               className="btn block"
               disabled={busy || !sessionReady}
-              onClick={() => void run(bidirectionalSync)}
+              onClick={() => void run(() => loadEngine().then((e) => e.bidirectionalSync()))}
             >
               {t('storage.retryOutbox')}
             </button>
@@ -407,7 +405,7 @@ export function DataStorageSettings() {
                 onClick={() => {
                   if (!confirm(t('storage.legacyClaimConfirm1'))) return;
                   if (!confirm(t('storage.legacyClaimConfirm2'))) return;
-                  void run(() => claimLegacyOutboxOwner({ confirmToken: 'CLAIM' }));
+                  void run(() => loadEngine().then((e) => e.claimLegacyOutboxOwner({ confirmToken: 'CLAIM' })));
                 }}
               >
                 {t('storage.legacyClaimButton')}
@@ -458,11 +456,13 @@ export function DataStorageSettings() {
                         onClick={() => {
                           if (!confirm(t('storage.orphanDiscardConfirm'))) return;
                           void run(() =>
-                            discardOrphanOutboxOwner({
-                              ownerUserId: o.ownerUserId,
-                              notionTargetId: o.notionTargetId,
-                              confirmToken: 'DISCARD',
-                            }),
+                            loadEngine().then((e) =>
+                              e.discardOrphanOutboxOwner({
+                                ownerUserId: o.ownerUserId,
+                                notionTargetId: o.notionTargetId,
+                                confirmToken: 'DISCARD',
+                              }),
+                            ),
                           );
                         }}
                       >
@@ -531,7 +531,7 @@ export function DataStorageSettings() {
             disabled={busy}
             onClick={() => {
               if (!confirm(t('storage.firstUploadConfirm'))) return;
-              void run(firstUploadToCloud);
+              void run(() => loadEngine().then((e) => e.firstUploadToCloud()));
             }}
           >
             {t('storage.firstUpload')}
@@ -542,7 +542,7 @@ export function DataStorageSettings() {
             disabled={busy}
             onClick={() => {
               if (!confirm(t('storage.restoreConfirm'))) return;
-              void run(() => restoreFromCloud({ replaceLocal: false }));
+              void run(() => loadEngine().then((e) => e.restoreFromCloud({ replaceLocal: false })));
             }}
           >
             {t('storage.restore')}
@@ -554,7 +554,7 @@ export function DataStorageSettings() {
             onClick={() => {
               if (!confirm(t('storage.restoreReplaceConfirm1'))) return;
               if (!confirm(t('storage.restoreReplaceConfirm2'))) return;
-              void run(() => restoreFromCloud({ replaceLocal: true }));
+              void run(() => loadEngine().then((e) => e.restoreFromCloud({ replaceLocal: true })));
             }}
           >
             {t('storage.restoreReplace')}
@@ -563,7 +563,7 @@ export function DataStorageSettings() {
             type="button"
             className="btn primary block"
             disabled={busy}
-            onClick={() => void run(bidirectionalSync)}
+            onClick={() => void run(() => loadEngine().then((e) => e.bidirectionalSync()))}
           >
             {t('storage.bidirectional')}
           </button>
@@ -573,7 +573,7 @@ export function DataStorageSettings() {
             disabled={busy}
             onClick={() => {
               if (!confirm(t('storage.disconnectConfirm'))) return;
-              void run(disconnectCloud);
+              void run(() => loadEngine().then((e) => e.disconnectCloud()));
             }}
           >
             {t('storage.disconnect')}
@@ -583,7 +583,7 @@ export function DataStorageSettings() {
               type="button"
               className="btn block"
               disabled={busy}
-              onClick={() => void run(bidirectionalSync)}
+              onClick={() => void run(() => loadEngine().then((e) => e.bidirectionalSync()))}
             >
               {t('storage.retryOutbox')}
             </button>

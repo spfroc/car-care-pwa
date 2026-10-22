@@ -17,6 +17,16 @@ export function rootTabIndex(pathname: string): number {
   return (ROOT_TAB_PATHS as readonly string[]).indexOf(normalizePath(pathname));
 }
 
+/** Tabs on either side of `pathname` (none at the ends / off the root tabs). */
+export function neighborRootTabs(pathname: string): RootTabPath[] {
+  const i = rootTabIndex(pathname);
+  if (i < 0) return [];
+  const out: RootTabPath[] = [];
+  if (i > 0) out.push(ROOT_TAB_PATHS[i - 1]!);
+  if (i + 1 < ROOT_TAB_PATHS.length) out.push(ROOT_TAB_PATHS[i + 1]!);
+  return out;
+}
+
 /** Next/prev tab path, or null at ends / when not on a root tab. */
 export function adjacentTabPath(pathname: string, direction: -1 | 1): string | null {
   const i = rootTabIndex(pathname);

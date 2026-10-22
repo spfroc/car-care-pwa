@@ -1,12 +1,5 @@
 import { getDB } from '../db';
 import type { Station, StationType } from '../types';
-import {
-  isCloudEnqueueEnabled,
-  makeOutboxItem,
-  putOutboxInTx,
-  settleTx,
-  stampOutboxOwner,
-} from '../sync/outbox';
 
 export async function listStations(type?: StationType): Promise<Station[]> {
   const db = await getDB();
@@ -17,6 +10,8 @@ export async function listStations(type?: StationType): Promise<Station[]> {
 }
 
 export async function putStation(s: Station): Promise<void> {
+  const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+    await import('../sync/outbox');
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled('stations');
   const outboxItem = sync
@@ -39,6 +34,8 @@ export async function putStation(s: Station): Promise<void> {
 }
 
 export async function deleteStation(id: string): Promise<void> {
+  const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+    await import('../sync/outbox');
   const db = await getDB();
   const records = await db.getAll('records');
   const syncStations = await isCloudEnqueueEnabled('stations');
