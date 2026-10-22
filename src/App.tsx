@@ -9,6 +9,7 @@ import { StatsPage } from './pages/StatsPage';
 import { useAppBootstrap } from './hooks/useAppData';
 import { AppDataProvider } from './i18n';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { PwaUpdateBanner } from './components/PwaUpdateBanner';
 import { translate } from './i18n/messages';
 import { useEffect } from 'react';
 import { installSyncLifecycle } from './sync/syncLifecycle';
@@ -16,6 +17,7 @@ import { installSyncLifecycle } from './sync/syncLifecycle';
 function AppRoutes({ persisted }: { persisted: boolean }) {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
+      <PwaUpdateBanner />
       <PwaInstallBanner persisted={persisted} />
       <Routes>
         <Route element={<Layout />}>

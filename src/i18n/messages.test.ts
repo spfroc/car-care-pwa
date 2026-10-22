@@ -17,4 +17,13 @@ describe('translate', () => {
     expect(translate('en', 'rform.mediaCount', { n: 3 })).toBe('3 photo(s) attached (JPEG compressed)');
     expect(translate('zh-CN', 'rform.mediaCount', { n: 2 })).toBe('已附 2 张图（已压缩 JPEG）');
   });
+
+  it('exposes feedback / about / PWA update copy', () => {
+    expect(translate('zh-CN', 'settings.feedback')).toBe('问题反馈');
+    expect(translate('en', 'settings.feedback')).toBe('Feedback');
+    expect(translate('zh-CN', 'settings.about')).toBe('关于本应用');
+    expect(translate('zh-CN', 'pwa.updateAvailable')).toContain('新版本');
+    expect(translate('en', 'pwa.updateNow')).toBe('Update now');
+    expect(translate('zh-CN', 'settings.feedbackMailtoHint', { email: 'a@b.c' })).toContain('a@b.c');
+  });
 });

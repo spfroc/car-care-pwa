@@ -2,9 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
-import { registerSW } from 'virtual:pwa-register';
+import { startPwaRegister } from './lib/pwaRegister';
 
-registerSW({ immediate: true });
+startPwaRegister();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
