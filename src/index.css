@@ -32,11 +32,12 @@ button, input, select, textarea {
 .app-main {
   flex: 1;
   padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  transition: padding-bottom 0.22s ease;
 }
 .tab-bar {
   position: fixed;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(0);
   bottom: 0;
   width: min(560px, 100%);
   height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
@@ -46,6 +47,25 @@ button, input, select, textarea {
   background: #fff;
   border-top: 1px solid var(--border);
   z-index: 20;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+  will-change: transform;
+}
+.app-shell.tab-bar-hidden .tab-bar {
+  transform: translateX(-50%) translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+}
+.app-shell.tab-bar-hidden .app-main {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.app-shell.tab-bar-hidden .page-home {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.app-shell.tab-bar-hidden .qe-fab {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+.app-shell.tab-bar-hidden .qe-sheet {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 .tab {
   display: flex;
