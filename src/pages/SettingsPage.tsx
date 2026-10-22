@@ -173,6 +173,15 @@ export function SettingsPage() {
           </select>
         </label>
         <p className="muted small">{t('settings.datetimeHint')}</p>
+        <label className="row-check">
+          <input
+            type="checkbox"
+            checked={settings.hideBottomNav}
+            onChange={(e) => saveKey('hideBottomNav', e.target.checked)}
+          />
+          {t('settings.hideBottomNav')}
+        </label>
+        <p className="muted small">{t('settings.hideBottomNavHint')}</p>
       </section>
 
       <section className="card">

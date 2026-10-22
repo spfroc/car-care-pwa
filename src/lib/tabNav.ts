@@ -45,5 +45,12 @@ export function hasHorizontalScrollAncestor(el: EventTarget | null): boolean {
 }
 
 export const TAB_SWIPE_MIN_DX = 56;
-export const TAB_BAR_SHOW_SCROLL_PX = 56;
-export const TAB_BAR_HIDE_DELAY_MS = 1000;
+
+/**
+ * Bottom-tab visibility follows Settings 「隐藏底栏」 only.
+ * `true` hides the bar; missing or `false` keeps it visible.
+ * Scroll and swipe must not override this.
+ */
+export function tabBarVisibleFromPreference(hideBottomNav: boolean | null | undefined): boolean {
+  return hideBottomNav !== true;
+}

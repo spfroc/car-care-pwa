@@ -173,6 +173,7 @@ export async function ensureDefaultSettings(): Promise<void> {
     'ocrWhitelist.discount': OCR_DEFAULTS.discount,
     ocrWhitelistDefaults: { ...OCR_DEFAULTS },
     hevAllowCharge: false,
+    hideBottomNav: false,
     fuelEconomyUnit: 'L/100km',
     electricEconomyUnit: 'kWh/100km',
   };

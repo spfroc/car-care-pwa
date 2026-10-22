@@ -59,6 +59,8 @@ export type AppSettings = {
   fuelGrades: string[];
   kwhToLiterFactor: number;
   hevAllowCharge: boolean;
+  /** Settings 「隐藏底栏」. Default false: bar stays visible. */
+  hideBottomNav: boolean;
   fuelEconomyUnit: string;
   electricEconomyUnit: string;
   ocrMain: string;
@@ -80,6 +82,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
     fuelGrades: await g('fuelGrades', ['92#', '95#', '98#', '0#柴油']),
     kwhToLiterFactor: await g('kwhToLiterFactor', 0.112),
     hevAllowCharge: await g('hevAllowCharge', false),
+    hideBottomNav: await g('hideBottomNav', false),
     fuelEconomyUnit: await g('fuelEconomyUnit', 'L/100km'),
     electricEconomyUnit: await g('electricEconomyUnit', 'kWh/100km'),
     ocrMain: await g('ocrWhitelist.main', OCR_DEFAULTS.main),
