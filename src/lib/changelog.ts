@@ -12,6 +12,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.3',
+    date: '2026-10-22',
+    bulletsZh: [
+      '主页 / 统计 / 设置支持左右滑动切换',
+      '使用中底栏自动隐藏；长距离上下滑动后再显示，停滑约 1 秒后再次隐藏',
+    ],
+    bulletsEn: [
+      'Swipe left/right between Home / Stats / Settings',
+      'Bottom tab bar auto-hides while using; long vertical swipe shows it, then hides ~1s after scrolling stops',
+    ],
+  },
+  {
     version: '1.0.2',
     date: '2026-10-22',
     bulletsZh: [
