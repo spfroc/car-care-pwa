@@ -12,6 +12,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.4',
+    date: '2026-10-22',
+    bulletsZh: [
+      '设置新增「隐藏底栏」开关（默认关闭，底栏始终显示）',
+      '开启后底栏始终隐藏；上下滑动不再显示或隐藏底栏。左右滑动切换首页 / 统计 / 设置保持可用',
+    ],
+    bulletsEn: [
+      'Settings: “Hide bottom bar” toggle (off by default — the tab bar stays visible)',
+      'When on, the tab bar stays hidden; scrolling no longer shows or hides it. Left/right swipe between Home / Stats / Settings still works',
+    ],
+  },
+  {
     version: '1.0.3',
     date: '2026-10-22',
     bulletsZh: [

@@ -23,6 +23,8 @@ describe('translate', () => {
     expect(translate('en', 'settings.feedback')).toBe('Feedback');
     expect(translate('zh-CN', 'settings.about')).toBe('关于本应用');
     expect(translate('zh-CN', 'settings.changelog')).toBe('更新日志');
+    expect(translate('zh-CN', 'settings.hideBottomNav')).toBe('隐藏底栏');
+    expect(translate('en', 'settings.hideBottomNav')).toBe('Hide bottom bar');
     expect(translate('en', 'settings.changelogShow')).toBe('Show changelog');
     expect(translate('zh-CN', 'settings.feedbackMailtoHint', { email: 'a@b.c' })).toContain('a@b.c');
   });

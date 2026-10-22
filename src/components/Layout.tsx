@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { useI18n } from '../i18n';
+import { useAppData } from '../i18n';
 import { useTabBarAutohide } from '../hooks/useTabBarAutohide';
 import { useTabSwipe } from '../hooks/useTabSwipe';
 
 export function Layout() {
-  const { t } = useI18n();
-  const { tabBarVisible } = useTabBarAutohide();
+  const { t, settings } = useAppData();
+  // Visibility is the preference only. Scroll/swipe must not show or hide the bar.
+  const { tabBarVisible } = useTabBarAutohide(settings?.hideBottomNav === true);
   useTabSwipe(true);
 
   return (

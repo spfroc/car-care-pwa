@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { adjacentTabPath, isRootTabPath, normalizePath, rootTabIndex } from './tabNav';
+import {
+  adjacentTabPath,
+  isRootTabPath,
+  normalizePath,
+  rootTabIndex,
+  tabBarVisibleFromPreference,
+} from './tabNav';
 
 describe('tabNav', () => {
   it('normalizes trailing slashes', () => {
@@ -22,6 +28,13 @@ describe('tabNav', () => {
     expect(adjacentTabPath('/settings', -1)).toBe('/stats');
     expect(adjacentTabPath('/', -1)).toBe(null);
     expect(adjacentTabPath('/vehicles/x', 1)).toBe(null);
+  });
+
+  it('shows the tab bar unless 隐藏底栏 is on', () => {
+    expect(tabBarVisibleFromPreference(false)).toBe(true);
+    expect(tabBarVisibleFromPreference(undefined)).toBe(true);
+    expect(tabBarVisibleFromPreference(null)).toBe(true);
+    expect(tabBarVisibleFromPreference(true)).toBe(false);
   });
 
   it('indexes root tabs', () => {
