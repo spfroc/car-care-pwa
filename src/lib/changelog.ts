@@ -12,6 +12,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.5',
+    date: '2026-10-22',
+    bulletsZh: [
+      '首页 / 统计 / 设置左右滑动时，页面跟手平移并交叉淡入淡出',
+      '在首页向右、或在设置向左（没有下一页）时，最多拖出约三分之一屏，露出灰白渐变模糊；松手后回弹，不切换页面',
+    ],
+    bulletsEn: [
+      'Swiping between Home, Stats, and Settings slides and crossfades with the finger',
+      'On Home (swipe right) or Settings (swipe left), when there is no next page, the drag resists after about one-third of the screen and shows a blurred gray-white gradient; release springs back without switching tabs',
+    ],
+  },
+  {
     version: '1.0.4',
     date: '2026-10-22',
     bulletsZh: [

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { useTabPanePortal } from './tabPanePortal';
 import { RECORD_TYPE_ICONS, recordTypeLabel } from '../lib/constants';
 import { useI18n } from '../i18n';
 import {
@@ -396,10 +398,11 @@ type FabProps = {
 /** Fixed FAB above the tab bar (home). Does not scroll with the list. */
 export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProps) {
   const { t } = useI18n();
+  const portal = useTabPanePortal();
   const [open, setOpen] = useState(false);
   if (vehicles.length === 0) return null;
 
-  return (
+  const ui = (
     <>
       <button
         type="button"
@@ -422,4 +425,7 @@ export function QuickEntryFab({ vehicles, records = [], stations = [] }: FabProp
       />
     </>
   );
+  // While the home pane is translated, fixed UI must live on that pane so it
+  // slides with the page and stays out of the scrolling content.
+  return portal ? createPortal(ui, portal) : ui;
 }

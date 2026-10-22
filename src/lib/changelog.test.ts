@@ -4,9 +4,9 @@ import { CHANGELOG, changelogBullets } from './changelog';
 describe('CHANGELOG', () => {
   it('lists newest versions first and includes recent releases', () => {
     expect(CHANGELOG.length).toBeGreaterThanOrEqual(3);
-    expect(CHANGELOG[0]?.version).toBe('1.0.4');
+    expect(CHANGELOG[0]?.version).toBe('1.0.5');
     expect(CHANGELOG.map((e) => e.version)).toEqual(
-      expect.arrayContaining(['1.0.4', '1.0.3', '1.0.2', '1.0.1', '1.0.0']),
+      expect.arrayContaining(['1.0.5', '1.0.4', '1.0.3', '1.0.2', '1.0.1', '1.0.0']),
     );
   });
 

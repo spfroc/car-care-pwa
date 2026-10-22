@@ -1,18 +1,22 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAppData } from '../i18n';
 import { useTabBarAutohide } from '../hooks/useTabBarAutohide';
-import { useTabSwipe } from '../hooks/useTabSwipe';
+import { isRootTabPath } from '../lib/tabNav';
+import { RootTabPager } from './RootTabPager';
 
 export function Layout() {
   const { t, settings } = useAppData();
+  const { pathname } = useLocation();
+  const onRootTab = isRootTabPath(pathname);
   // Visibility is the preference only. Scroll/swipe must not show or hide the bar.
   const { tabBarVisible } = useTabBarAutohide(settings?.hideBottomNav === true);
-  useTabSwipe(true);
 
   return (
-    <div className={`app-shell${tabBarVisible ? '' : ' tab-bar-hidden'}`}>
+    <div
+      className={`app-shell${tabBarVisible ? '' : ' tab-bar-hidden'}${onRootTab ? ' has-tab-pager' : ''}`}
+    >
       <main className="app-main">
-        <Outlet />
+        {onRootTab ? <RootTabPager /> : <Outlet />}
       </main>
       <nav className="tab-bar" aria-hidden={!tabBarVisible} inert={!tabBarVisible || undefined}>
         <NavLink to="/" end className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
