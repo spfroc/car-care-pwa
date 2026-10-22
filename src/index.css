@@ -15,6 +15,18 @@
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; min-height: 100%; }
+html:has(.app-shell.has-tab-pager),
+body:has(.app-shell.has-tab-pager) {
+  height: 100%;
+  overflow: hidden;
+}
+#root:has(.app-shell.has-tab-pager) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea {
   font: inherit;
@@ -66,6 +78,71 @@ button, input, select, textarea {
 }
 .app-shell.tab-bar-hidden .qe-sheet {
   margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Root tabs: follow-the-finger slide + crossfade. Nested routes keep document scroll. */
+.app-shell.has-tab-pager {
+  flex: 1 1 auto;
+  width: min(560px, 100%);
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+.app-shell.has-tab-pager .app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.tab-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8fafc;
+  touch-action: pan-y;
+}
+.tab-edge-wash {
+  position: absolute;
+  inset: -22%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background:
+    radial-gradient(26% 22% at 16% 28%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(32% 28% at 48% 70%, rgba(148, 163, 184, 0.9) 0%, rgba(148, 163, 184, 0) 72%),
+    radial-gradient(28% 24% at 78% 36%, rgba(226, 232, 240, 0.95) 0%, rgba(226, 232, 240, 0) 70%),
+    linear-gradient(105deg, #b9c6d4 0%, #d7e0ea 24%, #eef2f6 52%, #f8fafc 74%, #ffffff 100%);
+  filter: blur(18px);
+}
+.tab-pane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.tab-pane:has(.qe-overlay) {
+  z-index: 30;
+}
+.tab-pane-scroll {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 16px);
+}
+.app-shell.tab-bar-hidden .tab-pane-scroll {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 .tab {
   display: flex;
