@@ -1,32 +1,98 @@
+import { Suspense, useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { HomePage } from './pages/HomePage';
-import { VehicleDetailPage } from './pages/VehicleDetailPage';
-import { VehicleFormPage } from './pages/VehicleFormPage';
-import { RecordFormPage } from './pages/RecordFormPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { StatsPage } from './pages/StatsPage';
-import { useAppBootstrap } from './hooks/useAppData';
-import { AppDataProvider } from './i18n';
+import { AppDataProvider, useAppData } from './i18n';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { translate } from './i18n/messages';
-import { useEffect } from 'react';
-import { installSyncLifecycle } from './sync/syncLifecycle';
+import {
+  RecordFormPage,
+  VehicleDetailPage,
+  VehicleFormPage,
+} from './routes/lazyPages';
+
+function RouteFallback() {
+  const { t } = useAppData();
+  return (
+    <div className="page">
+      <p className="muted">{t('app.loading')}</p>
+    </div>
+  );
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
+function SyncLifecycleHost() {
+  const { dbReady, error } = useAppData();
+
+  useEffect(() => {
+    if (!dbReady || error) return;
+    let stop = () => {};
+    let cancelled = false;
+    void import('./sync/syncLifecycle').then((m) => {
+      if (cancelled) return;
+      stop = m.installSyncLifecycle().stop;
+    });
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [dbReady, error]);
+
+  return null;
+}
 
 function AppRoutes({ persisted }: { persisted: boolean }) {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
       <PwaInstallBanner persisted={persisted} />
+      <SyncLifecycleHost />
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/stats" element={<StatsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/vehicles/new" element={<VehicleFormPage />} />
-          <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
-          <Route path="/vehicles/:id/edit" element={<VehicleFormPage />} />
-          <Route path="/vehicles/:vehicleId/records/new/:type" element={<RecordFormPage />} />
-          <Route path="/vehicles/:vehicleId/records/:recordId" element={<RecordFormPage />} />
+          <Route path="/" element={null} />
+          <Route path="/stats" element={null} />
+          <Route path="/settings" element={null} />
+          <Route
+            path="/vehicles/new"
+            element={
+              <LazyPage>
+                <VehicleFormPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/vehicles/:id"
+            element={
+              <LazyPage>
+                <VehicleDetailPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/vehicles/:id/edit"
+            element={
+              <LazyPage>
+                <VehicleFormPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/vehicles/:vehicleId/records/new/:type"
+            element={
+              <LazyPage>
+                <RecordFormPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/vehicles/:vehicleId/records/:recordId"
+            element={
+              <LazyPage>
+                <RecordFormPage />
+              </LazyPage>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
@@ -34,14 +100,8 @@ function AppRoutes({ persisted }: { persisted: boolean }) {
   );
 }
 
-export default function App() {
-  const { ready, error, persisted } = useAppBootstrap();
-
-  useEffect(() => {
-    if (!ready || error) return;
-    const { stop } = installSyncLifecycle();
-    return stop;
-  }, [ready, error]);
+function BootstrappedApp() {
+  const { error, persisted } = useAppData();
 
   if (error) {
     return (
@@ -56,17 +116,13 @@ export default function App() {
     );
   }
 
-  if (!ready) {
-    return (
-      <div className="fatal">
-        <p>{translate('zh-CN', 'app.init')}</p>
-      </div>
-    );
-  }
+  return <AppRoutes persisted={persisted} />;
+}
 
+export default function App() {
   return (
     <AppDataProvider>
-      <AppRoutes persisted={persisted} />
+      <BootstrappedApp />
     </AppDataProvider>
   );
 }

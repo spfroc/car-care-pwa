@@ -29,22 +29,24 @@ function rangeDates(key: RangeKey): { from?: Date; to?: Date } {
 
 export function StatsPage() {
   const [params] = useSearchParams();
-  const { settings, t, language } = useSettings();
+  const { settings, t, language, dbReady } = useSettings();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState<string>(params.get('vehicle') || 'all');
   const [records, setRecords] = useState<CareRecord[]>([]);
   const [range, setRange] = useState<RangeKey>('all');
 
   useEffect(() => {
+    if (!dbReady) return;
     listVehicles().then(setVehicles);
-  }, []);
+  }, [dbReady]);
 
   useEffect(() => {
+    if (!dbReady) return;
     (async () => {
       if (vehicleId === 'all') setRecords(await listAllRecords());
       else setRecords(await listRecordsByVehicle(vehicleId));
     })();
-  }, [vehicleId]);
+  }, [dbReady, vehicleId]);
 
   const filtered = useMemo(() => {
     const { from, to } = rangeDates(range);
@@ -106,7 +108,7 @@ export function StatsPage() {
   const combined = settings ? combinedEconomy(filtered, settings.kwhToLiterFactor) : null;
   const ecoLowConf = fuelAvg.lowConfidence || elecAvg.lowConfidence;
 
-  if (!settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
+  if (!dbReady) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   const showFuelEco = vehicle
     ? allowsFuel(vehicle.energyType) && vehicle.energyType !== 'EV' && vehicle.energyType !== 'FCEV'

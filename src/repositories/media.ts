@@ -2,13 +2,6 @@ import { getDB, isQuotaError } from '../db';
 import type { Media } from '../types';
 import { compressImage } from '../lib/image';
 import { nowISO, uid } from '../lib/constants';
-import {
-  isCloudEnqueueEnabled,
-  makeOutboxItem,
-  putOutboxInTx,
-  settleTx,
-  stampOutboxOwner,
-} from '../sync/outbox';
 
 export async function putMediaFromFile(file: File): Promise<Media> {
   try {
@@ -23,6 +16,8 @@ export async function putMediaFromFile(file: File): Promise<Media> {
       createdAt: nowISO(),
     };
     const db = await getDB();
+    const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+      await import('../sync/outbox');
     const sync = await isCloudEnqueueEnabled('media');
     const outboxItem = sync
       ? await stampOutboxOwner(
@@ -52,6 +47,8 @@ export async function getMedia(id: string): Promise<Media | undefined> {
 }
 
 export async function deleteMedia(id: string): Promise<void> {
+  const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+    await import('../sync/outbox');
   const db = await getDB();
   const sync = await isCloudEnqueueEnabled('media');
   const outboxItem = sync

@@ -35,14 +35,7 @@ import {
   removeStaleConflictOps,
   syncNotionTargetGuardFromConfig,
 } from './outbox';
-import {
-  hasActiveLease,
-  hasFreshHeartbeat,
-  isWebSyncLockHeld,
-  SyncLeaseLostError,
-  throwIfSyncAborted,
-  withSyncLock,
-} from './tabLock';
+import { SyncLeaseLostError, throwIfSyncAborted, withSyncLock } from './tabLock';
 import { registerBackgroundOutboxSync } from './backgroundSync';
 import type { CloudProvider } from './providers/types';
 import { NotionProvider } from './providers/notion';
@@ -58,7 +51,7 @@ import {
   getOrphanOutboxPanel,
   type SwitchCorridorMode,
 } from './switchCorridor';
-import { SupabaseProvider } from './providers/supabase';
+import { recoverStaleSyncingStatus } from './recoverStale';
 import { assertCloudRowsValid } from './validatePayload';
 import { runSyncTxHook } from './txHooks';
 import type {
@@ -71,6 +64,8 @@ import type {
   SyncEntity,
   VerifyResult,
 } from './types';
+
+export { recoverStaleSyncingStatus };
 
 export type MediaMigrateSummary = {
   migrated: number;
@@ -94,25 +89,6 @@ export type SyncActionResult = {
   /** M3-B: set when another tab/task holds the sync lock. */
   lockBusy?: boolean;
 };
-
-/**
- * M3-B: if a previous tab crashed mid-sync, status may stick on `syncing`.
- * Must NOT infer idle from IDB lease alone — also check Web Locks + heartbeat
- * so Tab B opening settings while Tab A syncs (Web Locks) does not clear status.
- */
-export async function recoverStaleSyncingStatus(): Promise<boolean> {
-  const meta = await getSyncMeta();
-  if (meta.status !== 'syncing') return false;
-  // Live signals that another (or this) tab is still syncing:
-  if (await isWebSyncLockHeld()) return false;
-  if (await hasActiveLease()) return false;
-  if (await hasFreshHeartbeat()) return false;
-  await patchSyncMeta({
-    status: 'idle',
-    lastError: '检测到上次同步异常中断（可能关页/崩溃）；队列仍保留，可重新同步。',
-  });
-  return true;
-}
 
 async function runExclusiveSync(
   _label: string,
@@ -151,6 +127,7 @@ export async function resolveProvider(): Promise<CloudProvider | null> {
   const cfg = await getCloudStorageConfig();
   const deviceId = await ensureDeviceId();
   if (cfg.provider === 'supabase' && cfg.supabaseUrl && cfg.supabaseAnonKey) {
+    const { SupabaseProvider } = await import('./providers/supabase');
     return new SupabaseProvider({
       url: cfg.supabaseUrl,
       anonKey: cfg.supabaseAnonKey,

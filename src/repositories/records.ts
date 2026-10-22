@@ -1,14 +1,5 @@
 import { getDB } from '../db';
 import type { CareRecord, RecordType } from '../types';
-import {
-  isCloudEnqueueEnabled,
-  makeOutboxItem,
-  prepareOutboxEnqueue,
-  putOutboxInTx,
-  settleTx,
-  stampOutboxOwner,
-} from '../sync/outbox';
-import { noteLocalHardDelete } from '../sync/notionMap';
 
 export async function listRecordsByVehicle(vehicleId: string, type?: RecordType): Promise<CareRecord[]> {
   const db = await getDB();
@@ -34,6 +25,7 @@ export async function getRecord(id: string): Promise<CareRecord | undefined> {
 }
 
 export async function putRecord(r: CareRecord): Promise<void> {
+  const { prepareOutboxEnqueue, putOutboxInTx, settleTx } = await import('../sync/outbox');
   const db = await getDB();
   // Shared helper: isCloudEnqueueEnabled + Notion same-workspace tombstone gate
   const outboxItem = await prepareOutboxEnqueue({
@@ -80,6 +72,8 @@ async function mediaStillReferenced(
  * Delete one record (+ orphan media) and outbox tombstones in one transaction.
  */
 export async function deleteRecord(id: string): Promise<void> {
+  const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+    await import('../sync/outbox');
   const db = await getDB();
   const rec = await db.get('records', id);
   if (!rec) return;
@@ -114,7 +108,10 @@ export async function deleteRecord(id: string): Promise<void> {
     await tx.objectStore('records').delete(id);
     for (const item of outboxItems) await putOutboxInTx(tx, item);
   });
-  if (syncRecords) await noteLocalHardDelete('records', id);
+  if (syncRecords) {
+    const { noteLocalHardDelete } = await import('../sync/notionMap');
+    await noteLocalHardDelete('records', id);
+  }
 }
 
 export async function deleteRecordsForVehicle(vehicleId: string): Promise<void> {

@@ -35,7 +35,7 @@ import { useEffect } from 'react';
 import { DataStorageSettings } from '../components/DataStorageSettings';
 
 export function SettingsPage() {
-  const { settings, saveSetting, refresh, t, language } = useSettings();
+  const { settings, saveSetting, refresh, t, language, dbReady } = useSettings();
   const [msg, setMsg] = useState('');
   const [gas, setGas] = useState<Station[]>([]);
   const [charge, setCharge] = useState<Station[]>([]);
@@ -68,11 +68,12 @@ export function SettingsPage() {
   }
 
   useEffect(() => {
+    if (!dbReady) return;
     refreshLocal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dbReady]);
 
-  if (!settings) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
+  if (!dbReady) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   async function saveKey(key: string, value: unknown) {
     await saveSetting(key, value);

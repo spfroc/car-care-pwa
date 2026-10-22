@@ -1,15 +1,6 @@
 import { getDB } from '../db';
 import type { Vehicle } from '../types';
-import {
-  isCloudEnqueueEnabled,
-  makeOutboxItem,
-  prepareOutboxEnqueue,
-  putOutboxInTx,
-  stampOutboxOwner,
-  settleTx,
-} from '../sync/outbox';
 import { runSyncTxHook } from '../sync/txHooks';
-import { noteLocalHardDelete } from '../sync/notionMap';
 
 export async function listVehicles(): Promise<Vehicle[]> {
   const db = await getDB();
@@ -22,6 +13,7 @@ export async function getVehicle(id: string): Promise<Vehicle | undefined> {
 }
 
 export async function putVehicle(v: Vehicle): Promise<void> {
+  const { prepareOutboxEnqueue, putOutboxInTx, settleTx } = await import('../sync/outbox');
   const db = await getDB();
   // Shared helper: isCloudEnqueueEnabled + Notion same-workspace tombstone gate
   const outboxItem = await prepareOutboxEnqueue({
@@ -47,6 +39,8 @@ export async function putVehicle(v: Vehicle): Promise<void> {
  * plus matching sync_outbox tombstones when cloud is enabled for that entity.
  */
 export async function deleteVehicle(id: string): Promise<void> {
+  const { isCloudEnqueueEnabled, makeOutboxItem, putOutboxInTx, settleTx, stampOutboxOwner } =
+    await import('../sync/outbox');
   const db = await getDB();
   const vehicle = await db.get('vehicles', id);
   const rows = await db.getAllFromIndex('records', 'byVehicle', id);
@@ -112,6 +106,7 @@ export async function deleteVehicle(id: string): Promise<void> {
   });
   // D2-P5: persistent delete tombstone mapping (Notion)
   if (syncVehicles) {
+    const { noteLocalHardDelete } = await import('../sync/notionMap');
     await noteLocalHardDelete('vehicles', id);
     for (const r of rows) {
       if (syncRecords) await noteLocalHardDelete('records', r.id);
