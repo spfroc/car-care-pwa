@@ -12,6 +12,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.7',
+    date: '2026-10-23',
+    bulletsZh: [
+      '未加满的加油并入前后两次加满，按这段里程和升数计算油耗',
+      '还没再次加满的尾段不计入平均油耗，只在区间里标为参考',
+    ],
+    bulletsEn: [
+      'Partial fill-ups merge into the surrounding full-to-full interval',
+      'An open trailing segment stays out of the average and is shown as an estimate',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-10-22',
     bulletsZh: [

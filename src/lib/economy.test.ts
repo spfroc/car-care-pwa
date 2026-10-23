@@ -8,6 +8,7 @@ import {
   electricEconomySummary,
   electricIntervals,
   formatEconomy,
+  fuelEconomyDiagnostics,
   fuelEconomySummary,
   fuelIntervals,
   latestFuelEconomy,
@@ -62,6 +63,10 @@ describe('fuelIntervals', () => {
     const ivs = fuelIntervals(records);
     expect(ivs[0].economyPer100).toBeCloseTo(5, 5);
     expect(ivs[0].lowConfidence).toBe(true);
+    expect(ivs[0].open).toBe(true);
+    // Open tail is an estimate: not the confirmed average.
+    expect(averageFuelEconomy(records)).toBeNull();
+    expect(fuelEconomySummary(records).value).toBeNull();
   });
 
   it('ignores odometer≤0 history补录 so they cannot invent a 0→firstFill mega-interval', () => {
@@ -145,14 +150,23 @@ describe('fuelIntervals', () => {
     ];
     const ivs = fuelIntervals(records);
     expect(ivs.some((iv) => iv.fromOdometer === 0)).toBe(false);
-    // Without the fix, odo=0 → 34448 (25.85L) would dominate → ~1.27 with full history.
-    // With the fix, first interval starts at 34448→35072.
+    // Partial b (35072, not full) merges into the next full at c (35488).
+    expect(ivs).toHaveLength(2);
     expect(ivs[0].fromOdometer).toBe(34448);
-    expect(ivs[0].toOdometer).toBe(35072);
+    expect(ivs[0].toOdometer).toBe(35488);
+    expect(ivs[0].endRecordId).toBe('c');
+    expect(ivs[0].amount).toBeCloseTo(34.6 + 41.37, 5);
+    expect(ivs[0].lowConfidence).toBe(false);
+    expect(ivs[0].open).toBe(false);
+    expect(ivs[1].fromOdometer).toBe(35488);
+    expect(ivs[1].toOdometer).toBe(41864);
     const avg = averageFuelEconomy(records)!;
-    // Still includes a long 35488→41864 gap in this slim fixture; assert not crushed by odo=0.
+    // Closed chain: (all liters − first fill) / (last − first) × 100. Not crushed by odo=0.
+    const spanKm = 41864 - 34448;
+    const spanLiters = 34.6 + 41.37 + 39.75;
+    expect(avg).toBeCloseTo((spanLiters / spanKm) * 100, 5);
     expect(avg).toBeGreaterThan(1.27);
-    expect(fuelEconomySummary(records).lowConfidence).toBe(true); // partial fill b
+    expect(fuelEconomySummary(records).lowConfidence).toBe(false);
   });
 
   it('marks flags.lowConfidenceEconomy as 参考 but keeps the fill in the chain', () => {
@@ -348,20 +362,220 @@ describe('convertEconomy / formatEconomy unit conversion', () => {
   });
 });
 
+describe('full-to-full merge', () => {
+  function fuel(p: {
+    id: string;
+    odometer: number;
+    liters: number;
+    filledUp: boolean;
+    date: string;
+    vehicleId?: string;
+    flags?: { lowConfidenceEconomy?: boolean };
+  }): CareRecord {
+    return {
+      ...base,
+      id: p.id,
+      vehicleId: p.vehicleId ?? 'v',
+      type: 'fuel',
+      date: p.date,
+      odometer: p.odometer,
+      liters: p.liters,
+      fuelGrade: '95#',
+      filledUp: p.filledUp,
+      flags: p.flags,
+    };
+  }
+
+  it('merges a mid-tank fill into the surrounding full-to-full interval', () => {
+    // A 1000/4 full, B 1100/2 not, C 1200/3 full → 200 km, 5 L → 2.50
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1100, liters: 2, filledUp: false, date: '2026-01-02T00:00:00.000Z', flags: { lowConfidenceEconomy: true } }),
+      fuel({ id: 'c', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const before = structuredClone(records);
+    const ivs = fuelIntervals(records);
+    expect(records).toEqual(before);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].fromOdometer).toBe(1000);
+    expect(ivs[0].toOdometer).toBe(1200);
+    expect(ivs[0].amount).toBeCloseTo(5, 5);
+    expect(ivs[0].economyPer100).toBeCloseTo(2.5, 5);
+    expect(ivs[0].lowConfidence).toBe(false);
+    expect(ivs[0].open).toBe(false);
+    expect(ivs[0].endRecordId).toBe('c');
+    expect(averageFuelEconomy(records)).toBeCloseTo(2.5, 5);
+    expect(confidentFuelEconomy(records)).toBeCloseTo(2.5, 5);
+    const diag = fuelEconomyDiagnostics(records);
+    expect(diag.some((d) => d.code === 'low-confidence-backfill' && d.recordIds.includes('b'))).toBe(true);
+    expect(diag.some((d) => d.code === 'open-trailing-partial')).toBe(false);
+  });
+
+  it('weights complete intervals by distance, not by the mean of their economies', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 10, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1100, liters: 10, filledUp: true, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 2100, liters: 10, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const avg = averageFuelEconomy(records)!;
+    const arithmetic = (10 + 1) / 2;
+    expect(avg).toBeCloseTo((20 / 1100) * 100, 5);
+    expect(Math.abs(avg - arithmetic)).toBeGreaterThan(1);
+  });
+
+  it('excludes liters added before the first confirmed full', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'p', odometer: 500, liters: 9, filledUp: false, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const before = structuredClone(records);
+    const ivs = fuelIntervals(records);
+    expect(records).toEqual(before);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].fromOdometer).toBe(1000);
+    expect(ivs[0].amount).toBeCloseTo(3, 5);
+    expect(averageFuelEconomy(records)).toBeCloseTo((3 / 200) * 100, 5);
+    expect(fuelEconomyDiagnostics(records).some((d) => d.code === 'first-fill-not-full' && d.recordIds.includes('p'))).toBe(true);
+  });
+
+  it('merges consecutive partials between two fulls', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1100, liters: 2, filledUp: false, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 1150, liters: 1, filledUp: false, date: '2026-01-03T00:00:00.000Z' }),
+      fuel({ id: 'd', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-04T00:00:00.000Z' }),
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].amount).toBeCloseTo(6, 5);
+    expect(ivs[0].economyPer100).toBeCloseTo((6 / 200) * 100, 5);
+    const ids = fuelEconomyDiagnostics(records).find((d) => d.code === 'consecutive-partials')?.recordIds;
+    expect(ids).toEqual(['b', 'c']);
+  });
+
+  it('sums same-odometer fills and does not invent a zero-km interval', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'a2', odometer: 1000, liters: 1, filledUp: true, date: '2026-01-01T01:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1200, liters: 2, filledUp: false, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'b2', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-02T01:00:00.000Z' }),
+    ];
+    const before = structuredClone(records);
+    const ivs = fuelIntervals(records);
+    expect(records).toEqual(before);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].fromOdometer).toBe(1000);
+    expect(ivs[0].toOdometer).toBe(1200);
+    expect(ivs[0].amount).toBeCloseTo(5, 5);
+    expect(ivs[0].endRecordId).toBe('b2');
+    expect(ivs.some((iv) => iv.toOdometer - iv.fromOdometer <= 0)).toBe(false);
+    expect(fuelEconomyDiagnostics(records).some((d) => d.code === 'same-odo-multi-fill')).toBe(true);
+  });
+
+  it('leaves an odometer rollback out of distance and liters', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 900, liters: 2, filledUp: true, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const before = structuredClone(records);
+    const ivs = fuelIntervals(records);
+    expect(records).toEqual(before);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].fromOdometer).toBe(1000);
+    expect(ivs[0].toOdometer).toBe(1200);
+    expect(ivs[0].amount).toBeCloseTo(3, 5);
+    expect(fuelEconomyDiagnostics(records).find((d) => d.code === 'odo-rollback')?.recordIds).toEqual(['b']);
+  });
+
+  it('diagnoses illegal liters without rewriting the row or inventing a NaN economy', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 40, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'bad', odometer: 1500, liters: Number.NaN, filledUp: true, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 2000, liters: 40, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const ivs = fuelIntervals(records);
+    expect(Object.is(records[1] && (records[1] as { liters: number }).liters, Number.NaN)).toBe(true);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0].amount).toBeCloseTo(40, 5);
+    expect(Number.isFinite(ivs[0].economyPer100)).toBe(true);
+    expect(ivs[0].lowConfidence).toBe(true);
+    expect(fuelEconomyDiagnostics(records).find((d) => d.code === 'missing-or-illegal-liters')?.recordIds).toEqual(['bad']);
+    expect(fuelEconomySummary(records).lowConfidence).toBe(true);
+  });
+
+  it('keeps a flagged confirmed full in the average and marks that segment 参考', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a', odometer: 1000, liters: 40, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1500, liters: 30, filledUp: true, date: '2026-01-02T00:00:00.000Z', flags: { lowConfidenceEconomy: true } }),
+      fuel({ id: 'c', odometer: 2000, liters: 40, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs[0].lowConfidence).toBe(true);
+    expect(ivs[0].amount).toBeCloseTo(30, 5);
+    expect(ivs[1].lowConfidence).toBe(false);
+    expect(averageFuelEconomy(records)).toBeCloseTo((70 / 1000) * 100, 5);
+    expect(confidentFuelEconomy(records)).toBeCloseTo((40 / 500) * 100, 5);
+  });
+
+  it('does not stitch partials across vehicles', () => {
+    const records: CareRecord[] = [
+      fuel({ id: 'a1', vehicleId: 'car-a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'a2', vehicleId: 'car-a', odometer: 1100, liters: 2, filledUp: false, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'a3', vehicleId: 'car-a', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+      fuel({ id: 'b1', vehicleId: 'car-b', odometer: 1100, liters: 10, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b2', vehicleId: 'car-b', odometer: 1200, liters: 10, filledUp: true, date: '2026-01-04T00:00:00.000Z' }),
+    ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs.find((iv) => iv.endRecordId === 'a3')!.economyPer100).toBeCloseTo(2.5, 5);
+    expect(ivs.find((iv) => iv.endRecordId === 'b2')!.economyPer100).toBeCloseTo(10, 5);
+    expect(averageFuelEconomy(records)).toBeCloseTo((15 / 300) * 100, 5);
+    expect(fuelEconomyDiagnostics(records).some((d) => d.code === 'mixed-vehicles' && d.recordIds.includes('car-a') && d.recordIds.includes('car-b'))).toBe(true);
+  });
+
+  it('recomputes after a partial or closing full is removed', () => {
+    const full = [
+      fuel({ id: 'a', odometer: 1000, liters: 4, filledUp: true, date: '2026-01-01T00:00:00.000Z' }),
+      fuel({ id: 'b', odometer: 1100, liters: 2, filledUp: false, date: '2026-01-02T00:00:00.000Z' }),
+      fuel({ id: 'c', odometer: 1200, liters: 3, filledUp: true, date: '2026-01-03T00:00:00.000Z' }),
+    ];
+    expect(fuelIntervals(full)[0].amount).toBeCloseTo(5, 5);
+    const withoutPartial = full.filter((r) => r.id !== 'b');
+    expect(fuelIntervals(withoutPartial)[0].amount).toBeCloseTo(3, 5);
+    expect(fuelIntervals(withoutPartial)[0].fromOdometer).toBe(1000);
+    const withoutClose = full.filter((r) => r.id !== 'c');
+    const open = fuelIntervals(withoutClose);
+    expect(open).toHaveLength(1);
+    expect(open[0].open).toBe(true);
+    expect(open[0].amount).toBeCloseTo(2, 5);
+    expect(averageFuelEconomy(withoutClose)).toBeNull();
+    expect(full.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
 describe('low-confidence summaries & partial charge', () => {
-  it('fuelEconomySummary flags lowConfidence when any interval is partial fill', () => {
+  it('keeps an open trailing partial out of the confirmed average', () => {
     const records: CareRecord[] = [
       { ...base, id: 'a', vehicleId: 'v', type: 'fuel', date: '2026-01-01T10:00:00.000Z', odometer: 1000, liters: 40, fuelGrade: '95#', filledUp: true },
       { ...base, id: 'b', vehicleId: 'v', type: 'fuel', date: '2026-01-10T10:00:00.000Z', odometer: 1500, liters: 40, fuelGrade: '95#', filledUp: true },
       { ...base, id: 'c', vehicleId: 'v', type: 'fuel', date: '2026-01-20T10:00:00.000Z', odometer: 1700, liters: 10, fuelGrade: '95#', filledUp: false },
     ];
+    const ivs = fuelIntervals(records);
+    expect(ivs).toHaveLength(2);
+    expect(ivs[0].open).toBe(false);
+    expect(ivs[0].economyPer100).toBeCloseTo(8, 5);
+    expect(ivs[1].open).toBe(true);
+    expect(ivs[1].lowConfidence).toBe(true);
+    expect(ivs[1].amount).toBe(10);
     const s = fuelEconomySummary(records);
-    expect(s.value).not.toBeNull();
-    expect(s.lowConfidence).toBe(true);
+    expect(s.value).toBeCloseTo(8, 5);
+    expect(s.lowConfidence).toBe(false);
     expect(s.lowConfidenceCount).toBe(1);
     expect(s.intervalCount).toBe(2);
-    // Confident-only excludes the partial interval
     expect(confidentFuelEconomy(records)).toBeCloseTo(8, 5);
+    expect(averageFuelEconomy(records)).toBeCloseTo(8, 5);
   });
 
   it('returns null averages when fewer than 2 fuel records (missing data)', () => {
