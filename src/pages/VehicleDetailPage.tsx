@@ -159,28 +159,20 @@ function intervalLine(
   fuelUnit: string,
   elecUnit: string,
   translate: (key: 'detail.intervalFuel' | 'detail.intervalCharge', params: Record<string, string | number>) => string,
+  estimateLabel: string,
 ): string | null {
-  if (r.type === 'fuel') {
-    const iv = fuelByEnd.get(r.id);
-    if (!iv) return null;
-    const dist = iv.toOdometer - iv.fromOdometer;
-    return translate('detail.intervalFuel', {
-      dist: dist.toFixed(0),
-      eco: formatEconomy(iv.economyPer100, fuelUnit),
-      unit: fuelUnit,
-    });
-  }
-  if (r.type === 'charge') {
-    const iv = elecByEnd.get(r.id);
-    if (!iv) return null;
-    const dist = iv.toOdometer - iv.fromOdometer;
-    return translate('detail.intervalCharge', {
-      dist: dist.toFixed(0),
-      eco: formatEconomy(iv.economyPer100, elecUnit),
-      unit: elecUnit,
-    });
-  }
-  return null;
+  if (r.type !== 'fuel' && r.type !== 'charge') return null;
+  const iv = r.type === 'fuel' ? fuelByEnd.get(r.id) : elecByEnd.get(r.id);
+  if (!iv) return null;
+  const dist = iv.toOdometer - iv.fromOdometer;
+  const unit = r.type === 'fuel' ? fuelUnit : elecUnit;
+  const line = translate(r.type === 'fuel' ? 'detail.intervalFuel' : 'detail.intervalCharge', {
+    dist: dist.toFixed(0),
+    eco: formatEconomy(iv.economyPer100, unit),
+    unit,
+  });
+  // Open / partial segments must not read as an exact figure.
+  return iv.lowConfidence ? `${line}${estimateLabel}` : line;
 }
 
 export function VehicleDetailPage() {
@@ -464,6 +456,7 @@ export function VehicleDetailPage() {
             settings.fuelEconomyUnit,
             settings.electricEconomyUnit,
             t,
+            t('eco.estimate'),
           );
           return (
             <div key={r.id} className={`timeline-item ${r.type === 'ticket' && !r.paid ? 'unpaid' : ''}`}>

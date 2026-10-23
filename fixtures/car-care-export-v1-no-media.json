@@ -1,0 +1,491 @@
+{
+  "format": "car-care-export-v1",
+  "fixture": "fuel-rows-only",
+  "source": "car-care-export-v1-no-media",
+  "note": "Fuel rows only, copied from the attached export so economy tests can recompute from raw odometer/liters/filledUp. Plates, payments, stations, notes, and non-fuel records are omitted.",
+  "vehicles": [
+    {
+      "id": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "name": "Spacy125",
+      "energyType": "ICE",
+      "initialOdometer": 3
+    },
+    {
+      "id": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "name": "X-RV",
+      "energyType": "ICE"
+    }
+  ],
+  "records": [
+    {
+      "id": "023544a1-3509-4ee0-b8a6-3fe7d93e773f",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-02-25T04:00:00.000Z",
+      "odometer": 3017,
+      "liters": 4.48,
+      "filledUp": true
+    },
+    {
+      "id": "0c3fe9f4-bfa6-448e-a4a7-2b80fe4387ff",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-06-17T04:00:00.000Z",
+      "odometer": 4839,
+      "liters": 4.4,
+      "filledUp": true
+    },
+    {
+      "id": "135ede7c-158f-44a1-9d68-b02a7e460099",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-03-22T04:00:00.000Z",
+      "odometer": 36016,
+      "liters": 38.77,
+      "filledUp": true
+    },
+    {
+      "id": "146e737a-91f4-493a-8826-3c90098d5ab5",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2025-12-20T04:00:00.000Z",
+      "odometer": 34448,
+      "liters": 25.85,
+      "filledUp": true
+    },
+    {
+      "id": "17678495-99bf-445f-a8be-92cc4e528e7f",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-02-06T04:00:00.000Z",
+      "odometer": 2828,
+      "liters": 4.59,
+      "filledUp": true
+    },
+    {
+      "id": "19612b2d-75eb-4995-a75e-ad83f6b93076",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-09-25T04:00:00.000Z",
+      "odometer": 40589,
+      "liters": 37.58,
+      "filledUp": true
+    },
+    {
+      "id": "1aa685bf-563a-49df-9869-9c37e1179d99",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-12-02T04:00:00.000Z",
+      "odometer": 1638,
+      "liters": 3.87,
+      "filledUp": true
+    },
+    {
+      "id": "29ccf26d-fa7b-4c14-95d8-0cfc3b8278f7",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-10-22T04:00:00.000Z",
+      "odometer": 764,
+      "liters": 4.62,
+      "filledUp": true
+    },
+    {
+      "id": "30b9eed5-fad3-44df-8aa5-41a60560f8c7",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-10-10T03:52:00.000Z",
+      "odometer": 6757,
+      "liters": 4.58,
+      "filledUp": true,
+      "flags": {
+        "odometerAnomaly": false,
+        "lowConfidenceEconomy": false
+      }
+    },
+    {
+      "id": "33905589-4200-489c-8ccc-2434cf578086",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-11-02T04:00:00.000Z",
+      "odometer": 943,
+      "liters": 4.18,
+      "filledUp": true
+    },
+    {
+      "id": "37c315a0-6dcc-4c38-bc0c-492a8400d944",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-04-05T04:00:00.000Z",
+      "odometer": 36657,
+      "liters": 42.41,
+      "filledUp": true
+    },
+    {
+      "id": "3e738910-9cea-4cd5-9a96-b5606d445236",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-04-07T04:00:00.000Z",
+      "odometer": 37210,
+      "liters": 36.18,
+      "filledUp": true
+    },
+    {
+      "id": "3eb09e3a-a7a3-44e1-a067-4bad1150096d",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-12-09T04:00:00.000Z",
+      "odometer": 1811,
+      "liters": 4.51,
+      "filledUp": true
+    },
+    {
+      "id": "4037f067-9e51-4dad-8590-f52c14a5b5e5",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-06-04T04:00:00.000Z",
+      "odometer": 4629,
+      "liters": 4.54,
+      "filledUp": true
+    },
+    {
+      "id": "455cb83c-4d85-4d1f-a050-8d443cbba03a",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-08-21T04:00:00.000Z",
+      "odometer": 5929,
+      "liters": 4.5,
+      "filledUp": true
+    },
+    {
+      "id": "47e54434-4c3d-41b2-8703-e4ef996e92fe",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-12-19T04:00:00.000Z",
+      "odometer": 1976,
+      "liters": 4.22,
+      "filledUp": true
+    },
+    {
+      "id": "4a9f5019-e9db-407b-abe2-2a16501e7952",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-10-23T00:35:00.000Z",
+      "odometer": 6954,
+      "liters": 4.431,
+      "filledUp": true,
+      "flags": {
+        "odometerAnomaly": false,
+        "lowConfidenceEconomy": false
+      }
+    },
+    {
+      "id": "4b81f63c-70da-4f07-9243-8d2e8668c8ea",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-01-01T04:00:00.000Z",
+      "odometer": 35072,
+      "liters": 34.6,
+      "filledUp": false,
+      "flags": {
+        "lowConfidenceEconomy": true
+      }
+    },
+    {
+      "id": "5110a884-93bd-4cad-828e-c913f13280eb",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-05-08T04:00:00.000Z",
+      "odometer": 4188,
+      "liters": 4.72,
+      "filledUp": true
+    },
+    {
+      "id": "516fe295-225f-402f-99b2-bc0717b4c110",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-09-25T04:00:00.000Z",
+      "odometer": 383,
+      "liters": 4.37,
+      "filledUp": true
+    },
+    {
+      "id": "535b5085-26a6-4f20-925e-c6c31f544e72",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-08-08T04:00:00.000Z",
+      "odometer": 5718,
+      "liters": 4.34,
+      "filledUp": true
+    },
+    {
+      "id": "57fb386d-b322-49ff-853f-2609b9b357e0",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-04-11T04:00:00.000Z",
+      "odometer": 3774,
+      "liters": 4.05,
+      "filledUp": true
+    },
+    {
+      "id": "59fe9157-3480-45b7-8954-1efa2058e8bf",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-01-29T04:00:00.000Z",
+      "odometer": 2647,
+      "liters": 4.48,
+      "filledUp": true
+    },
+    {
+      "id": "5d63b545-5629-4f9a-89f4-6ffb62ffc33f",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-01-19T04:00:00.000Z",
+      "odometer": 2485,
+      "liters": 4.46,
+      "filledUp": true
+    },
+    {
+      "id": "5dc70fa5-e847-4032-b508-7ce3a35b995c",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-08-15T04:00:00.000Z",
+      "odometer": 40049,
+      "liters": 42.5,
+      "filledUp": true
+    },
+    {
+      "id": "5e4cd268-64ae-43c7-a5bb-7b3b9b54d21e",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-05-01T04:00:00.000Z",
+      "odometer": 37714,
+      "liters": 35.01,
+      "filledUp": true
+    },
+    {
+      "id": "6f7b524d-c9bc-4426-8b7f-c727b02ce1a0",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-09-14T04:00:00.000Z",
+      "odometer": 198,
+      "liters": 4.57,
+      "filledUp": true
+    },
+    {
+      "id": "747815da-6c55-455e-ba5f-58a2c0b184e3",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-03-09T04:00:00.000Z",
+      "odometer": 3187,
+      "liters": 4.23,
+      "filledUp": true
+    },
+    {
+      "id": "79f56d8e-13c6-4993-8119-af575231bcae",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-03-30T04:00:00.000Z",
+      "odometer": 3569,
+      "liters": 4.42,
+      "filledUp": true
+    },
+    {
+      "id": "7f06d3fd-b3cc-4f41-907c-7c88c24e4464",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-01-25T04:00:00.000Z",
+      "odometer": 35488,
+      "liters": 41.37,
+      "filledUp": true
+    },
+    {
+      "id": "804d1b5a-ad40-4d75-a30a-a26da07a663a",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-01-09T04:00:00.000Z",
+      "odometer": 2316,
+      "liters": 4.37,
+      "filledUp": true
+    },
+    {
+      "id": "82216fbf-312e-4c45-8aa9-3a02366119f7",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-08-31T04:00:00.000Z",
+      "odometer": 6146,
+      "liters": 4.02,
+      "filledUp": true
+    },
+    {
+      "id": "8530fdd4-dcf5-42be-85bd-e838284b777a",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-04-22T04:00:00.000Z",
+      "odometer": 3963,
+      "liters": 4.75,
+      "filledUp": true
+    },
+    {
+      "id": "85c72441-93ee-4807-9166-1fb4034d512d",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-09-30T04:00:00.000Z",
+      "odometer": 41211,
+      "liters": 40.84,
+      "filledUp": true
+    },
+    {
+      "id": "92576c25-6b33-40e1-bce6-ed85ad842ed8",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-11-10T04:00:00.000Z",
+      "odometer": 1115,
+      "liters": 3.74,
+      "filledUp": true
+    },
+    {
+      "id": "9f358cec-f3af-485c-baaf-546c93803185",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-03-19T04:00:00.000Z",
+      "odometer": 3396,
+      "liters": 3.99,
+      "filledUp": true
+    },
+    {
+      "id": "a8df92ed-17c6-4f50-9a08-119f2bae7c34",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-10-10T04:00:00.000Z",
+      "odometer": 569,
+      "liters": 4.75,
+      "filledUp": true
+    },
+    {
+      "id": "a9f53d49-5562-46f3-a481-381164d39863",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-06-19T04:00:00.000Z",
+      "odometer": 38892,
+      "liters": 36.13,
+      "filledUp": true
+    },
+    {
+      "id": "af5f757d-4135-48dc-9921-d39e843745b5",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-11-17T04:00:00.000Z",
+      "odometer": 1288,
+      "liters": 4.21,
+      "filledUp": true
+    },
+    {
+      "id": "b3be7c4d-3b75-4440-bf37-9bd23caa07a8",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-05-16T04:00:00.000Z",
+      "odometer": 38352,
+      "liters": 43.08,
+      "filledUp": true
+    },
+    {
+      "id": "b83386d3-40c1-4d4c-aaf8-2a1223696359",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-11-24T04:00:00.000Z",
+      "odometer": 1474,
+      "liters": 4.34,
+      "filledUp": true
+    },
+    {
+      "id": "ba642606-ba38-4737-93ab-8151f107109d",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-09-06T04:00:00.000Z",
+      "odometer": 3,
+      "liters": 4.07,
+      "filledUp": true
+    },
+    {
+      "id": "c4d7d132-df24-4dbd-9d69-5d25e684839b",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-09-09T04:00:00.000Z",
+      "odometer": 6327,
+      "liters": 4.31,
+      "filledUp": true
+    },
+    {
+      "id": "c6f62622-8ccf-468b-bc97-df9c8c6e10a5",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-07-28T04:00:00.000Z",
+      "odometer": 5487,
+      "liters": 4.45,
+      "filledUp": true
+    },
+    {
+      "id": "c7a2dc15-f88d-479a-ad30-8e38c854fcca",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-10-06T04:00:00.000Z",
+      "odometer": 41864,
+      "liters": 39.75,
+      "filledUp": true
+    },
+    {
+      "id": "eb064008-6bab-4e30-aa7f-ae90a1a64710",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-05-22T04:00:00.000Z",
+      "odometer": 4410,
+      "liters": 4.59,
+      "filledUp": true
+    },
+    {
+      "id": "eb75f9bd-5efd-44cc-b354-1833267f60f2",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-07-17T04:00:00.000Z",
+      "odometer": 5268,
+      "liters": 4.22,
+      "filledUp": true
+    },
+    {
+      "id": "ef00b9fe-0da6-4fa8-8314-78773634370c",
+      "vehicleId": "e9a408a1-3ec1-4c20-8b81-beb38cf15924",
+      "type": "fuel",
+      "date": "2026-07-30T04:00:00.000Z",
+      "odometer": 39441,
+      "liters": 38.5,
+      "filledUp": true
+    },
+    {
+      "id": "f2cc7f92-c89e-40ee-9854-70283bf926fc",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2025-12-30T04:00:00.000Z",
+      "odometer": 2151,
+      "liters": 4.32,
+      "filledUp": true
+    },
+    {
+      "id": "f51c520e-c4d2-47d3-a1d5-c670ceaf27b7",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-09-22T04:00:00.000Z",
+      "odometer": 6545,
+      "liters": 4.48,
+      "filledUp": true
+    },
+    {
+      "id": "f743447b-647c-4736-9827-159de3ca7a56",
+      "vehicleId": "744cb316-ba6e-47f6-9df0-87a13dedef7e",
+      "type": "fuel",
+      "date": "2026-07-01T04:00:00.000Z",
+      "odometer": 5056,
+      "liters": 4.29,
+      "filledUp": true
+    }
+  ]
+}

@@ -233,6 +233,11 @@ export interface EconomyInterval {
   economyPer100: number;
   lowConfidence: boolean;
   endRecordId: UUID;
+  /**
+   * Fuel only: trailing fills after the last confirmed full tank.
+   * An estimate — omitted from the confirmed average.
+   */
+  open?: boolean;
 }
 
 export interface CarCareExportV1 {
