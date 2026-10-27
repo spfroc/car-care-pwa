@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="车护助手功能介绍：离线优先车辆养护账本 PWA，记录加油/充电、保养维保、停车保险等花费，支持多车油耗电耗统计。"
+    />
+    <meta name="theme-color" content="#6d28d9" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://car.adobesun.com/about/" />
+    <title>功能介绍 — 车护助手</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #6d28d9;
+        --border: #e2e8f0;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+        color: var(--text);
+        background: linear-gradient(180deg, #f5f3ff 0%, var(--bg) 40%);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+      header {
+        margin-bottom: 28px;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+        background: #ede9fe;
+        border-radius: 999px;
+        padding: 4px 10px;
+        margin-bottom: 12px;
+      }
+      h1 {
+        font-size: 1.75rem;
+        line-height: 1.25;
+        margin: 0 0 10px;
+      }
+      .lead {
+        color: var(--muted);
+        margin: 0;
+        font-size: 1.05rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px 22px;
+        margin: 16px 0;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin: 0 0 10px;
+      }
+      ul {
+        margin: 0;
+        padding-left: 1.2em;
+        color: var(--muted);
+      }
+      li { margin: 6px 0; }
+      a.cta {
+        display: inline-block;
+        margin-top: 8px;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+        padding: 12px 18px;
+        border-radius: 12px;
+      }
+      a.cta:hover { filter: brightness(1.05); }
+      a.secondary {
+        color: var(--accent);
+        margin-left: 14px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="badge">公开介绍 · 可索引</div>
+        <h1>车护助手</h1>
+        <p class="lead">
+          面向日常养车的离线优先 PWA：把加油、充电、保养与各类用车花费记在本机，随时查看油耗电耗与多车统计。
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>能做什么</h2>
+        <ul>
+          <li><strong>加油 / 充电记账</strong>：按车辆能源类型录入油量、电量、站点与实付金额。</li>
+          <li><strong>保养与维保</strong>：记录保养、配件、洗车、改装等养护事项，可备注下次保养里程。</li>
+          <li><strong>停车、高速、保险、罚单</strong>：把常见用车开销汇总在同一本账里。</li>
+          <li><strong>多车与能耗统计</strong>：首页花费矩阵、油耗/电耗区间与综合折算，支持 ICE / EV / PHEV / HEV 等。</li>
+          <li><strong>离线优先</strong>：数据默认保存在浏览器 IndexedDB；可导出 JSON 备份，可选云端同步（按设置）。</li>
+          <li><strong>可安装 PWA</strong>：支持添加到主屏幕，适合手机日常快速记账。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>适合谁</h2>
+        <ul>
+          <li>想系统记录加油保养、看清每公里花费的车主。</li>
+          <li>家里有多台车，需要分别统计油耗/电耗的用户。</li>
+          <li>希望数据先落在本机、减少依赖网络的人。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>隐私说明</h2>
+        <p style="margin:0;color:var(--muted)">
+          核心记账在浏览器本地完成。照片默认仅存本机；是否启用云端同步由你在设置中选择。本页仅介绍产品功能，不含账号注册墙。
+        </p>
+      </section>
+
+      <p>
+        <a class="cta" href="/">打开车护助手</a>
+        <a class="secondary" href="https://car.adobesun.com/">car.adobesun.com</a>
+      </p>
+
+      <footer>
+        <p>生产站点：<a href="https://car.adobesun.com/">https://car.adobesun.com/</a> · 站点地图见 <a href="/sitemap.xml">/sitemap.xml</a></p>
+      </footer>
+    </main>
+  </body>
+</html>
