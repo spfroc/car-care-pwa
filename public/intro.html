@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="canonical" href="https://car.adobesun.com/intro.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#6d28d9" />
+    <meta
+      name="description"
+      content="车护助手功能介绍：离线优先的车辆养护账本，记录加油、充电、维保、保险等花费，本地存储，可安装到手机主屏幕，无需注册。"
+    />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="车护助手" />
+    <meta property="og:title" content="车护助手功能介绍 — 离线车辆养护账本" />
+    <meta
+      property="og:description"
+      content="离线优先的车辆养护 PWA：加油充电、维保保险、油耗电耗统计，数据留在本机。"
+    />
+    <meta property="og:url" content="https://car.adobesun.com/intro.html" />
+    <meta property="og:image" content="https://car.adobesun.com/pwa-512.png" />
+    <title>车护助手功能介绍 — 离线车辆养护账本</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "车护助手",
+        "alternateName": "Car Care",
+        "url": "https://car.adobesun.com/",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Any",
+        "inLanguage": "zh-CN",
+        "description": "离线优先的车辆养护账本：记录加油、充电、维保、保险等花费，本地存储，可安装到主屏幕。",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" }
+      }
+    </script>
+    <style>
+      :root {
+        font-family: "PingFang SC", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+        line-height: 1.55;
+        color: #0f172a;
+        background: #f1f5f9;
+        --primary: #6d28d9;
+        --card: #fff;
+        --border: #e2e8f0;
+        --muted: #64748b;
+        --radius: 14px;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body { background: #f1f5f9; }
+      a { color: var(--primary); }
+      .shell {
+        max-width: 560px;
+        margin: 0 auto;
+        min-height: 100dvh;
+        background: #f8fafc;
+        padding: 24px 16px 48px;
+      }
+      header h1 { margin: 0 0 6px; font-size: 1.6rem; }
+      .lead { color: var(--muted); margin: 0 0 20px; }
+      .cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 28px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        padding: 10px 14px;
+        text-decoration: none;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: #0f172a;
+        font-weight: 600;
+      }
+      .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+      section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      h2 { margin: 0 0 10px; font-size: 1.08rem; }
+      ul { margin: 0; padding-left: 1.2em; }
+      li { margin: 0 0 6px; }
+      .muted { color: var(--muted); }
+      footer { margin-top: 24px; font-size: 13px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <h1>车护助手</h1>
+        <p class="lead">离线优先的车辆养护账本。数据在你的手机或电脑上，打开就能记一笔加油、充电或保养。</p>
+      </header>
+
+      <p class="cta">
+        <a class="btn primary" href="/">打开应用</a>
+        <a class="btn" href="/settings">去设置</a>
+      </p>
+
+      <section>
+        <h2>适合谁用</h2>
+        <ul>
+          <li>想随手记下油费、电费和保养，又不想先注册账号</li>
+          <li>家里有燃油、纯电、插混或油电混动，需要按车分别记账</li>
+          <li>经常没网或信号不好，仍要能打开账本补录</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>能记什么</h2>
+        <ul>
+          <li>加油、充电：油量、电量、站点、实付与优惠</li>
+          <li>维保、改装、洗车、配件</li>
+          <li>罚单、停车费、高速费、保险</li>
+          <li>可附照片（本机压缩后保存）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>统计与多能源</h2>
+        <ul>
+          <li>按车辆看油耗、电耗、花费和每公里成本</li>
+          <li>燃油、纯电、插混、增程、油混按能源类型显示对应入口</li>
+          <li>首页卡片、详情时间线和统计页共用同一套口径</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>数据怎么存放</h2>
+        <ul>
+          <li>默认存在浏览器本地（IndexedDB），可安装到主屏幕当 PWA 使用</li>
+          <li>支持导出 / 导入 JSON 备份；建议定期导出</li>
+          <li>不做匿名用量上报</li>
+          <li>如需跨设备，可在设置里自行接入你的 Supabase 或 Notion（自带密钥，不经过我们的账号体系）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>怎么开始</h2>
+        <ul>
+          <li>打开应用 → 添加第一辆车 → 在详情里记一笔，或用首页快捷入口</li>
+          <li>想先看看样子：设置 → 载入演示数据</li>
+          <li>iOS Safari：分享 → 添加到主屏幕；Android Chrome：菜单 → 安装应用</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Car Care in short</h2>
+        <p class="muted">
+          Offline-first vehicle care ledger. Log fuel, charging, service, insurance and more on this device.
+          Install it as a PWA. No sign-up required. Optional bring-your-own Supabase or Notion sync lives in Settings.
+        </p>
+      </section>
+
+      <footer>
+        <p>正式站点：<a href="https://car.adobesun.com/">car.adobesun.com</a></p>
+        <p><a href="/">返回应用</a> · <a href="/robots.txt">robots.txt</a> · <a href="/sitemap.xml">sitemap.xml</a></p>
+      </footer>
+    </main>
+  </body>
+</html>

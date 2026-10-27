@@ -1,0 +1,22 @@
+# 车护助手 https://car.adobesun.com
+# 允许主流搜索引擎抓取公开页面，避免 SPA 回退把本文件变成 HTML。
+
+User-agent: *
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Sogou
+Allow: /
+
+Sitemap: https://car.adobesun.com/sitemap.xml

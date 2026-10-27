@@ -39,6 +39,9 @@ export function HomePage() {
             {t('home.addFirst')}
           </Link>
           <p className="muted small">{t('home.emptyHint')}</p>
+          <a href="/intro.html" className="btn block">
+            {t('home.introLink')}
+          </a>
         </div>
       ) : (
         <div className="stack">

@@ -491,6 +491,9 @@ export function SettingsPage() {
           </div>
         </dl>
         <p className="muted small">{t('settings.aboutHint')}</p>
+        <a className="btn block" href="/intro.html">
+          {t('settings.introLink')}
+        </a>
       </section>
 
       <section className="card">

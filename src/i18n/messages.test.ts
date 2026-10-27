@@ -22,6 +22,9 @@ describe('translate', () => {
     expect(translate('zh-CN', 'settings.feedback')).toBe('问题反馈');
     expect(translate('en', 'settings.feedback')).toBe('Feedback');
     expect(translate('zh-CN', 'settings.about')).toBe('关于本应用');
+    expect(translate('zh-CN', 'settings.introLink')).toBe('公开功能介绍');
+    expect(translate('en', 'settings.introLink')).toBe('Public feature overview');
+    expect(translate('zh-CN', 'home.introLink')).toContain('车护助手');
     expect(translate('zh-CN', 'settings.changelog')).toBe('更新日志');
     expect(translate('zh-CN', 'settings.hideBottomNav')).toBe('隐藏底栏');
     expect(translate('en', 'settings.hideBottomNav')).toBe('Hide bottom bar');

@@ -44,12 +44,13 @@ export default defineConfig({
         'pwa-192.png',
         'pwa-512.png',
         'pwa-maskable-512.png',
+        'google133d1449864ee82b.html',
       ],
       manifest: {
         id: '/',
         name: '车护助手',
         short_name: '车护助手',
-        description: '离线优先车辆养护账本',
+        description: '离线优先的车辆养护账本：加油、充电、维保、保险，本地记账',
         theme_color: '#6d28d9',
         background_color: '#f8fafc',
         display: 'standalone',
@@ -69,6 +70,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/robots.txt', '**/sitemap.xml'],
+        navigateFallbackDenylist: [
+          /^\/robots\.txt$/i,
+          /^\/sitemap\.xml$/i,
+          /^\/google[0-9a-f]+\.html$/i,
+          /^\/intro\.html$/i,
+        ],
         // M3-B: optional Background Sync signal (clients still run the engine)
         importScripts: ['bg-sync-sw-addon.js'],
       },

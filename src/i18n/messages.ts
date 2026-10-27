@@ -91,6 +91,7 @@ const zhCN = {
   'home.empty': '还没有车辆',
   'home.addFirst': '添加第一辆车',
   'home.emptyHint': '或到设置中载入演示数据',
+  'home.introLink': '了解车护助手能做什么',
 
   // Vehicle card
   'card.odometer': '当前里程',
@@ -267,6 +268,7 @@ const zhCN = {
   'settings.aboutStandaloneYes': ' · 已安装独立窗口',
   'settings.aboutStandaloneNo': ' · 浏览器标签页',
   'settings.aboutHint': '版本来自 package.json；构建号为短提交 SHA（构建时写入）。无匿名用量上报。应用更新为无感自动更新。',
+  'settings.introLink': '公开功能介绍',
   'settings.changelog': '更新日志',
   'settings.changelogHint': '最近版本变更摘要。默认折叠，点下方按钮展开。',
   'settings.changelogShow': '展开更新日志',
@@ -612,6 +614,7 @@ const en: { [K in MessageKey]: string } = {
   'home.empty': 'No vehicles yet',
   'home.addFirst': 'Add your first vehicle',
   'home.emptyHint': 'Or load demo data in Settings',
+  'home.introLink': 'What Car Care can do',
 
   'card.odometer': 'Odometer',
   'card.fuelEco': 'Fuel eco',
@@ -782,6 +785,7 @@ const en: { [K in MessageKey]: string } = {
   'settings.aboutStandaloneYes': ' · Installed standalone',
   'settings.aboutStandaloneNo': ' · Browser tab',
   'settings.aboutHint': 'Version comes from package.json; build id is the short commit SHA injected at build. No anonymous usage telemetry. App updates apply silently.',
+  'settings.introLink': 'Public feature overview',
   'settings.changelog': 'Changelog',
   'settings.changelogHint': 'Recent release notes. Collapsed by default — tap below to expand.',
   'settings.changelogShow': 'Show changelog',
