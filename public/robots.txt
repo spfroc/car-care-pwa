@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://car.adobesun.com/sitemap.xml

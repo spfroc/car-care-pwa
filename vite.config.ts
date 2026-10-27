@@ -49,7 +49,7 @@ export default defineConfig({
         id: '/',
         name: '车护助手',
         short_name: '车护助手',
-        description: '离线优先车辆养护账本',
+        description: '离线优先车辆养护账本：加油、保养、多车油耗电耗统计',
         theme_color: '#6d28d9',
         background_color: '#f8fafc',
         display: 'standalone',
@@ -69,6 +69,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Keep SEO/static entrypoints out of SPA navigateFallback.
+        navigateFallbackDenylist: [
+          /^\/about(?:\/|$)/,
+          /^\/robots\.txt$/,
+          /^\/sitemap\.xml$/,
+        ],
         // M3-B: optional Background Sync signal (clients still run the engine)
         importScripts: ['bg-sync-sw-addon.js'],
       },
